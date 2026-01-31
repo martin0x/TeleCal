@@ -5,6 +5,7 @@ import { db } from "../db"
 import { AllowedUsersRepository } from "../db/repositories/allowed-users"
 import { UsersRepository } from "../db/repositories/users"
 import { createAllowlistMiddleware } from "./middleware/allowlist"
+import { createAdminCommand } from "./commands/admin"
 
 export interface BotContext extends Context {}
 
@@ -35,6 +36,8 @@ export function createBot() {
         "/settings - Change preferences"
     )
   })
+
+  bot.command("admin", createAdminCommand(allowedUsersRepo))
 
   return { bot, allowedUsersRepo, usersRepo }
 }
