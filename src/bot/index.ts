@@ -8,6 +8,7 @@ import { FoodLogsRepository } from "../db/repositories/food-logs"
 import { createAllowlistMiddleware } from "./middleware/allowlist"
 import { createAdminCommand } from "./commands/admin"
 import { createTodayCommand } from "./commands/today"
+import { createWeekCommand, createMonthCommand } from "./commands/stats"
 
 export interface BotContext extends Context {}
 
@@ -42,6 +43,8 @@ export function createBot() {
 
   bot.command("admin", createAdminCommand(allowedUsersRepo))
   bot.command("today", createTodayCommand(foodLogsRepo, usersRepo))
+  bot.command("week", createWeekCommand(foodLogsRepo, usersRepo))
+  bot.command("month", createMonthCommand(foodLogsRepo, usersRepo))
 
   return { bot, allowedUsersRepo, usersRepo, foodLogsRepo }
 }
