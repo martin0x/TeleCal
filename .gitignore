@@ -1,0 +1,18 @@
+# Worktrees
+.worktrees/
+
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+
+# Database
+data/*.db
+
+# Build
+dist/
+
+# OS
+.DS_Store
