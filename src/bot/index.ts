@@ -4,8 +4,10 @@ import { config } from "../config"
 import { db } from "../db"
 import { AllowedUsersRepository } from "../db/repositories/allowed-users"
 import { UsersRepository } from "../db/repositories/users"
+import { FoodLogsRepository } from "../db/repositories/food-logs"
 import { createAllowlistMiddleware } from "./middleware/allowlist"
 import { createAdminCommand } from "./commands/admin"
+import { createTodayCommand } from "./commands/today"
 
 export interface BotContext extends Context {}
 
@@ -14,6 +16,7 @@ export function createBot() {
 
   const allowedUsersRepo = new AllowedUsersRepository(db)
   const usersRepo = new UsersRepository(db)
+  const foodLogsRepo = new FoodLogsRepository(db)
 
   bot.use(createAllowlistMiddleware(allowedUsersRepo))
 
@@ -38,6 +41,7 @@ export function createBot() {
   })
 
   bot.command("admin", createAdminCommand(allowedUsersRepo))
+  bot.command("today", createTodayCommand(foodLogsRepo, usersRepo))
 
-  return { bot, allowedUsersRepo, usersRepo }
+  return { bot, allowedUsersRepo, usersRepo, foodLogsRepo }
 }
