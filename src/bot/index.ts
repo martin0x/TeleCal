@@ -5,10 +5,15 @@ import { db } from "../db"
 import { AllowedUsersRepository } from "../db/repositories/allowed-users"
 import { UsersRepository } from "../db/repositories/users"
 import { FoodLogsRepository } from "../db/repositories/food-logs"
+import { ConversationsRepository } from "../db/repositories/conversations"
+import { PendingRepository } from "../db/repositories/pending"
 import { createAllowlistMiddleware } from "./middleware/allowlist"
 import { createAdminCommand } from "./commands/admin"
 import { createTodayCommand } from "./commands/today"
 import { createWeekCommand, createMonthCommand } from "./commands/stats"
+import { createLogCommand, createLogMessageHandler } from "./commands/log"
+import { LogFlow } from "./conversations/log-flow"
+import { AIService } from "../ai/service"
 
 export interface BotContext extends Context {}
 
@@ -18,6 +23,10 @@ export function createBot() {
   const allowedUsersRepo = new AllowedUsersRepository(db)
   const usersRepo = new UsersRepository(db)
   const foodLogsRepo = new FoodLogsRepository(db)
+  const conversationsRepo = new ConversationsRepository(db)
+  const pendingRepo = new PendingRepository(db)
+  const aiService = new AIService(db)
+  const logFlow = new LogFlow(conversationsRepo, foodLogsRepo, pendingRepo, aiService)
 
   bot.use(createAllowlistMiddleware(allowedUsersRepo))
 
@@ -45,6 +54,10 @@ export function createBot() {
   bot.command("today", createTodayCommand(foodLogsRepo, usersRepo))
   bot.command("week", createWeekCommand(foodLogsRepo, usersRepo))
   bot.command("month", createMonthCommand(foodLogsRepo, usersRepo))
+  bot.command("log", createLogCommand(logFlow, conversationsRepo, usersRepo))
 
-  return { bot, allowedUsersRepo, usersRepo, foodLogsRepo }
+  // Handle messages for active /log conversations
+  bot.on("message:text", createLogMessageHandler(logFlow, conversationsRepo, usersRepo))
+
+  return { bot, allowedUsersRepo, usersRepo, foodLogsRepo, conversationsRepo, pendingRepo, aiService, logFlow }
 }
