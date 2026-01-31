@@ -12,6 +12,10 @@ import { createAdminCommand } from "./commands/admin"
 import { createTodayCommand } from "./commands/today"
 import { createWeekCommand, createMonthCommand } from "./commands/stats"
 import { createLogCommand, createLogMessageHandler } from "./commands/log"
+import { createDeleteCommand, createDeleteMessageHandler, hasDeleteState } from "./commands/delete"
+import { createEditCommand, createEditMessageHandler, hasEditState } from "./commands/edit"
+import { createSettingsCommand, createSettingsCallbackHandler, createSettingsMessageHandler, hasPendingSettings } from "./commands/settings"
+import { createPendingCommand, createPendingCallbackHandler } from "./commands/pending"
 import { LogFlow } from "./conversations/log-flow"
 import { AIService } from "../ai/service"
 
@@ -55,9 +59,47 @@ export function createBot() {
   bot.command("week", createWeekCommand(foodLogsRepo, usersRepo))
   bot.command("month", createMonthCommand(foodLogsRepo, usersRepo))
   bot.command("log", createLogCommand(logFlow, conversationsRepo, usersRepo))
+  bot.command("delete", createDeleteCommand(foodLogsRepo))
+  bot.command("edit", createEditCommand(foodLogsRepo))
+  bot.command("settings", createSettingsCommand(usersRepo, aiService))
+  bot.command("pending", createPendingCommand(pendingRepo))
 
-  // Handle messages for active /log conversations
-  bot.on("message:text", createLogMessageHandler(logFlow, conversationsRepo, usersRepo))
+  // Handle callback queries for inline keyboards
+  bot.on("callback_query:data", async (ctx, next) => {
+    const data = ctx.callbackQuery?.data
+    if (data?.startsWith("settings:")) {
+      return createSettingsCallbackHandler(usersRepo, aiService)(ctx)
+    }
+    if (data?.startsWith("pending:")) {
+      return createPendingCallbackHandler(pendingRepo)(ctx)
+    }
+    return next()
+  })
+
+  // Create message handlers
+  const logMessageHandler = createLogMessageHandler(logFlow, conversationsRepo, usersRepo)
+  const deleteMessageHandler = createDeleteMessageHandler(foodLogsRepo)
+  const editMessageHandler = createEditMessageHandler(foodLogsRepo, usersRepo, aiService)
+  const settingsMessageHandler = createSettingsMessageHandler(usersRepo)
+
+  // Handle text messages - route to appropriate handler based on active state
+  bot.on("message:text", async (ctx) => {
+    const userId = ctx.from?.id
+    if (!userId) return
+
+    // Priority order: settings > delete > edit > log conversation
+    if (hasPendingSettings(userId)) {
+      return settingsMessageHandler(ctx)
+    }
+    if (hasDeleteState(userId)) {
+      return deleteMessageHandler(ctx)
+    }
+    if (hasEditState(userId)) {
+      return editMessageHandler(ctx)
+    }
+    // Default to log conversation handler
+    return logMessageHandler(ctx)
+  })
 
   return { bot, allowedUsersRepo, usersRepo, foodLogsRepo, conversationsRepo, pendingRepo, aiService, logFlow }
 }
