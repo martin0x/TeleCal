@@ -78,6 +78,14 @@ export class UsersRepository {
     this.db.run(sql, ...values)
   }
 
+  getUsersWithReminders(): User[] {
+    const stmt = this.db.prepare(
+      "SELECT * FROM users WHERE reminder_time IS NOT NULL"
+    )
+    const rows = stmt.all() as UserRow[]
+    return rows.map((row) => this.rowToUser(row))
+  }
+
   private rowToUser(row: UserRow): User {
     return {
       ...row,
