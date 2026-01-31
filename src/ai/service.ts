@@ -3,6 +3,7 @@ import { Database } from "bun:sqlite"
 import { AIProvider, EstimationResult, CachedEstimation } from "./types"
 import { OpenAIProvider } from "./providers/openai"
 import { AnthropicProvider } from "./providers/anthropic"
+import { GeminiProvider } from "./providers/gemini"
 import { config } from "../config"
 
 export class AIService {
@@ -17,6 +18,9 @@ export class AIService {
     }
     if (config.ai.anthropicApiKey) {
       this.providers.set("anthropic", new AnthropicProvider())
+    }
+    if (config.ai.googleApiKey) {
+      this.providers.set("gemini", new GeminiProvider())
     }
   }
 

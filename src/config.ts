@@ -32,6 +32,7 @@ export const config = {
   ai: {
     openaiApiKey: getEnv("OPENAI_API_KEY", ""),
     anthropicApiKey: getEnv("ANTHROPIC_API_KEY", ""),
+    googleApiKey: getEnv("GOOGLE_API_KEY", ""),
   },
   web: {
     appUrl: getEnv("APP_URL", "http://localhost:3000"),
