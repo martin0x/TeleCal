@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>TeleCal</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg-color: var(--tg-theme-bg-color, #ffffff);
+      --text-color: var(--tg-theme-text-color, #000000);
+      --hint-color: var(--tg-theme-hint-color, #999999);
+      --link-color: var(--tg-theme-link-color, #2481cc);
+      --button-color: var(--tg-theme-button-color, #2481cc);
+      --button-text: var(--tg-theme-button-text-color, #ffffff);
+      --secondary-bg: var(--tg-theme-secondary-bg-color, #f0f0f0);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-color);
+      color: var(--text-color);
+      min-height: 100vh;
+      padding-bottom: 20px;
+    }
+
+    .tabs {
+      display: flex;
+      background: var(--secondary-bg);
+      padding: 8px;
+      gap: 8px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 10px 16px;
+      border: none;
+      background: transparent;
+      color: var(--hint-color);
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tab.active {
+      background: var(--button-color);
+      color: var(--button-text);
+    }
+
+    .view {
+      display: none;
+      padding: 16px;
+    }
+
+    .view.active {
+      display: block;
+    }
+
+    /* Progress Ring */
+    .progress-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 0;
+    }
+
+    .progress-ring {
+      position: relative;
+      width: 200px;
+      height: 200px;
+    }
+
+    .progress-ring canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    .progress-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+
+    .progress-calories {
+      font-size: 32px;
+      font-weight: 700;
+    }
+
+    .progress-goal {
+      font-size: 14px;
+      color: var(--hint-color);
+    }
+
+    .progress-percent {
+      font-size: 16px;
+      color: var(--link-color);
+      margin-top: 4px;
+    }
+
+    /* Chart containers */
+    .chart-container {
+      position: relative;
+      height: 200px;
+      margin-bottom: 16px;
+    }
+
+    /* Calendar */
+    .calendar {
+      margin-top: 16px;
+    }
+
+    .calendar-header {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+
+    .calendar-header span {
+      text-align: center;
+      font-size: 12px;
+      color: var(--hint-color);
+      font-weight: 600;
+    }
+
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+    }
+
+    .calendar-day {
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+      background: transparent;
+      color: var(--text-color);
+    }
+
+    .calendar-day:hover {
+      background: var(--secondary-bg);
+    }
+
+    .calendar-day.empty {
+      color: var(--hint-color);
+      cursor: default;
+    }
+
+    .calendar-day.has-data {
+      font-weight: 600;
+    }
+
+    .calendar-day.selected {
+      background: var(--button-color);
+      color: var(--button-text);
+    }
+
+    .calendar-day.no-data {
+      color: var(--hint-color);
+    }
+
+    /* Food log */
+    .food-log {
+      margin-top: 16px;
+    }
+
+    .food-log-header {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--hint-color);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--secondary-bg);
+    }
+
+    .food-item {
+      display: flex;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--secondary-bg);
+    }
+
+    .food-item:last-child {
+      border-bottom: none;
+    }
+
+    .food-emoji {
+      font-size: 24px;
+      margin-right: 12px;
+      width: 32px;
+      text-align: center;
+    }
+
+    .food-details {
+      flex: 1;
+    }
+
+    .food-name {
+      font-size: 15px;
+      margin-bottom: 2px;
+    }
+
+    .food-calories {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--link-color);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 32px;
+      color: var(--hint-color);
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    .loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 48px;
+      color: var(--hint-color);
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--hint-color);
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="tabs">
+    <button class="tab active" data-tab="today">Today</button>
+    <button class="tab" data-tab="week">Week</button>
+    <button class="tab" data-tab="month">Month</button>
+  </div>
+
+  <div id="today-view" class="view active">
+    <div class="progress-container">
+      <div class="progress-ring">
+        <canvas id="progress-chart"></canvas>
+        <div class="progress-text">
+          <div class="progress-calories" id="today-calories">--</div>
+          <div class="progress-goal" id="today-goal">/ -- cal</div>
+          <div class="progress-percent" id="today-percent">--%</div>
+        </div>
+      </div>
+    </div>
+    <div class="food-log" id="today-log"></div>
+  </div>
+
+  <div id="week-view" class="view">
+    <div class="chart-container">
+      <canvas id="week-chart"></canvas>
+    </div>
+    <div class="food-log" id="week-log"></div>
+  </div>
+
+  <div id="month-view" class="view">
+    <div class="section-title">30-Day Trend</div>
+    <div class="chart-container">
+      <canvas id="month-chart"></canvas>
+    </div>
+    <div class="calendar" id="calendar"></div>
+    <div class="food-log" id="month-log"></div>
+  </div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+
+    // State
+    let userData = null;
+    let weekData = null;
+    let monthData = null;
+    let selectedDate = null;
+    let charts = {};
+
+    // API helpers
+    async function api(endpoint) {
+      const res = await fetch(endpoint, {
+        headers: { 'Authorization': `tg-init-data ${tg.initData}` }
+      });
+      if (!res.ok) throw new Error('API error');
+      return res.json();
+    }
+
+    // Format date for display
+    function formatDate(dateStr) {
+      const date = new Date(dateStr + 'T00:00:00');
+      return date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric'
+      });
+    }
+
+    // Get day of week abbreviation
+    function getDayAbbr(dateStr) {
+      const date = new Date(dateStr + 'T00:00:00');
+      return date.toLocaleDateString('en-US', { weekday: 'short' });
+    }
+
+    // Render food items
+    function renderFoodLog(container, items, date) {
+      if (!items || items.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">🍽️</div>
+            <div>No food logged${date ? ' for ' + formatDate(date) : ''}</div>
+          </div>
+        `;
+        return;
+      }
+
+      const header = date ? formatDate(date) : "Today's Log";
+      const total = items.reduce((sum, item) => sum + item.calories, 0);
+
+      container.innerHTML = `
+        <div class="food-log-header">${header} &bull; ${total} cal</div>
+        ${items.map(item => `
+          <div class="food-item">
+            <div class="food-emoji">${item.emoji || '🍴'}</div>
+            <div class="food-details">
+              <div class="food-name">${item.description}</div>
+            </div>
+            <div class="food-calories">${item.calories}</div>
+          </div>
+        `).join('')}
+      `;
+    }
+
+    // Initialize progress ring chart
+    function createProgressChart(current, goal) {
+      const ctx = document.getElementById('progress-chart').getContext('2d');
+      const percent = goal > 0 ? Math.min(current / goal, 1) : 0;
+
+      if (charts.progress) charts.progress.destroy();
+
+      charts.progress = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          datasets: [{
+            data: [percent, 1 - percent],
+            backgroundColor: [
+              getComputedStyle(document.documentElement).getPropertyValue('--button-color').trim() || '#2481cc',
+              getComputedStyle(document.documentElement).getPropertyValue('--secondary-bg').trim() || '#f0f0f0'
+            ],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          cutout: '75%',
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: { legend: { display: false }, tooltip: { enabled: false } }
+        }
+      });
+
+      document.getElementById('today-calories').textContent = current.toLocaleString();
+      document.getElementById('today-goal').textContent = goal ? `/ ${goal.toLocaleString()} cal` : 'No goal set';
+      document.getElementById('today-percent').textContent = goal ? `${Math.round(percent * 100)}%` : '';
+    }
+
+    // Initialize week bar chart
+    function createWeekChart(data, goal) {
+      const ctx = document.getElementById('week-chart').getContext('2d');
+      const dates = Object.keys(data.daily).sort();
+      const values = dates.map(d => data.daily[d]);
+      const labels = dates.map(d => getDayAbbr(d));
+
+      const buttonColor = getComputedStyle(document.documentElement).getPropertyValue('--button-color').trim() || '#2481cc';
+
+      if (charts.week) charts.week.destroy();
+
+      charts.week = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            data: values,
+            backgroundColor: buttonColor + '99',
+            borderColor: buttonColor,
+            borderWidth: 1,
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            annotation: goal ? {
+              annotations: {
+                goalLine: {
+                  type: 'line',
+                  yMin: goal,
+                  yMax: goal,
+                  borderColor: '#ff6b6b',
+                  borderWidth: 2,
+                  borderDash: [5, 5]
+                }
+              }
+            } : {}
+          },
+          scales: {
+            y: { beginAtZero: true, grid: { display: false } },
+            x: { grid: { display: false } }
+          },
+          onClick: (e, elements) => {
+            if (elements.length > 0) {
+              const index = elements[0].index;
+              const date = dates[index];
+              loadDayLog(date, 'week');
+            }
+          }
+        }
+      });
+    }
+
+    // Initialize month line chart
+    function createMonthChart(data) {
+      const ctx = document.getElementById('month-chart').getContext('2d');
+      const dates = Object.keys(data.daily).sort();
+      const values = dates.map(d => data.daily[d]);
+
+      const buttonColor = getComputedStyle(document.documentElement).getPropertyValue('--button-color').trim() || '#2481cc';
+
+      if (charts.month) charts.month.destroy();
+
+      charts.month = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: dates.map(d => d.slice(-2)), // Just day number
+          datasets: [{
+            data: values,
+            borderColor: buttonColor,
+            backgroundColor: buttonColor + '33',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, grid: { display: false } },
+            x: {
+              grid: { display: false },
+              ticks: { maxTicksLimit: 7 }
+            }
+          }
+        }
+      });
+    }
+
+    // Create calendar for month view
+    function createCalendar(data) {
+      const container = document.getElementById('calendar');
+      const dates = Object.keys(data.daily).sort();
+      const startDate = new Date(dates[0] + 'T00:00:00');
+      const endDate = new Date(dates[dates.length - 1] + 'T00:00:00');
+
+      // Get the first day of the month containing start date
+      const firstOfMonth = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+      const startDayOfWeek = firstOfMonth.getDay();
+
+      const daysOfWeek = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+      let html = `
+        <div class="calendar-header">
+          ${daysOfWeek.map(d => `<span>${d}</span>`).join('')}
+        </div>
+        <div class="calendar-grid">
+      `;
+
+      // Empty cells for days before start of month
+      for (let i = 0; i < startDayOfWeek; i++) {
+        html += `<button class="calendar-day empty"></button>`;
+      }
+
+      // Generate days
+      const daysInMonth = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0).getDate();
+      const dataSet = new Set(dates);
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const hasData = dataSet.has(dateStr) && data.daily[dateStr] > 0;
+        const isSelected = dateStr === selectedDate;
+
+        const classes = ['calendar-day'];
+        if (hasData) classes.push('has-data');
+        else classes.push('no-data');
+        if (isSelected) classes.push('selected');
+
+        html += `<button class="${classes.join(' ')}" data-date="${dateStr}">${day}</button>`;
+      }
+
+      html += '</div>';
+      container.innerHTML = html;
+
+      // Add click handlers
+      container.querySelectorAll('.calendar-day[data-date]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const date = btn.dataset.date;
+          selectCalendarDay(date, data);
+        });
+      });
+    }
+
+    function selectCalendarDay(date, data) {
+      selectedDate = date;
+
+      // Update calendar selection
+      document.querySelectorAll('.calendar-day').forEach(btn => {
+        btn.classList.toggle('selected', btn.dataset.date === date);
+      });
+
+      loadDayLog(date, 'month');
+    }
+
+    async function loadDayLog(date, target) {
+      const container = document.getElementById(`${target}-log`);
+      container.innerHTML = '<div class="loading">Loading...</div>';
+
+      try {
+        const data = await api(`/api/day/${date}`);
+        renderFoodLog(container, data.items, date);
+      } catch (e) {
+        container.innerHTML = '<div class="empty-state">Failed to load</div>';
+      }
+    }
+
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+
+        tab.classList.add('active');
+        document.getElementById(`${target}-view`).classList.add('active');
+
+        loadTabData(target);
+      });
+    });
+
+    async function loadTabData(tab) {
+      try {
+        if (tab === 'today') {
+          const [user, today] = await Promise.all([
+            userData ? Promise.resolve(userData) : api('/api/user'),
+            api('/api/today')
+          ]);
+          userData = user;
+
+          createProgressChart(today.total, user.daily_goal || 2000);
+          renderFoodLog(document.getElementById('today-log'), today.items);
+        }
+
+        if (tab === 'week') {
+          if (!weekData) weekData = await api('/api/stats?period=week');
+          if (!userData) userData = await api('/api/user');
+
+          createWeekChart(weekData, userData.daily_goal);
+          document.getElementById('week-log').innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">👆</div>
+              <div>Tap a bar to see that day's log</div>
+            </div>
+          `;
+        }
+
+        if (tab === 'month') {
+          if (!monthData) monthData = await api('/api/stats?period=month');
+
+          createMonthChart(monthData);
+          createCalendar(monthData);
+          document.getElementById('month-log').innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">📅</div>
+              <div>Tap a day to see its log</div>
+            </div>
+          `;
+        }
+      } catch (e) {
+        console.error('Failed to load data:', e);
+      }
+    }
+
+    // Initial load
+    loadTabData('today');
+  </script>
+</body>
+</html>
