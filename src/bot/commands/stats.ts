@@ -37,6 +37,7 @@ async function sendStatsMessage(
   foodLogsRepo: FoodLogsRepository,
   usersRepo: UsersRepository
 ) {
+  const isPrivateChat = ctx.chat?.type === "private"
   const today = getToday()
   const dateRange = getDateRange(days, today)
   const startDate = dateRange[0]
@@ -57,13 +58,13 @@ async function sendStatsMessage(
   if (daysWithData === 0) {
     message += "No data logged for this period.\n\n"
     message += "Use /log to start tracking!"
-    await ctx.reply(message, {
+    await ctx.reply(message, isPrivateChat ? {
       reply_markup: {
         inline_keyboard: [[
           { text: "📈 View Charts", web_app: { url: config.web.appUrl } }
         ]]
       }
-    })
+    } : {})
     return
   }
 
@@ -101,13 +102,13 @@ async function sendStatsMessage(
     message += `\n🎯 Under goal: ${daysUnderGoal}/${daysWithData} days (${percentage}%)`
   }
 
-  await ctx.reply(message, {
+  await ctx.reply(message, isPrivateChat ? {
     reply_markup: {
       inline_keyboard: [[
         { text: "📈 View Charts", web_app: { url: config.web.appUrl } }
       ]]
     }
-  })
+  } : {})
 }
 
 function createMiniBar(value: number, max: number): string {

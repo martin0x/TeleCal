@@ -13,6 +13,7 @@ export function createTodayCommand(
     const userId = ctx.from?.id
     if (!userId) return
 
+    const isPrivateChat = ctx.chat?.type === "private"
     const today = getToday()
     const entries = foodLogsRepo.getByDate(userId, today)
     const totalCalories = foodLogsRepo.getTotalCalories(userId, today)
@@ -24,13 +25,13 @@ export function createTodayCommand(
         `📅 ${formatDateForDisplay(today)}\n\n` +
           "No food logged yet today.\n\n" +
           "Use /log to add your first entry!",
-        {
+        isPrivateChat ? {
           reply_markup: {
             inline_keyboard: [[
               { text: "📈 View Charts", web_app: { url: config.web.appUrl } }
             ]]
           }
-        }
+        } : {}
       )
       return
     }
@@ -66,13 +67,13 @@ export function createTodayCommand(
       }
     }
 
-    await ctx.reply(message, {
+    await ctx.reply(message, isPrivateChat ? {
       reply_markup: {
         inline_keyboard: [[
           { text: "📈 View Charts", web_app: { url: config.web.appUrl } }
         ]]
       }
-    })
+    } : {})
   }
 }
 
