@@ -21,18 +21,36 @@ export function createTodayCommand(
     const dailyGoal = user?.daily_goal
 
     if (entries.length === 0) {
-      await ctx.reply(
-        `📅 ${formatDateForDisplay(today)}\n\n` +
-          "No food logged yet today.\n\n" +
-          "Use /log to add your first entry!",
-        isPrivateChat ? {
-          reply_markup: {
-            inline_keyboard: [[
-              { text: "📈 View Charts", web_app: { url: config.web.appUrl } }
-            ]]
-          }
-        } : {}
-      )
+      let emptyMessage = `📅 ${formatDateForDisplay(today)}\n\n` +
+        "No food logged yet today.\n\n" +
+        "Use /log to add your first entry!"
+
+      if (!isPrivateChat) {
+        emptyMessage += "\n\n💬 Start a chat with me to see interactive charts!"
+      }
+
+      await ctx.reply(emptyMessage, isPrivateChat ? {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: "📈 View Charts", web_app: { url: config.web.appUrl } }
+          ]]
+        }
+      } : {})
+
+      // Try to DM the mini-app button in group chats
+      if (!isPrivateChat) {
+        try {
+          await ctx.api.sendMessage(userId, "📈 Here's your chart view:", {
+            reply_markup: {
+              inline_keyboard: [[
+                { text: "📈 View Charts", web_app: { url: config.web.appUrl } }
+              ]]
+            }
+          })
+        } catch {
+          // User hasn't started bot - the group note guides them
+        }
+      }
       return
     }
 
@@ -67,6 +85,11 @@ export function createTodayCommand(
       }
     }
 
+    // Add note for group chats
+    if (!isPrivateChat) {
+      message += "\n\n💬 Start a chat with me to see interactive charts!"
+    }
+
     await ctx.reply(message, isPrivateChat ? {
       reply_markup: {
         inline_keyboard: [[
@@ -74,6 +97,21 @@ export function createTodayCommand(
         ]]
       }
     } : {})
+
+    // Try to DM the mini-app button in group chats
+    if (!isPrivateChat) {
+      try {
+        await ctx.api.sendMessage(userId, "📈 Here's your chart view:", {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "📈 View Charts", web_app: { url: config.web.appUrl } }
+            ]]
+          }
+        })
+      } catch {
+        // User hasn't started bot - the group note guides them
+      }
+    }
   }
 }
 
