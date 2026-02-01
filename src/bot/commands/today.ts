@@ -3,6 +3,7 @@ import { Context } from "grammy"
 import { FoodLogsRepository } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
 import { getToday, formatDateForDisplay } from "../../utils/dates"
+import { config } from "../../config"
 
 export function createTodayCommand(
   foodLogsRepo: FoodLogsRepository,
@@ -22,7 +23,14 @@ export function createTodayCommand(
       await ctx.reply(
         `📅 ${formatDateForDisplay(today)}\n\n` +
           "No food logged yet today.\n\n" +
-          "Use /log to add your first entry!"
+          "Use /log to add your first entry!",
+        {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "📈 View Charts", web_app: { url: config.web.appUrl } }
+            ]]
+          }
+        }
       )
       return
     }
@@ -58,7 +66,13 @@ export function createTodayCommand(
       }
     }
 
-    await ctx.reply(message)
+    await ctx.reply(message, {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: "📈 View Charts", web_app: { url: config.web.appUrl } }
+        ]]
+      }
+    })
   }
 }
 

@@ -3,6 +3,7 @@ import { Context } from "grammy"
 import { FoodLogsRepository } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
 import { getToday, getDateRange, formatDateForDisplay, getDayOfWeek } from "../../utils/dates"
+import { config } from "../../config"
 
 export function createWeekCommand(
   foodLogsRepo: FoodLogsRepository,
@@ -56,7 +57,13 @@ async function sendStatsMessage(
   if (daysWithData === 0) {
     message += "No data logged for this period.\n\n"
     message += "Use /log to start tracking!"
-    await ctx.reply(message)
+    await ctx.reply(message, {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: "📈 View Charts", web_app: { url: config.web.appUrl } }
+        ]]
+      }
+    })
     return
   }
 
@@ -94,7 +101,13 @@ async function sendStatsMessage(
     message += `\n🎯 Under goal: ${daysUnderGoal}/${daysWithData} days (${percentage}%)`
   }
 
-  await ctx.reply(message)
+  await ctx.reply(message, {
+    reply_markup: {
+      inline_keyboard: [[
+        { text: "📈 View Charts", web_app: { url: config.web.appUrl } }
+      ]]
+    }
+  })
 }
 
 function createMiniBar(value: number, max: number): string {
