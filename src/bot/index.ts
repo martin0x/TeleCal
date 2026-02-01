@@ -50,7 +50,11 @@ export function createBot() {
         "/today - See today's calories\n" +
         "/week - See past 7 days\n" +
         "/month - See past 30 days\n" +
-        "/settings - Change preferences"
+        "/edit - Edit a food entry\n" +
+        "/delete - Delete a food entry\n" +
+        "/pending - View pending estimations\n" +
+        "/settings - Change preferences\n\n" +
+        'Tip: Type "cancel" to abort any active conversation.'
     )
   })
 
