@@ -6,6 +6,7 @@ import { UsersRepository } from "../db/repositories/users"
 import { AIService } from "../ai/service"
 import { config } from "../config"
 import { formatDateForDisplay } from "../utils/dates"
+import { redactUserId } from "../utils/logging"
 
 const MAX_RETRIES = 10
 const BATCH_SIZE = 5
@@ -51,7 +52,7 @@ export function createRetryPendingJob(
               `Please try logging it again with /log.`
           )
         } catch (error) {
-          console.error(`Failed to notify user ${entry.telegram_id}:`, error)
+          console.error(`Failed to notify user ${redactUserId(entry.telegram_id)}:`, error)
         }
         continue
       }
@@ -95,7 +96,7 @@ export function createRetryPendingJob(
             `Logged to ${formatDateForDisplay(entry.target_date)}.`
         )
 
-        console.log(`Successfully processed entry ${entry.id} for user ${entry.telegram_id}`)
+        console.log(`Successfully processed entry ${entry.id} for user ${redactUserId(entry.telegram_id)}`)
       } catch (error) {
         // AI still unavailable - increment retry
         pendingRepo.incrementRetry(entry.id)

@@ -18,6 +18,25 @@ interface ConversationContext {
   clarificationHistory?: string[]
 }
 
+/**
+ * Safely parse JSON with a fallback value.
+ * Prevents crashes from corrupted database data or encoding issues.
+ */
+function safeJsonParse<T>(json: string | null, defaultValue: T): T {
+  if (!json) return defaultValue
+  try {
+    return JSON.parse(json) as T
+  } catch (error) {
+    console.error(
+      "JSON parse error:",
+      error,
+      "Input preview:",
+      json?.substring(0, 100)
+    )
+    return defaultValue
+  }
+}
+
 export class LogFlow {
   constructor(
     private conversations: ConversationsRepository,
@@ -145,7 +164,7 @@ export class LogFlow {
     }
   ): Promise<LogFlowResult> {
     // Build context from previous conversation
-    const context = state.context ? JSON.parse(state.context) as ConversationContext : {}
+    const context = safeJsonParse<ConversationContext>(state.context, {})
     const contextStr = this.buildContextString(state.pending_food, context)
 
     try {
@@ -174,7 +193,16 @@ export class LogFlow {
         }
       }
 
-      const items = JSON.parse(state.pending_items) as FoodItem[]
+      const items = safeJsonParse<FoodItem[]>(state.pending_items, [])
+
+      if (items.length === 0) {
+        return {
+          message:
+            "Something went wrong with your saved items. Please start over with /log.",
+          action: "error",
+        }
+      }
+
       const log = this.foodLogs.create(telegramId, chatId, state.target_date, items)
 
       const totalCalories = items.reduce((sum, item) => sum + item.calories, 0)
@@ -312,7 +340,13 @@ export class LogFlow {
         }
       case "confirming":
         if (state.pending_items) {
-          const items = JSON.parse(state.pending_items) as FoodItem[]
+          const items = safeJsonParse<FoodItem[]>(state.pending_items, [])
+          if (items.length === 0) {
+            return {
+              message: "Something went wrong. Please start over with /log",
+              action: "error",
+            }
+          }
           const itemsDisplay = items
             .map((item) => `${item.emoji ?? "🍽️"} ${item.description} — ${item.calories} cal`)
             .join("\n")

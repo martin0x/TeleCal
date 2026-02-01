@@ -51,31 +51,49 @@ export class UsersRepository {
       reminder_mention: boolean
     }>
   ): void {
-    const updates: string[] = []
-    const values: (string | number | null)[] = []
+    // Explicit allowlist - TypeScript enforces only these columns can be used
+    const allowedColumns = [
+      "ai_provider",
+      "daily_goal",
+      "reminder_time",
+      "reminder_mention",
+    ] as const
+    type AllowedColumn = (typeof allowedColumns)[number]
+
+    const columnUpdates: {
+      column: AllowedColumn
+      value: string | number | null
+    }[] = []
 
     if (settings.ai_provider !== undefined) {
-      updates.push("ai_provider = ?")
-      values.push(settings.ai_provider)
+      columnUpdates.push({ column: "ai_provider", value: settings.ai_provider })
     }
     if (settings.daily_goal !== undefined) {
-      updates.push("daily_goal = ?")
-      values.push(settings.daily_goal)
+      columnUpdates.push({ column: "daily_goal", value: settings.daily_goal })
     }
     if (settings.reminder_time !== undefined) {
-      updates.push("reminder_time = ?")
-      values.push(settings.reminder_time)
+      columnUpdates.push({
+        column: "reminder_time",
+        value: settings.reminder_time,
+      })
     }
     if (settings.reminder_mention !== undefined) {
-      updates.push("reminder_mention = ?")
-      values.push(settings.reminder_mention ? 1 : 0)
+      columnUpdates.push({
+        column: "reminder_mention",
+        value: settings.reminder_mention ? 1 : 0,
+      })
     }
 
-    if (updates.length === 0) return
+    if (columnUpdates.length === 0) return
 
-    values.push(telegramId)
-    const sql = `UPDATE users SET ${updates.join(", ")} WHERE telegram_id = ?`
-    this.db.run(sql, ...values)
+    // TypeScript guarantees column names are from the literal union
+    const setClause = columnUpdates.map((u) => `${u.column} = ?`).join(", ")
+    const values = columnUpdates.map((u) => u.value)
+
+    const stmt = this.db.prepare(
+      `UPDATE users SET ${setClause} WHERE telegram_id = ?`
+    )
+    stmt.run(...values, telegramId)
   }
 
   getUsersWithReminders(): User[] {

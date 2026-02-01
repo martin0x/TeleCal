@@ -20,6 +20,32 @@ export function validateInitData(
     const hash = params.get("hash")
     if (!hash) return null
 
+    // REQUIRED: Validate auth_date exists and is recent
+    const authDate = params.get("auth_date")
+    if (!authDate) {
+      return null // auth_date is required for security
+    }
+
+    const authTimestamp = parseInt(authDate, 10)
+    if (isNaN(authTimestamp)) {
+      return null // Invalid auth_date format
+    }
+
+    const authMs = authTimestamp * 1000
+    const now = Date.now()
+    const maxAge = 5 * 60 * 1000 // 5 minutes (reduced from 1 hour)
+
+    // Check if token is too old
+    if (now - authMs > maxAge) {
+      return null
+    }
+
+    // Check for future dates (clock skew attack prevention)
+    const maxClockSkew = 60 * 1000 // Allow 1 minute of clock skew
+    if (authMs > now + maxClockSkew) {
+      return null // Token from the future
+    }
+
     params.delete("hash")
 
     // Sort params alphabetically and create data check string
@@ -40,17 +66,6 @@ export function validateInitData(
 
     if (hash !== expectedHash) {
       return null
-    }
-
-    // Optional: Check auth_date is not too old (1 hour)
-    const authDate = params.get("auth_date")
-    if (authDate) {
-      const authTimestamp = parseInt(authDate, 10) * 1000
-      const now = Date.now()
-      const oneHour = 60 * 60 * 1000
-      if (now - authTimestamp > oneHour) {
-        return null
-      }
     }
 
     // Parse user data

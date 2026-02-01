@@ -329,33 +329,61 @@
       return date.toLocaleDateString('en-US', { weekday: 'short' });
     }
 
-    // Render food items
+    // Render food items (using DOM APIs to prevent XSS)
     function renderFoodLog(container, items, date) {
+      container.innerHTML = ''; // Clear container safely
+
       if (!items || items.length === 0) {
-        container.innerHTML = `
-          <div class="empty-state">
-            <div class="empty-state-icon">🍽️</div>
-            <div>No food logged${date ? ' for ' + formatDate(date) : ''}</div>
-          </div>
-        `;
+        const emptyDiv = document.createElement('div');
+        emptyDiv.className = 'empty-state';
+
+        const iconDiv = document.createElement('div');
+        iconDiv.className = 'empty-state-icon';
+        iconDiv.textContent = '🍽️';
+
+        const textDiv = document.createElement('div');
+        textDiv.textContent = 'No food logged' + (date ? ' for ' + formatDate(date) : '');
+
+        emptyDiv.appendChild(iconDiv);
+        emptyDiv.appendChild(textDiv);
+        container.appendChild(emptyDiv);
         return;
       }
 
-      const header = date ? formatDate(date) : "Today's Log";
+      const headerText = date ? formatDate(date) : "Today's Log";
       const total = items.reduce((sum, item) => sum + item.calories, 0);
 
-      container.innerHTML = `
-        <div class="food-log-header">${header} &bull; ${total} cal</div>
-        ${items.map(item => `
-          <div class="food-item">
-            <div class="food-emoji">${item.emoji || '🍴'}</div>
-            <div class="food-details">
-              <div class="food-name">${item.description}</div>
-            </div>
-            <div class="food-calories">${item.calories}</div>
-          </div>
-        `).join('')}
-      `;
+      const headerDiv = document.createElement('div');
+      headerDiv.className = 'food-log-header';
+      headerDiv.textContent = `${headerText} • ${total} cal`;
+      container.appendChild(headerDiv);
+
+      items.forEach(item => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'food-item';
+
+        const emojiDiv = document.createElement('div');
+        emojiDiv.className = 'food-emoji';
+        emojiDiv.textContent = item.emoji || '🍴';
+
+        const detailsDiv = document.createElement('div');
+        detailsDiv.className = 'food-details';
+
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'food-name';
+        nameDiv.textContent = item.description; // Safe: textContent escapes HTML
+
+        detailsDiv.appendChild(nameDiv);
+
+        const caloriesDiv = document.createElement('div');
+        caloriesDiv.className = 'food-calories';
+        caloriesDiv.textContent = item.calories;
+
+        itemDiv.appendChild(emojiDiv);
+        itemDiv.appendChild(detailsDiv);
+        itemDiv.appendChild(caloriesDiv);
+        container.appendChild(itemDiv);
+      });
     }
 
     // Initialize progress ring chart

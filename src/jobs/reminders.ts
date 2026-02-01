@@ -3,6 +3,7 @@ import { Bot } from "grammy"
 import { UsersRepository } from "../db/repositories/users"
 import { FoodLogsRepository } from "../db/repositories/food-logs"
 import { getToday } from "../utils/dates"
+import { redactUserId } from "../utils/logging"
 import { config } from "../config"
 
 // Track which users we've reminded today to avoid duplicates
@@ -107,9 +108,9 @@ export function createReminderJob(
         await bot.api.sendMessage(user.telegram_id, message)
         remindedToday.add(user.telegram_id)
 
-        console.log(`Sent reminder to user ${user.telegram_id}`)
+        console.log(`Sent reminder to user ${redactUserId(user.telegram_id)}`)
       } catch (error) {
-        console.error(`Failed to send reminder to user ${user.telegram_id}:`, error)
+        console.error(`Failed to send reminder to user ${redactUserId(user.telegram_id)}:`, error)
       }
     }
   }

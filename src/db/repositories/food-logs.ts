@@ -140,27 +140,33 @@ export class FoodLogsRepository {
     itemId: number,
     updates: Partial<{ description: string; calories: number; emoji: string }>
   ): void {
-    const sets: string[] = []
-    const values: (string | number)[] = []
+    // Explicit allowlist - TypeScript enforces only these columns can be used
+    const allowedColumns = ["description", "calories", "emoji"] as const
+    type AllowedColumn = (typeof allowedColumns)[number]
+
+    const columnUpdates: { column: AllowedColumn; value: string | number }[] =
+      []
 
     if (updates.description !== undefined) {
-      sets.push("description = ?")
-      values.push(updates.description)
+      columnUpdates.push({ column: "description", value: updates.description })
     }
     if (updates.calories !== undefined) {
-      sets.push("calories = ?")
-      values.push(updates.calories)
+      columnUpdates.push({ column: "calories", value: updates.calories })
     }
     if (updates.emoji !== undefined) {
-      sets.push("emoji = ?")
-      values.push(updates.emoji)
+      columnUpdates.push({ column: "emoji", value: updates.emoji })
     }
 
-    if (sets.length === 0) return
+    if (columnUpdates.length === 0) return
 
-    values.push(itemId)
-    const sql = `UPDATE food_items SET ${sets.join(", ")} WHERE id = ?`
-    this.db.run(sql, ...values)
+    // TypeScript guarantees column names are from the literal union
+    const setClause = columnUpdates.map((u) => `${u.column} = ?`).join(", ")
+    const values = columnUpdates.map((u) => u.value)
+
+    const stmt = this.db.prepare(
+      `UPDATE food_items SET ${setClause} WHERE id = ?`
+    )
+    stmt.run(...values, itemId)
   }
 
   getItemsByDate(telegramId: number, targetDate: string): (FoodItem & { log_id: number })[] {
