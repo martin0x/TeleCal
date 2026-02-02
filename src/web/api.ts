@@ -1,7 +1,7 @@
 // src/web/api.ts
 import { UsersRepository } from "../db/repositories/users"
 import { FoodLogsRepository } from "../db/repositories/food-logs"
-import { getToday, getDateRange } from "../utils/dates"
+import { getTodayInTimezone, getDateRangeInTimezone, DEFAULT_TIMEZONE } from "../utils/dates"
 
 export interface ApiDeps {
   usersRepo: UsersRepository
@@ -21,7 +21,9 @@ export function createApiHandlers(deps: ApiDeps) {
     },
 
     getToday(telegramId: number) {
-      const today = getToday()
+      const user = usersRepo.findById(telegramId)
+      const timezone = user?.timezone ?? DEFAULT_TIMEZONE
+      const today = getTodayInTimezone(timezone)
       const entries = foodLogsRepo.getByDate(telegramId, today)
       const items = entries.flatMap((log) =>
         log.items.map((item) => ({
@@ -41,9 +43,11 @@ export function createApiHandlers(deps: ApiDeps) {
     },
 
     getStats(telegramId: number, period: "week" | "month") {
-      const today = getToday()
+      const user = usersRepo.findById(telegramId)
+      const timezone = user?.timezone ?? DEFAULT_TIMEZONE
+      const today = getTodayInTimezone(timezone)
       const days = period === "week" ? 7 : 30
-      const dateRange = getDateRange(days, today)
+      const dateRange = getDateRangeInTimezone(days, today, timezone)
       const startDate = dateRange[0]
       const endDate = dateRange[dateRange.length - 1]
 

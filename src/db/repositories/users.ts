@@ -8,6 +8,7 @@ export interface User {
   daily_goal: number | null
   reminder_time: string | null
   reminder_mention: boolean
+  timezone: string
   created_at: string
 }
 
@@ -18,6 +19,7 @@ interface UserRow {
   daily_goal: number | null
   reminder_time: string | null
   reminder_mention: number
+  timezone: string
   created_at: string
 }
 
@@ -49,6 +51,7 @@ export class UsersRepository {
       daily_goal: number | null
       reminder_time: string | null
       reminder_mention: boolean
+      timezone: string
     }>
   ): void {
     // Explicit allowlist - TypeScript enforces only these columns can be used
@@ -57,6 +60,7 @@ export class UsersRepository {
       "daily_goal",
       "reminder_time",
       "reminder_mention",
+      "timezone",
     ] as const
     type AllowedColumn = (typeof allowedColumns)[number]
 
@@ -82,6 +86,9 @@ export class UsersRepository {
         column: "reminder_mention",
         value: settings.reminder_mention ? 1 : 0,
       })
+    }
+    if (settings.timezone !== undefined) {
+      columnUpdates.push({ column: "timezone", value: settings.timezone })
     }
 
     if (columnUpdates.length === 0) return

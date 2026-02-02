@@ -17,6 +17,7 @@ describe("UsersRepository", () => {
         daily_goal INTEGER,
         reminder_time TEXT,
         reminder_mention INTEGER DEFAULT 1,
+        timezone TEXT DEFAULT 'Asia/Manila',
         created_at TEXT DEFAULT (datetime('now'))
       )
     `)
@@ -57,5 +58,17 @@ describe("UsersRepository", () => {
     const user = repo.findById(123)
     expect(user?.daily_goal).toBe(2000)
     expect(user?.ai_provider).toBe("anthropic")
+  })
+
+  test("user has default timezone", () => {
+    const user = repo.upsert(123, "john")
+    expect(user.timezone).toBe("Asia/Manila")
+  })
+
+  test("updates user timezone", () => {
+    repo.upsert(123, "john")
+    repo.updateSettings(123, { timezone: "America/New_York" })
+    const user = repo.findById(123)
+    expect(user?.timezone).toBe("America/New_York")
   })
 })

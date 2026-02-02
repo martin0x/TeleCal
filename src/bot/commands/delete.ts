@@ -1,7 +1,8 @@
 // src/bot/commands/delete.ts
 import { Context } from "grammy"
 import { FoodLogsRepository, FoodItem } from "../../db/repositories/food-logs"
-import { getToday, formatDateForDisplay } from "../../utils/dates"
+import { UsersRepository } from "../../db/repositories/users"
+import { getTodayInTimezone, formatDateForDisplay, DEFAULT_TIMEZONE } from "../../utils/dates"
 
 interface DeleteState {
   targetDate: string
@@ -19,7 +20,7 @@ function formatItemsList(items: (FoodItem & { log_id: number })[]): string {
     .join("\n")
 }
 
-export function createDeleteCommand(foodLogsRepo: FoodLogsRepository) {
+export function createDeleteCommand(foodLogsRepo: FoodLogsRepository, usersRepo: UsersRepository) {
   return async (ctx: Context) => {
     const userId = ctx.from?.id
     if (!userId) return
@@ -27,8 +28,10 @@ export function createDeleteCommand(foodLogsRepo: FoodLogsRepository) {
     const text = ctx.message?.text ?? ""
     const args = text.split(/\s+/).slice(1).join(" ").trim()
 
-    // Default to today
-    const targetDate = getToday()
+    // Default to today in user's timezone
+    const user = usersRepo.findById(userId)
+    const timezone = user?.timezone ?? DEFAULT_TIMEZONE
+    const targetDate = getTodayInTimezone(timezone)
     const items = foodLogsRepo.getItemsByDate(userId, targetDate)
 
     if (items.length === 0) {

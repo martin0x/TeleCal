@@ -2,7 +2,7 @@
 import { Context } from "grammy"
 import { FoodLogsRepository } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
-import { getToday, formatDateForDisplay } from "../../utils/dates"
+import { getTodayInTimezone, formatDateForDisplay, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { config } from "../../config"
 
 export function createTodayCommand(
@@ -14,10 +14,11 @@ export function createTodayCommand(
     if (!userId) return
 
     const isPrivateChat = ctx.chat?.type === "private"
-    const today = getToday()
+    const user = usersRepo.findById(userId)
+    const timezone = user?.timezone ?? DEFAULT_TIMEZONE
+    const today = getTodayInTimezone(timezone)
     const entries = foodLogsRepo.getByDate(userId, today)
     const totalCalories = foodLogsRepo.getTotalCalories(userId, today)
-    const user = usersRepo.findById(userId)
     const dailyGoal = user?.daily_goal
 
     if (entries.length === 0) {

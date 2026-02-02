@@ -63,8 +63,8 @@ export function createBot() {
   bot.command("week", createWeekCommand(foodLogsRepo, usersRepo))
   bot.command("month", createMonthCommand(foodLogsRepo, usersRepo))
   bot.command("log", createLogCommand(logFlow, conversationsRepo, usersRepo))
-  bot.command("delete", createDeleteCommand(foodLogsRepo))
-  bot.command("edit", createEditCommand(foodLogsRepo))
+  bot.command("delete", createDeleteCommand(foodLogsRepo, usersRepo))
+  bot.command("edit", createEditCommand(foodLogsRepo, usersRepo))
   bot.command("settings", createSettingsCommand(usersRepo, aiService))
   bot.command("pending", createPendingCommand(pendingRepo))
 

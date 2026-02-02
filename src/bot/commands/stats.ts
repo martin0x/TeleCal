@@ -2,7 +2,7 @@
 import { Context } from "grammy"
 import { FoodLogsRepository } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
-import { getToday, getDateRange, formatDateForDisplay, getDayOfWeek } from "../../utils/dates"
+import { getTodayInTimezone, getDateRangeInTimezone, formatDateForDisplay, getDayOfWeek, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { config } from "../../config"
 
 export function createWeekCommand(
@@ -38,13 +38,14 @@ async function sendStatsMessage(
   usersRepo: UsersRepository
 ) {
   const isPrivateChat = ctx.chat?.type === "private"
-  const today = getToday()
-  const dateRange = getDateRange(days, today)
+  const user = usersRepo.findById(userId)
+  const timezone = user?.timezone ?? DEFAULT_TIMEZONE
+  const today = getTodayInTimezone(timezone)
+  const dateRange = getDateRangeInTimezone(days, today, timezone)
   const startDate = dateRange[0]
   const endDate = dateRange[dateRange.length - 1]
 
   const dailyTotals = foodLogsRepo.getDailyTotals(userId, startDate, endDate)
-  const user = usersRepo.findById(userId)
   const dailyGoal = user?.daily_goal
 
   // Calculate stats

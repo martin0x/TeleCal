@@ -3,7 +3,7 @@ import { Context } from "grammy"
 import { FoodLogsRepository, FoodItem } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
 import { AIService } from "../../ai/service"
-import { getToday, formatDateForDisplay } from "../../utils/dates"
+import { getTodayInTimezone, formatDateForDisplay, DEFAULT_TIMEZONE } from "../../utils/dates"
 
 interface EditState {
   targetDate: string
@@ -21,7 +21,7 @@ function formatItemsList(items: (FoodItem & { log_id: number })[]): string {
     .join("\n")
 }
 
-export function createEditCommand(foodLogsRepo: FoodLogsRepository) {
+export function createEditCommand(foodLogsRepo: FoodLogsRepository, usersRepo: UsersRepository) {
   return async (ctx: Context) => {
     const userId = ctx.from?.id
     if (!userId) return
@@ -29,7 +29,9 @@ export function createEditCommand(foodLogsRepo: FoodLogsRepository) {
     const text = ctx.message?.text ?? ""
     const args = text.split(/\s+/).slice(1).join(" ").trim()
 
-    const targetDate = getToday()
+    const user = usersRepo.findById(userId)
+    const timezone = user?.timezone ?? DEFAULT_TIMEZONE
+    const targetDate = getTodayInTimezone(timezone)
     const items = foodLogsRepo.getItemsByDate(userId, targetDate)
 
     if (items.length === 0) {

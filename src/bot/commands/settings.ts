@@ -2,9 +2,10 @@
 import { Context, InlineKeyboard } from "grammy"
 import { UsersRepository } from "../../db/repositories/users"
 import { AIService } from "../../ai/service"
+import { isValidTimezone, DEFAULT_TIMEZONE } from "../../utils/dates"
 
-// Track users waiting for goal/reminder input
-const pendingSettings = new Map<number, "goal" | "reminder">()
+// Track users waiting for goal/reminder/timezone input
+const pendingSettings = new Map<number, "goal" | "reminder" | "timezone">()
 
 function createMainKeyboard(): InlineKeyboard {
   return new InlineKeyboard()
@@ -12,6 +13,8 @@ function createMainKeyboard(): InlineKeyboard {
     .text("Set Daily Goal", "settings:goal")
     .row()
     .text("Set Reminder", "settings:reminder")
+    .text("Set Timezone", "settings:timezone")
+    .row()
     .text("Close", "settings:close")
 }
 
@@ -32,18 +35,21 @@ function formatSettings(user: {
   daily_goal: number | null
   reminder_time: string | null
   reminder_mention: boolean
+  timezone: string
 }): string {
   const provider = user.ai_provider.charAt(0).toUpperCase() + user.ai_provider.slice(1)
   const goal = user.daily_goal ? `${user.daily_goal.toLocaleString()} cal` : "Not set"
   const reminder = user.reminder_time
     ? `${user.reminder_time} (mention: ${user.reminder_mention ? "on" : "off"})`
     : "Off"
+  const timezone = user.timezone ?? DEFAULT_TIMEZONE
 
   return (
     `⚙️ Your Settings\n\n` +
     `AI Provider: ${provider}\n` +
     `Daily Goal: ${goal}\n` +
-    `Reminder: ${reminder}`
+    `Reminder: ${reminder}\n` +
+    `Timezone: ${timezone}`
   )
 }
 
@@ -111,6 +117,18 @@ export function createSettingsCallbackHandler(usersRepo: UsersRepository, aiServ
           "⏰ Reminder Settings\n\n" +
             "When should I remind you to log?\n" +
             `Enter a time (e.g., "8pm", "20:00"), or "off" to disable.`
+        )
+        await ctx.answerCallbackQuery()
+        break
+      }
+
+      case "timezone": {
+        pendingSettings.set(userId, "timezone")
+        await ctx.editMessageText(
+          "🌍 Set Timezone\n\n" +
+            "Enter your timezone (e.g., Asia/Manila, America/New_York, Europe/London).\n\n" +
+            `Current: ${user.timezone ?? DEFAULT_TIMEZONE}\n\n` +
+            "Find your timezone at: timeanddate.com/time/zones"
         )
         await ctx.answerCallbackQuery()
         break
@@ -207,6 +225,22 @@ export function createSettingsMessageHandler(usersRepo: UsersRepository) {
       usersRepo.updateSettings(userId, { reminder_time: time })
       pendingSettings.delete(userId)
       await ctx.reply(`Reminder set for ${time}. Use /settings to view settings.`)
+      return
+    }
+
+    if (pending === "timezone") {
+      if (!isValidTimezone(text)) {
+        await ctx.reply(
+          `"${text}" is not a valid timezone.\n\n` +
+            "Please enter a valid IANA timezone (e.g., Asia/Manila, America/New_York, Europe/London).\n\n" +
+            "Find your timezone at: timeanddate.com/time/zones"
+        )
+        return
+      }
+
+      usersRepo.updateSettings(userId, { timezone: text })
+      pendingSettings.delete(userId)
+      await ctx.reply(`Timezone set to ${text}. Use /settings to view settings.`)
       return
     }
   }

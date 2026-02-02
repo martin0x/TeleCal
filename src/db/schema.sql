@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
   daily_goal INTEGER,
   reminder_time TEXT,
   reminder_mention INTEGER DEFAULT 1,
+  timezone TEXT DEFAULT 'Asia/Manila',
   created_at TEXT DEFAULT (datetime('now'))
 );
 

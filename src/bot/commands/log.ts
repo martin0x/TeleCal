@@ -3,7 +3,7 @@ import { Context } from "grammy"
 import { LogFlow } from "../conversations/log-flow"
 import { ConversationsRepository } from "../../db/repositories/conversations"
 import { UsersRepository } from "../../db/repositories/users"
-import { getToday, getYesterday, formatDate } from "../../utils/dates"
+import { getTodayInTimezone, getYesterdayInTimezone, formatDate, DEFAULT_TIMEZONE } from "../../utils/dates"
 
 const MONTHS: Record<string, number> = {
   jan: 0, january: 0,
@@ -20,15 +20,15 @@ const MONTHS: Record<string, number> = {
   dec: 11, december: 11,
 }
 
-function parseDateArg(arg: string): string | null {
+function parseDateArg(arg: string, timezone: string): string | null {
   const lower = arg.toLowerCase().trim()
 
   // Handle "today" and "yesterday"
   if (lower === "today" || lower === "") {
-    return getToday()
+    return getTodayInTimezone(timezone)
   }
   if (lower === "yesterday") {
-    return getYesterday()
+    return getYesterdayInTimezone(timezone)
   }
 
   // Handle ISO format: 2026-01-31
@@ -75,11 +75,12 @@ export function createLogCommand(
 
     const user = usersRepo.findById(userId)
     const provider = user?.ai_provider ?? "openai"
+    const timezone = user?.timezone ?? DEFAULT_TIMEZONE
 
     const text = ctx.message?.text ?? ""
     const args = text.split(/\s+/).slice(1).join(" ")
 
-    const targetDate = parseDateArg(args) ?? getToday()
+    const targetDate = parseDateArg(args, timezone) ?? getTodayInTimezone(timezone)
 
     const result = await logFlow.start(userId, chatId, targetDate, provider)
     await ctx.reply(result.message)
@@ -112,11 +113,12 @@ export function createLogMessageHandler(
     // Handle continue/new response
     const lower = text.toLowerCase()
     if (lower === "continue" || lower === "new") {
+      const timezone = user?.timezone ?? DEFAULT_TIMEZONE
       const result = await logFlow.continueOrStartOver(
         userId,
         chatId,
         lower as "continue" | "new",
-        getToday()
+        getTodayInTimezone(timezone)
       )
       await ctx.reply(result.message)
       return

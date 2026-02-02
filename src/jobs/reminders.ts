@@ -2,28 +2,12 @@
 import { Bot } from "grammy"
 import { UsersRepository } from "../db/repositories/users"
 import { FoodLogsRepository } from "../db/repositories/food-logs"
-import { getToday } from "../utils/dates"
+import { getTodayInTimezone, getCurrentTimeInTimezone, DEFAULT_TIMEZONE } from "../utils/dates"
 import { redactUserId } from "../utils/logging"
 import { config } from "../config"
 
-// Track which users we've reminded today to avoid duplicates
-const remindedToday = new Set<number>()
-let lastResetDate = getToday()
-
-function resetIfNewDay(): void {
-  const today = getToday()
-  if (today !== lastResetDate) {
-    remindedToday.clear()
-    lastResetDate = today
-  }
-}
-
-function getCurrentTime(): string {
-  const now = new Date()
-  const hours = now.getHours().toString().padStart(2, "0")
-  const minutes = now.getMinutes().toString().padStart(2, "0")
-  return `${hours}:${minutes}`
-}
+// Track the last date each user was reminded (per-user timezone aware)
+const lastRemindedDate = new Map<number, string>()
 
 function formatReminderMessage(
   username: string | null,
@@ -74,14 +58,15 @@ export function createReminderJob(
   foodLogsRepo: FoodLogsRepository
 ) {
   return async (): Promise<void> => {
-    resetIfNewDay()
-
-    const currentTime = getCurrentTime()
     const users = usersRepo.getUsersWithReminders()
 
     for (const user of users) {
-      // Skip if already reminded today
-      if (remindedToday.has(user.telegram_id)) {
+      const timezone = user.timezone ?? DEFAULT_TIMEZONE
+      const userToday = getTodayInTimezone(timezone)
+      const currentTime = getCurrentTimeInTimezone(timezone)
+
+      // Skip if already reminded today in user's timezone
+      if (lastRemindedDate.get(user.telegram_id) === userToday) {
         continue
       }
 
@@ -91,9 +76,8 @@ export function createReminderJob(
       }
 
       try {
-        const today = getToday()
-        const totalCalories = foodLogsRepo.getTotalCalories(user.telegram_id, today)
-        const logs = foodLogsRepo.getByDate(user.telegram_id, today)
+        const totalCalories = foodLogsRepo.getTotalCalories(user.telegram_id, userToday)
+        const logs = foodLogsRepo.getByDate(user.telegram_id, userToday)
         const hasLogs = logs.length > 0
 
         const message = formatReminderMessage(
@@ -106,7 +90,7 @@ export function createReminderJob(
 
         // Send to user's DM (telegram_id is also the chat_id for DMs)
         await bot.api.sendMessage(user.telegram_id, message)
-        remindedToday.add(user.telegram_id)
+        lastRemindedDate.set(user.telegram_id, userToday)
 
         console.log(`Sent reminder to user ${redactUserId(user.telegram_id)}`)
       } catch (error) {
