@@ -4,6 +4,7 @@ import { LogFlow } from "../conversations/log-flow"
 import { ConversationsRepository } from "../../db/repositories/conversations"
 import { UsersRepository } from "../../db/repositories/users"
 import { getTodayInTimezone, getYesterdayInTimezone, formatDate, DEFAULT_TIMEZONE } from "../../utils/dates"
+import { smartReply } from "../utils/smart-reply"
 
 const MONTHS: Record<string, number> = {
   jan: 0, january: 0,
@@ -83,7 +84,7 @@ export function createLogCommand(
     const targetDate = parseDateArg(args, timezone) ?? getTodayInTimezone(timezone)
 
     const result = await logFlow.start(userId, chatId, targetDate, provider)
-    await ctx.reply(result.message)
+    await smartReply(ctx, result.message)
   }
 }
 
@@ -120,11 +121,11 @@ export function createLogMessageHandler(
         lower as "continue" | "new",
         getTodayInTimezone(timezone)
       )
-      await ctx.reply(result.message)
+      await smartReply(ctx, result.message)
       return
     }
 
     const result = await logFlow.processInput(userId, chatId, text, provider)
-    await ctx.reply(result.message)
+    await smartReply(ctx, result.message)
   }
 }
