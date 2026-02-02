@@ -18,6 +18,7 @@ import { createSettingsCommand, createSettingsCallbackHandler, createSettingsMes
 import { createPendingCommand, createPendingCallbackHandler } from "./commands/pending"
 import { LogFlow } from "./conversations/log-flow"
 import { AIService } from "../ai/service"
+import { smartReply } from "./utils/smart-reply"
 
 export interface BotContext extends Context {}
 
@@ -42,7 +43,7 @@ export function createBot() {
   })
 
   bot.command("start", async (ctx) => {
-    await ctx.reply(
+    await smartReply(ctx,
       "Welcome to TeleCal! 🍽️\n\n" +
         "Track your calories with AI-powered estimation.\n\n" +
         "Commands:\n" +
