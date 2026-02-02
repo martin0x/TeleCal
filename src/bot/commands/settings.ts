@@ -3,6 +3,7 @@ import { Context, InlineKeyboard } from "grammy"
 import { UsersRepository } from "../../db/repositories/users"
 import { AIService } from "../../ai/service"
 import { isValidTimezone, DEFAULT_TIMEZONE } from "../../utils/dates"
+import { smartReply } from "../utils/smart-reply"
 
 // Track users waiting for goal/reminder/timezone input
 const pendingSettings = new Map<number, "goal" | "reminder" | "timezone">()
@@ -60,11 +61,11 @@ export function createSettingsCommand(usersRepo: UsersRepository, aiService: AIS
 
     const user = usersRepo.findById(userId)
     if (!user) {
-      await ctx.reply("Please use /start first.")
+      await smartReply(ctx, "Please use /start first.")
       return
     }
 
-    await ctx.reply(formatSettings(user), {
+    await smartReply(ctx, formatSettings(user), {
       reply_markup: createMainKeyboard(),
     })
   }
@@ -192,19 +193,19 @@ export function createSettingsMessageHandler(usersRepo: UsersRepository) {
       if (lower === "off" || lower === "clear") {
         usersRepo.updateSettings(userId, { daily_goal: null })
         pendingSettings.delete(userId)
-        await ctx.reply("Daily goal cleared. Use /settings to view settings.")
+        await smartReply(ctx, "Daily goal cleared. Use /settings to view settings.")
         return
       }
 
       const goal = parseInt(text, 10)
       if (isNaN(goal) || goal < 100 || goal > 10000) {
-        await ctx.reply("Please enter a number between 100 and 10000, or 'off' to clear.")
+        await smartReply(ctx, "Please enter a number between 100 and 10000, or 'off' to clear.")
         return
       }
 
       usersRepo.updateSettings(userId, { daily_goal: goal })
       pendingSettings.delete(userId)
-      await ctx.reply(`Daily goal set to ${goal.toLocaleString()} cal. Use /settings to view settings.`)
+      await smartReply(ctx, `Daily goal set to ${goal.toLocaleString()} cal. Use /settings to view settings.`)
       return
     }
 
@@ -212,25 +213,25 @@ export function createSettingsMessageHandler(usersRepo: UsersRepository) {
       if (lower === "off" || lower === "disable") {
         usersRepo.updateSettings(userId, { reminder_time: null })
         pendingSettings.delete(userId)
-        await ctx.reply("Reminder disabled. Use /settings to view settings.")
+        await smartReply(ctx, "Reminder disabled. Use /settings to view settings.")
         return
       }
 
       const time = parseTime(text)
       if (!time) {
-        await ctx.reply(`Please enter a valid time (e.g., "8pm", "20:00"), or "off" to disable.`)
+        await smartReply(ctx, `Please enter a valid time (e.g., "8pm", "20:00"), or "off" to disable.`)
         return
       }
 
       usersRepo.updateSettings(userId, { reminder_time: time })
       pendingSettings.delete(userId)
-      await ctx.reply(`Reminder set for ${time}. Use /settings to view settings.`)
+      await smartReply(ctx, `Reminder set for ${time}. Use /settings to view settings.`)
       return
     }
 
     if (pending === "timezone") {
       if (!isValidTimezone(text)) {
-        await ctx.reply(
+        await smartReply(ctx,
           `"${text}" is not a valid timezone.\n\n` +
             "Please enter a valid IANA timezone (e.g., Asia/Manila, America/New_York, Europe/London).\n\n" +
             "Find your timezone at: timeanddate.com/time/zones"
@@ -240,7 +241,7 @@ export function createSettingsMessageHandler(usersRepo: UsersRepository) {
 
       usersRepo.updateSettings(userId, { timezone: text })
       pendingSettings.delete(userId)
-      await ctx.reply(`Timezone set to ${text}. Use /settings to view settings.`)
+      await smartReply(ctx, `Timezone set to ${text}. Use /settings to view settings.`)
       return
     }
   }
