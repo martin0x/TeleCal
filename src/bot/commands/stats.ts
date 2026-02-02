@@ -4,6 +4,7 @@ import { FoodLogsRepository } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
 import { getTodayInTimezone, getDateRangeInTimezone, formatDateForDisplay, getDayOfWeek, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { config } from "../../config"
+import { smartReply } from "../utils/smart-reply"
 
 export function createWeekCommand(
   foodLogsRepo: FoodLogsRepository,
@@ -64,7 +65,7 @@ async function sendStatsMessage(
       message += "\n\n💬 Start a chat with me to see interactive charts!"
     }
 
-    await ctx.reply(message, isPrivateChat ? {
+    await smartReply(ctx, message, isPrivateChat ? {
       reply_markup: {
         inline_keyboard: [[
           { text: "📈 View Charts", web_app: { url: config.web.appUrl } }
@@ -128,7 +129,7 @@ async function sendStatsMessage(
     message += "\n\n💬 Start a chat with me to see interactive charts!"
   }
 
-  await ctx.reply(message, isPrivateChat ? {
+  await smartReply(ctx, message, isPrivateChat ? {
     reply_markup: {
       inline_keyboard: [[
         { text: "📈 View Charts", web_app: { url: config.web.appUrl } }
