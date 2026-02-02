@@ -2,6 +2,7 @@
 import { Context, NextFunction } from "grammy"
 import { AllowedUsersRepository } from "../../db/repositories/allowed-users"
 import { config } from "../../config"
+import { smartReply } from "../utils/smart-reply"
 
 export function createAllowlistMiddleware(repo: AllowedUsersRepository) {
   return async (ctx: Context, next: NextFunction) => {
@@ -16,6 +17,6 @@ export function createAllowlistMiddleware(repo: AllowedUsersRepository) {
       return next()
     }
 
-    await ctx.reply("⛔ Sorry, this bot is invite-only.\nContact the admin to request access.")
+    await smartReply(ctx, "⛔ Sorry, this bot is invite-only.\nContact the admin to request access.")
   }
 }
