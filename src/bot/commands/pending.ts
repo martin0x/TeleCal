@@ -2,6 +2,7 @@
 import { Context, InlineKeyboard } from "grammy"
 import { PendingRepository } from "../../db/repositories/pending"
 import { formatDateForDisplay } from "../../utils/dates"
+import { smartReply } from "../utils/smart-reply"
 
 function formatPendingEntry(entry: {
   food_text: string
@@ -30,7 +31,7 @@ export function createPendingCommand(pendingRepo: PendingRepository) {
     const entries = pendingRepo.getByUser(userId)
 
     if (entries.length === 0) {
-      await ctx.reply("No pending entries. All caught up!")
+      await smartReply(ctx, "No pending entries. All caught up!")
       return
     }
 
@@ -40,7 +41,7 @@ export function createPendingCommand(pendingRepo: PendingRepository) {
       .text("Cancel All", "pending:cancel_all")
       .text("Retry Now", "pending:retry")
 
-    await ctx.reply(
+    await smartReply(ctx,
       `📋 Pending entries:\n\n${entriesText}`,
       { reply_markup: keyboard }
     )
