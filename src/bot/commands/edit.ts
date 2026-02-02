@@ -4,6 +4,7 @@ import { FoodLogsRepository, FoodItem } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
 import { AIService } from "../../ai/service"
 import { getTodayInTimezone, formatDateForDisplay, DEFAULT_TIMEZONE } from "../../utils/dates"
+import { smartReply } from "../utils/smart-reply"
 
 interface EditState {
   targetDate: string
@@ -35,7 +36,7 @@ export function createEditCommand(foodLogsRepo: FoodLogsRepository, usersRepo: U
     const items = foodLogsRepo.getItemsByDate(userId, targetDate)
 
     if (items.length === 0) {
-      await ctx.reply(`No entries for ${formatDateForDisplay(targetDate)}.`)
+      await smartReply(ctx, `No entries for ${formatDateForDisplay(targetDate)}.`)
       return
     }
 
@@ -49,7 +50,7 @@ export function createEditCommand(foodLogsRepo: FoodLogsRepository, usersRepo: U
         pendingAction: "edit",
         selectedItemIndex: itemNum - 1,
       })
-      await ctx.reply(
+      await smartReply(ctx,
         `Editing: ${item.emoji ?? "🍽️"} ${item.description} — ${item.calories} cal\n\n` +
           `What would you like to change?\n` +
           `• Type a number to set calories manually\n` +
@@ -66,7 +67,7 @@ export function createEditCommand(foodLogsRepo: FoodLogsRepository, usersRepo: U
       pendingAction: "select",
     })
 
-    await ctx.reply(
+    await smartReply(ctx,
       `${formatDateForDisplay(targetDate)} entries:\n\n` +
         `${formatItemsList(items)}\n\n` +
         `Which item to edit? (enter number or "cancel")`
@@ -100,7 +101,7 @@ export function createEditMessageHandler(
     // Handle cancel
     if (lower === "cancel") {
       editStates.delete(userId)
-      await ctx.reply("Cancelled.")
+      await smartReply(ctx, "Cancelled.")
       return
     }
 
@@ -112,7 +113,7 @@ export function createEditMessageHandler(
           state.pendingAction = "edit"
           state.selectedItemIndex = itemNum - 1
           editStates.set(userId, state)
-          await ctx.reply(
+          await smartReply(ctx,
             `Editing: ${item.emoji ?? "🍽️"} ${item.description} — ${item.calories} cal\n\n` +
               `What would you like to change?\n` +
               `• Type a number to set calories manually\n` +
@@ -122,7 +123,7 @@ export function createEditMessageHandler(
           return
         }
 
-        await ctx.reply(`Please enter a number (1-${state.items.length}) or "cancel".`)
+        await smartReply(ctx, `Please enter a number (1-${state.items.length}) or "cancel".`)
         break
       }
 
@@ -134,7 +135,7 @@ export function createEditMessageHandler(
         if (!isNaN(newCalories) && newCalories > 0 && newCalories < 10000) {
           foodLogsRepo.updateItem(item.id!, { calories: newCalories })
           editStates.delete(userId)
-          await ctx.reply(
+          await smartReply(ctx,
             `Updated: ${item.emoji ?? "🍽️"} ${item.description} — ${newCalories} cal`
           )
           return
@@ -147,7 +148,7 @@ export function createEditMessageHandler(
           const result = await aiService.estimate(text, provider)
 
           if (result.needsClarification || result.items.length === 0) {
-            await ctx.reply(
+            await smartReply(ctx,
               `Couldn't estimate calories for "${text}".\n` +
                 `Try typing a number instead, or "cancel" to abort.`
             )
@@ -162,11 +163,11 @@ export function createEditMessageHandler(
             emoji: newItem.emoji,
           })
           editStates.delete(userId)
-          await ctx.reply(
+          await smartReply(ctx,
             `Updated: ${newItem.emoji ?? "🍽️"} ${newItem.description} — ${newItem.calories} cal`
           )
         } catch (error) {
-          await ctx.reply(
+          await smartReply(ctx,
             `Couldn't reach AI to estimate. Try typing a number instead, or "cancel" to abort.`
           )
         }
