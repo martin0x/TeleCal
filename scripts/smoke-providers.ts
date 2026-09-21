@@ -36,6 +36,6 @@ try {
   }
   process.exit(0)
 } catch (error) {
-  console.error(`✗ ${provider} failed:`, error)
+  console.error(`✗ ${provider} failed:`, error instanceof Error ? error.message : String(error))
   process.exit(1)
 }
