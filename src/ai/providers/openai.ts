@@ -42,10 +42,8 @@ export class OpenAIProvider implements AIProvider {
   name = "openai"
   private client: OpenAI
 
-  constructor() {
-    this.client = new OpenAI({
-      apiKey: config.ai.openaiApiKey,
-    })
+  constructor(client?: OpenAI) {
+    this.client = client ?? new OpenAI({ apiKey: config.ai.openaiApiKey })
   }
 
   async estimate(foodDescription: string, context?: string): Promise<EstimationResult> {
