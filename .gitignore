@@ -1,6 +1,9 @@
 # Worktrees
 .worktrees/
 
+# Agent scratch (ledgers, briefs, review packages)
+.superpowers/
+
 # Dependencies
 node_modules/
 
