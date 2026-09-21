@@ -86,6 +86,18 @@ bun run start
 | `/pending` | View entries awaiting AI processing |
 | `/admin` | Manage allowed users (admin only) |
 
+### Privacy
+
+Food descriptions are sent to whichever AI provider the user has selected in
+`/settings` (OpenAI, Anthropic, or Google) to estimate calories.
+
+TeleCal disables server-side retention where the provider offers the option —
+OpenAI calls are made with `store: false`, so requests are not kept in the
+OpenAI organization's logs. Providers may still retain request content
+separately for abuse monitoring under their own policies.
+
+Calorie data itself is stored only in TeleCal's local SQLite database.
+
 ### Logging Flow
 
 1. Send `/log` to start a session
