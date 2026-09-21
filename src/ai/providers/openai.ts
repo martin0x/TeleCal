@@ -3,40 +3,47 @@ import OpenAI from "openai"
 import { AIProvider, EstimationResult, FoodEstimate } from "../types"
 import { config } from "../../config"
 
-const SYSTEM_PROMPT = `You are a nutrition expert that estimates calories in food.
-
-When given a food description, respond with a JSON object containing:
-- items: array of {description, calories, emoji} for each food item
-- needsClarification: boolean - true if the description is too vague
-- clarificationQuestion: string - question to ask if clarification needed
-- confidence: "high" | "medium" | "low"
+const INSTRUCTIONS = `You are a nutrition expert that estimates calories in food.
 
 Rules:
 - Be accurate but err on the side of slightly higher estimates
 - Use common portion sizes if not specified
-- Include relevant emoji for each food item
-- If multiple items mentioned, break them down separately
-- If quantity/size is unclear, ask for clarification
+- Include a relevant emoji for each food item
+- If multiple items are mentioned, break them down separately
+- If quantity or size is unclear, set needsClarification to true and ask a
+  specific question in clarificationQuestion
+- When no clarification is needed, return an empty string for
+  clarificationQuestion`
 
-Example input: "chicken sandwich and fries"
-Example output:
-{
-  "items": [
-    {"description": "Chicken sandwich", "calories": 450, "emoji": "🥪"},
-    {"description": "French fries (medium)", "calories": 365, "emoji": "🍟"}
-  ],
-  "needsClarification": false,
-  "confidence": "medium"
-}
-
-Example input: "some chicken"
-Example output:
-{
-  "items": [],
-  "needsClarification": true,
-  "clarificationQuestion": "How was the chicken prepared (grilled, fried, etc.) and approximately how much?",
-  "confidence": "low"
-}`
+/**
+ * Strict Structured Outputs requires every property to appear in `required`
+ * and `additionalProperties: false` on every object. Fields that are
+ * conceptually optional (clarificationQuestion, emoji) are therefore required
+ * here and filled with an empty string when not applicable — see INSTRUCTIONS.
+ */
+const ESTIMATE_SCHEMA = {
+  type: "object",
+  properties: {
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          description: { type: "string" },
+          calories: { type: "number" },
+          emoji: { type: "string" },
+        },
+        required: ["description", "calories", "emoji"],
+        additionalProperties: false,
+      },
+    },
+    needsClarification: { type: "boolean" },
+    clarificationQuestion: { type: "string" },
+    confidence: { type: "string", enum: ["high", "medium", "low"] },
+  },
+  required: ["items", "needsClarification", "clarificationQuestion", "confidence"],
+  additionalProperties: false,
+} as const
 
 export class OpenAIProvider implements AIProvider {
   name = "openai"
@@ -51,20 +58,31 @@ export class OpenAIProvider implements AIProvider {
       ? `Context from previous conversation: ${context}\n\nFood to estimate: ${foodDescription}`
       : foodDescription
 
-    const response = await this.client.chat.completions.create({
+    const response = await this.client.responses.create({
       model: "gpt-5.6-luna",
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userMessage },
-      ],
-      response_format: { type: "json_object" },
+      instructions: INSTRUCTIONS,
+      input: userMessage,
+      reasoning: { effort: "none" },
+      // Defaults to true, which would retain user food descriptions in the
+      // OpenAI org for 30+ days. TeleCal keeps its own conversation state.
+      store: false,
+      text: {
+        format: {
+          type: "json_schema",
+          name: "calorie_estimate",
+          schema: ESTIMATE_SCHEMA,
+          strict: true,
+        },
+      },
     })
 
-    const content = response.choices[0]?.message?.content
+    const content = response.output_text
     if (!content) {
       throw new Error("No response from OpenAI")
     }
 
+    // No markdown-fence stripping: strict Structured Outputs cannot return
+    // fenced or malformed JSON.
     const result = JSON.parse(content) as {
       items: FoodEstimate[]
       needsClarification: boolean
@@ -75,7 +93,7 @@ export class OpenAIProvider implements AIProvider {
     return {
       items: result.items || [],
       needsClarification: result.needsClarification || false,
-      clarificationQuestion: result.clarificationQuestion,
+      clarificationQuestion: result.clarificationQuestion || undefined,
       confidence: result.confidence || "medium",
     }
   }
