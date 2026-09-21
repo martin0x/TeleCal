@@ -2219,7 +2219,7 @@ Expected: every test passes. Record the total count.
 - [ ] **Step 4: End-to-end check against a real database**
 
 ```bash
-bun run -e '
+bun -e '
 import { Database } from "bun:sqlite"
 import { readFileSync } from "fs"
 const db = new Database(":memory:")

@@ -398,7 +398,7 @@ If the file presents `OPENAI_API_KEY` as the primary or only required key, adjus
 - [ ] **Step 6: Verify a fresh database picks up the new default**
 
 ```bash
-bun run -e '
+bun -e '
 import { Database } from "bun:sqlite"
 import { readFileSync } from "fs"
 const db = new Database(":memory:")
