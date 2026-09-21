@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS allowed_users (
 CREATE TABLE IF NOT EXISTS users (
   telegram_id INTEGER PRIMARY KEY,
   username TEXT,
-  ai_provider TEXT DEFAULT 'openai',
+  ai_provider TEXT DEFAULT 'gemini',
   daily_goal INTEGER,
   reminder_time TEXT,
   reminder_mention INTEGER DEFAULT 1,
