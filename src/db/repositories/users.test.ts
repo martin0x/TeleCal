@@ -13,6 +13,8 @@ describe("UsersRepository", () => {
       CREATE TABLE users (
         telegram_id INTEGER PRIMARY KEY,
         username TEXT,
+        -- Fixture DDL intentionally diverges from schema.sql (which now defaults to
+        -- 'gemini'); a shared createTestDb() helper unifies this in a later branch.
         ai_provider TEXT DEFAULT 'openai',
         daily_goal INTEGER,
         reminder_time TEXT,

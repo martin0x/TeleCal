@@ -13,7 +13,10 @@ bun run dev      # Start with hot reload
 bun run start    # Production start
 bun test         # Run all tests
 bun test src/ai  # Run tests in specific directory
+bun run scripts/smoke-providers.ts <openai|anthropic|gemini>   # one live API call to verify a provider's model id
 ```
+
+`smoke-providers.ts` needs `TELEGRAM_BOT_TOKEN` set even though it makes no Telegram calls — it imports `AIService`, which imports `src/config.ts`, which throws on a missing token.
 
 ## Architecture
 

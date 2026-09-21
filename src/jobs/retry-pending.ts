@@ -49,7 +49,8 @@ export function createRetryPendingJob(
           await bot.api.sendMessage(
             entry.telegram_id,
             `❌ Couldn't process your entry "${entry.food_text}" after multiple attempts.\n` +
-              `Please try logging it again with /log.`
+              `Your AI provider may be unavailable — try switching it with /settings, ` +
+              `then log the entry again with /log.`
           )
         } catch (error) {
           console.error(`Failed to notify user ${redactUserId(entry.telegram_id)}:`, error)
