@@ -11,7 +11,7 @@
     "@anthropic-ai/sdk": "^0.127.0",
     "@google/generative-ai": "^0.24.1",
     "grammy": "^1.21.1",
-    "openai": "^4.67.0"
+    "openai": "^7.20.0"
   },
   "devDependencies": {
     "@types/bun": "latest"
