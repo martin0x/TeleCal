@@ -54,13 +54,12 @@ export class OpenAIProvider implements AIProvider {
       : foodDescription
 
     const response = await this.client.chat.completions.create({
-      model: "gpt-5-mini",
+      model: "gpt-5.6-luna",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userMessage },
       ],
       response_format: { type: "json_object" },
-      temperature: 0.3,
     })
 
     const content = response.choices[0]?.message?.content
