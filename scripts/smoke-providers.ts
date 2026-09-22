@@ -21,7 +21,11 @@ if (!service.hasProvider(provider)) {
 }
 
 try {
-  const result = await service.estimate("two scrambled eggs and a slice of toast", provider)
+  const result = await service.estimate("two scrambled eggs and a slice of toast", provider, {
+    telegramId: 0,
+    chatId: null,
+    callType: "estimate",
+  })
   console.log(`✓ ${provider} responded`)
   console.log(JSON.stringify(result, null, 2))
   if (result.items.length === 0 && !result.needsClarification) {
