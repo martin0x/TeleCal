@@ -1,8 +1,10 @@
 // scripts/smoke-providers.ts
 // Development tool: makes one real API call per provider to verify the
 // configured model id and parameters are accepted. Not part of the app.
-import { Database } from "bun:sqlite"
 import { AIService } from "../src/ai/service"
+import { createTestDb } from "../src/db/test-helpers"
+import { CacheRepository } from "../src/db/repositories/cache"
+import { UsageRepository } from "../src/db/repositories/usage"
 
 const provider = process.argv[2]
 if (!provider) {
@@ -10,16 +12,8 @@ if (!provider) {
   process.exit(1)
 }
 
-const db = new Database(":memory:")
-db.run(`
-  CREATE TABLE estimation_cache (
-    normalized_food TEXT PRIMARY KEY,
-    result_json TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now'))
-  )
-`)
-
-const service = new AIService(db)
+const db = createTestDb()
+const service = new AIService(new CacheRepository(db), new UsageRepository(db))
 
 if (!service.hasProvider(provider)) {
   console.error(`Provider "${provider}" is not configured. Check the API key in .env.`)

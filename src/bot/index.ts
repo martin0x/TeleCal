@@ -7,6 +7,8 @@ import { UsersRepository } from "../db/repositories/users"
 import { FoodLogsRepository } from "../db/repositories/food-logs"
 import { ConversationsRepository } from "../db/repositories/conversations"
 import { PendingRepository } from "../db/repositories/pending"
+import { CacheRepository } from "../db/repositories/cache"
+import { UsageRepository } from "../db/repositories/usage"
 import { createAllowlistMiddleware } from "./middleware/allowlist"
 import { createAdminCommand } from "./commands/admin"
 import { createTodayCommand } from "./commands/today"
@@ -30,7 +32,7 @@ export function createBot() {
   const foodLogsRepo = new FoodLogsRepository(db)
   const conversationsRepo = new ConversationsRepository(db)
   const pendingRepo = new PendingRepository(db)
-  const aiService = new AIService(db)
+  const aiService = new AIService(new CacheRepository(db), new UsageRepository(db))
   const logFlow = new LogFlow(conversationsRepo, foodLogsRepo, pendingRepo, aiService)
 
   bot.use(createAllowlistMiddleware(allowedUsersRepo))

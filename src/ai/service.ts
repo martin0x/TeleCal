@@ -1,18 +1,19 @@
 // src/ai/service.ts
-import { Database } from "bun:sqlite"
-import { AIProvider, EstimationResult, CachedEstimation } from "./types"
+import { AIProvider, EstimationResult } from "./types"
 import { OpenAIProvider } from "./providers/openai"
 import { AnthropicProvider } from "./providers/anthropic"
 import { GeminiProvider } from "./providers/gemini"
+import { CacheRepository } from "../db/repositories/cache"
+import { UsageRepository } from "../db/repositories/usage"
 import { config } from "../config"
 
 export class AIService {
   private providers: Map<string, AIProvider> = new Map()
-  private db: Database
 
-  constructor(db: Database) {
-    this.db = db
-
+  constructor(
+    private cache: CacheRepository,
+    private usage: UsageRepository
+  ) {
     if (config.ai.openaiApiKey) {
       this.providers.set("openai", new OpenAIProvider())
     }
@@ -33,7 +34,7 @@ export class AIService {
 
     // Check cache first (only if no context and caching enabled)
     if (!context && config.features.caching) {
-      const cached = this.getFromCache(normalizedFood)
+      const cached = this.cache.get(normalizedFood)
       if (cached) {
         return cached
       }
@@ -62,7 +63,7 @@ export class AIService {
 
     // Cache successful results without clarification needed
     if (!result.needsClarification && !context && config.features.caching) {
-      this.saveToCache(normalizedFood, result)
+      this.cache.set(normalizedFood, result)
     }
 
     return result
@@ -74,25 +75,6 @@ export class AIService {
       .trim()
       .replace(/\s+/g, " ")
       .replace(/[^\w\s]/g, "")
-  }
-
-  private getFromCache(normalizedFood: string): EstimationResult | null {
-    const stmt = this.db.prepare(
-      "SELECT result_json FROM estimation_cache WHERE normalized_food = ?"
-    )
-    const row = stmt.get(normalizedFood) as CachedEstimation | null
-    if (row) {
-      return JSON.parse(row.result_json) as EstimationResult
-    }
-    return null
-  }
-
-  private saveToCache(normalizedFood: string, result: EstimationResult): void {
-    const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO estimation_cache (normalized_food, result_json, created_at)
-      VALUES (?, ?, datetime('now'))
-    `)
-    stmt.run(normalizedFood, JSON.stringify(result))
   }
 
   getAvailableProviders(): string[] {
