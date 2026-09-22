@@ -1,18 +1,18 @@
 # Handoff — AI usage tracking work
 
 **Date:** 2026-09-22
-**State:** Branches 1 and 2 code-complete, NOT merged. Branch 2 has two
-verification steps deliberately deferred — see "Deferred on branch 2".
+**State:** All three branches code-complete, NOT merged, stacked on each other.
+OpenAI's live path is unverified throughout — see "Deferred on branch 2" (#4).
 
 ## Where things stand
 
-Three branches were planned. The first two exist.
+All three planned branches exist, each cut from the one before it.
 
 | Branch | Plan | Status |
 |---|---|---|
 | `chore/sdk-and-model-refresh` | `docs/superpowers/plans/2026-09-21-sdk-and-model-refresh.md` | **DONE** — 7 commits, `856b794..a270a31`, unmerged |
 | `refactor/openai-responses-api` | `docs/superpowers/plans/2026-09-21-openai-responses-api.md` | **CODE DONE** — 4 commits, `0121cb8..4f2edf9`, unmerged, live checks deferred |
-| `feat/ai-usage-tracking` | `docs/superpowers/plans/2026-09-21-ai-usage-tracking.md` | Not started |
+| `feat/ai-usage-tracking` | `docs/superpowers/plans/2026-09-21-ai-usage-tracking.md` | **CODE DONE** — 10 commits, `a5c0588..732bc25`, unmerged |
 
 `main` is at `856b794`. Nothing has been merged.
 
@@ -22,9 +22,8 @@ before reopening a settled question.
 
 ## To resume
 
-Branch 2 is cut from branch 1 and its code tasks are done. Close out the two
-deferred checks below once OpenAI credits exist, then execute
-`docs/superpowers/plans/2026-09-21-ai-usage-tracking.md` for branch 3.
+All three plans are executed. What remains is integration (three stacked
+branches to merge, oldest first) and the live verification parked in #4.
 
 The per-task ledger for branch 1 is at
 `.superpowers/sdd/2026-09-21-sdk-and-model-refresh/progress.md` (gitignored, on
@@ -94,6 +93,64 @@ is parked deliberately rather than pending. Do not block branch 3 on it.
    has been made, there is nothing to look for yet.
 
 Full steps, expected output and failure triage live in #4.
+
+## What branch 3 did
+
+Executed `docs/superpowers/plans/2026-09-21-ai-usage-tracking.md` in full.
+10 commits, one per task, `a5c0588..732bc25`. Suite went 77 → **132 pass / 0 fail
+across 22 files**; `bunx tsc --noEmit` clean at every task boundary.
+
+- `ai_usage` table + `createTestDb()`, which reads the real `schema.sql` instead
+  of hand-copying DDL. Production applies the schema the same way (`db.run` on
+  the whole multi-statement file), so the helper cannot drift from it.
+- `src/ai/pricing.ts` — `MODEL_PRICING` for all three models and `calculateCost`.
+  Reasoning tokens are never added on top of output; cache writes carry no
+  surcharge; unknown models warn once and cost 0 rather than dropping the row.
+- `UsageRepository` with `record`, `getUserTotals`, `getAllUserTotals`,
+  `getModelBreakdown`. Non-`ok` rows still count toward totals — they were billed.
+- `CacheRepository` extracted, so `AIService` holds no `Database`. That is what
+  made Task 6's accounting testable against fakes.
+- All three providers return `ProviderResult { estimate, usage }` and take an
+  injectable client. Anthropic and Gemini had no tests before; they do now.
+- `AIService.estimate(food, provider, opts)` records one row per billed call.
+  Cache hits record nothing. A `SyntaxError` records a `parse_error` row; any
+  other throw records nothing. Every write is try/caught — accounting can never
+  fail a food log.
+- `/usage` (tokens only, no dollars) and `/admin usage [7d|30d|all]` (dollars,
+  per-user and per-model, list capped at 10 rows).
+
+### Divergence from the plan: a fifth call site
+
+The plan's Task 7 is titled "Update the four call sites" and lists `log-flow.ts`
+(x2), `edit.ts` and `retry-pending.ts`. **There is a fifth:**
+`scripts/smoke-providers.ts` also calls `estimate()`. `tsconfig.json` includes
+only `src/**/*`, so `bunx tsc --noEmit` cannot see it — the script broke at
+runtime with `undefined is not an object (evaluating 'opts.context')` and a
+green typecheck. Fixed in the Task 6 commit. If you add another entry point
+outside `src/`, nothing will typecheck it.
+
+## Verified live (Gemini only)
+
+Gemini is the one provider with a working key, so it carries the live proof:
+
+- Usage field paths confirmed against a real response: `promptTokenCount` → 222
+  `inputTokens`, `candidatesTokenCount` → 109 `outputTokens`, priced $0.000219.
+  No fake can prove this mapping; this does.
+- A real end-to-end row written to `ai_usage` from a live `/log`-equivalent call,
+  correctly priced.
+- `/usage` renders with **no** dollar sign; `/admin usage` renders the total,
+  the per-user row and the model breakdown; `7d` and `all` windows both render.
+- Logging the same food twice left the call count at 1 — cache hits really do
+  record nothing.
+
+**OpenAI and Anthropic usage mappings are still unproven against live responses**
+(no credits / no key). Both are covered by fakes only.
+
+## Known cosmetic issue
+
+Messages read "1 calls" — nothing pluralizes. Visible in both `/usage` and
+`/admin usage`. The plan specified these strings verbatim and its tests assert
+them, so this was left alone rather than changed unasked.
 
 ## Blockers you need to resolve
 
