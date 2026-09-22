@@ -1,20 +1,22 @@
 # Handoff — AI usage tracking work
 
 **Date:** 2026-09-22
-**State:** All three branches code-complete, NOT merged, stacked on each other.
-OpenAI's live path is unverified throughout — see "Deferred on branch 2" (#4).
+**State:** All three branches **merged to `main` and pushed** (`a1cfaf7..f8a190d`,
+29 commits, fast-forward). Feature branches deleted. Railway deploys from `main`.
+OpenAI's live path is still unverified — see "Deferred on branch 2" (#4).
 
 ## Where things stand
 
-All three planned branches exist, each cut from the one before it.
+All three planned branches were executed in sequence and are now all on `main`.
 
 | Branch | Plan | Status |
 |---|---|---|
-| `chore/sdk-and-model-refresh` | `docs/superpowers/plans/2026-09-21-sdk-and-model-refresh.md` | **DONE** — 7 commits, `856b794..a270a31`, unmerged |
-| `refactor/openai-responses-api` | `docs/superpowers/plans/2026-09-21-openai-responses-api.md` | **CODE DONE** — 4 commits, `0121cb8..4f2edf9`, unmerged, live checks deferred |
-| `feat/ai-usage-tracking` | `docs/superpowers/plans/2026-09-21-ai-usage-tracking.md` | **CODE DONE** — 10 commits, `a5c0588..732bc25`, unmerged |
+| `chore/sdk-and-model-refresh` | `.../2026-09-21-sdk-and-model-refresh.md` | **MERGED** — 7 commits, was `0121cb8` |
+| `refactor/openai-responses-api` | `.../2026-09-21-openai-responses-api.md` | **MERGED** — 4 commits, was `ba9a200`, live checks deferred to #4 |
+| `feat/ai-usage-tracking` | `.../2026-09-21-ai-usage-tracking.md` | **MERGED** — 10 commits, was `f8a190d` |
 
-`main` is at `856b794`. Nothing has been merged.
+`main` is at `f8a190d` and pushed to `origin/main`. The three branch labels are
+deleted; every commit is an ancestor of `main`, and the SHAs above recover them.
 
 Design doc: `docs/superpowers/specs/2026-09-20-ai-usage-tracking-design.md`.
 It carries a Decisions table recording what was rejected and why — read that
@@ -22,8 +24,20 @@ before reopening a settled question.
 
 ## To resume
 
-All three plans are executed. What remains is integration (three stacked
-branches to merge, oldest first) and the live verification parked in #4.
+All three plans are executed and shipped. What remains is the live verification
+parked in **#4** (needs OpenAI credits) and whatever the prod deploy surfaces.
+
+### Pre-deploy checks that were run
+
+- **Schema migration against an existing database.** Seeded a pre-branch-3
+  database with a user and a food log, then applied the new `schema.sql` the way
+  `initializeDatabase()` does. `ai_usage` and `idx_ai_usage_user_date` are
+  created; existing rows survive untouched. The migration is purely additive —
+  every statement is `IF NOT EXISTS` and no column is altered or dropped.
+- **Full boot path**, everything `src/index.ts` does except `bot.start()`:
+  db init, `createBot()`, web server, reminder job, retry-pending job. All clean.
+  Polling was deliberately not started so as not to steal `getUpdates` from the
+  live bot.
 
 The per-task ledger for branch 1 is at
 `.superpowers/sdd/2026-09-21-sdk-and-model-refresh/progress.md` (gitignored, on
