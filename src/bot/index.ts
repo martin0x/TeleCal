@@ -18,6 +18,7 @@ import { createDeleteCommand, createDeleteMessageHandler, hasDeleteState } from 
 import { createEditCommand, createEditMessageHandler, hasEditState } from "./commands/edit"
 import { createSettingsCommand, createSettingsCallbackHandler, createSettingsMessageHandler, hasPendingSettings } from "./commands/settings"
 import { createPendingCommand, createPendingCallbackHandler } from "./commands/pending"
+import { createUsageCommand } from "./commands/usage"
 import { LogFlow } from "./conversations/log-flow"
 import { AIService } from "../ai/service"
 import { smartReply } from "./utils/smart-reply"
@@ -32,7 +33,8 @@ export function createBot() {
   const foodLogsRepo = new FoodLogsRepository(db)
   const conversationsRepo = new ConversationsRepository(db)
   const pendingRepo = new PendingRepository(db)
-  const aiService = new AIService(new CacheRepository(db), new UsageRepository(db))
+  const usageRepo = new UsageRepository(db)
+  const aiService = new AIService(new CacheRepository(db), usageRepo)
   const logFlow = new LogFlow(conversationsRepo, foodLogsRepo, pendingRepo, aiService)
 
   bot.use(createAllowlistMiddleware(allowedUsersRepo))
@@ -62,6 +64,7 @@ export function createBot() {
   })
 
   bot.command("admin", createAdminCommand(allowedUsersRepo))
+  bot.command("usage", createUsageCommand(usageRepo))
   bot.command("today", createTodayCommand(foodLogsRepo, usersRepo))
   bot.command("week", createWeekCommand(foodLogsRepo, usersRepo))
   bot.command("month", createMonthCommand(foodLogsRepo, usersRepo))
