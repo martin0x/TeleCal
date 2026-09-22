@@ -69,3 +69,28 @@ CREATE TABLE IF NOT EXISTS estimation_cache (
   result_json TEXT NOT NULL,
   created_at TEXT DEFAULT (datetime('now'))
 );
+
+-- Per-call AI usage and cost accounting
+-- No FK to users: usage history must outlive the user record it describes.
+CREATE TABLE IF NOT EXISTS ai_usage (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  telegram_id INTEGER NOT NULL,
+  chat_id INTEGER,
+  provider TEXT NOT NULL,
+  model TEXT NOT NULL,
+  input_tokens INTEGER NOT NULL,
+  -- Subset of input_tokens billed at the cached rate. Null when unreported.
+  cached_input_tokens INTEGER,
+  -- Subset of input_tokens written to cache. Recorded, not separately priced.
+  cache_write_tokens INTEGER,
+  output_tokens INTEGER NOT NULL,
+  -- Subset of output_tokens, NEVER added to it. Billed as output. OpenAI only.
+  reasoning_tokens INTEGER,
+  cost_usd REAL NOT NULL,
+  call_type TEXT NOT NULL,      -- estimate | clarify | edit | retry
+  status TEXT NOT NULL,         -- ok | parse_error | no_usage
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_usage_user_date
+  ON ai_usage(telegram_id, created_at);
