@@ -145,7 +145,11 @@ export class LogFlow {
     targetDate: string
   ): Promise<LogFlowResult> {
     try {
-      const result = await this.aiService.estimate(input, provider)
+      const result = await this.aiService.estimate(input, provider, {
+        telegramId,
+        chatId,
+        callType: "estimate",
+      })
       return this.processEstimationResult(telegramId, chatId, input, result, targetDate)
     } catch (error) {
       return this.handleAIError(telegramId, chatId, input, targetDate)
@@ -168,7 +172,12 @@ export class LogFlow {
     const contextStr = this.buildContextString(state.pending_food, context)
 
     try {
-      const result = await this.aiService.estimate(input, provider, contextStr)
+      const result = await this.aiService.estimate(input, provider, {
+        telegramId,
+        chatId,
+        callType: "clarify",
+        context: contextStr,
+      })
       return this.processEstimationResult(telegramId, chatId, input, result, state.target_date, context)
     } catch (error) {
       return this.handleAIError(telegramId, chatId, `${state.pending_food} - ${input}`, state.target_date)

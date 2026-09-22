@@ -145,7 +145,11 @@ export function createEditMessageHandler(
         try {
           const user = usersRepo.findById(userId)
           const provider = user?.ai_provider ?? "openai"
-          const result = await aiService.estimate(text, provider)
+          const result = await aiService.estimate(text, provider, {
+            telegramId: userId,
+            chatId: ctx.chat?.id ?? null,
+            callType: "edit",
+          })
 
           if (result.needsClarification || result.items.length === 0) {
             await smartReply(ctx,

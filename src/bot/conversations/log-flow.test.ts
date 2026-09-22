@@ -151,7 +151,10 @@ describe("LogFlow", () => {
     expect(mockAIService.estimate).toHaveBeenCalledWith(
       "200g grilled",
       "openai",
-      expect.stringContaining("chicken")
+      expect.objectContaining({
+        callType: "clarify",
+        context: expect.stringContaining("chicken"),
+      })
     )
   })
 

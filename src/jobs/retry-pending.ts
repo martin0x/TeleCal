@@ -62,7 +62,11 @@ export function createRetryPendingJob(
         const user = usersRepo.findById(entry.telegram_id)
         const provider = user?.ai_provider ?? "openai"
 
-        const result = await aiService.estimate(entry.food_text, provider)
+        const result = await aiService.estimate(entry.food_text, provider, {
+          telegramId: entry.telegram_id,
+          chatId: entry.chat_id,
+          callType: "retry",
+        })
 
         if (result.needsClarification || result.items.length === 0) {
           // Still can't estimate - increment retry and continue
