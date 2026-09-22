@@ -76,7 +76,9 @@ Confirmed for branch 3: all four usage paths it expects exist in the v7 types �
 
 ## Deferred on branch 2
 
-Both need OpenAI credits. Deferred by explicit decision, not oversight.
+Tracked in **[#4](https://github.com/martin0x/TeleCal/issues/4)** — no longer on
+the critical path. Credits are not available for the foreseeable future, so this
+is parked deliberately rather than pending. Do not block branch 3 on it.
 
 1. **Task 3 Step 4 — live smoke.** `bun run scripts/smoke-providers.ts openai`
    still returns `429 You have no credits remaining`. So the Responses migration
@@ -91,7 +93,7 @@ Both need OpenAI credits. Deferred by explicit decision, not oversight.
    was *sent*; only the dashboard proves the server obeyed it. Since no live call
    has been made, there is nothing to look for yet.
 
-When credits exist, run the smoke test and check the dashboard — in that order.
+Full steps, expected output and failure triage live in #4.
 
 ## Blockers you need to resolve
 
@@ -111,9 +113,10 @@ Two consequences:
   hint to the give-up message so they can self-serve, but the underlying cause is
   the credit balance.
 
-**This gate was not met.** Branch 2 was executed anyway, by explicit decision,
-with its two live checks deferred. The isolation the split was buying is spent:
-the next OpenAI failure has two candidate causes. See "Deferred on branch 2".
+**This gate was not met, and will not be met soon** — there is no budget for
+credits right now. Branch 2 was executed anyway, by explicit decision, with its
+two live checks parked in #4. The isolation the split was buying is spent: the
+next OpenAI failure has two candidate causes.
 
 ### 2. `ANTHROPIC_API_KEY` is empty
 
