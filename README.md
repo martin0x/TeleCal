@@ -84,7 +84,8 @@ bun run start
 | `/delete` | Delete a logged entry |
 | `/settings` | Change AI provider, daily goal, reminders |
 | `/pending` | View entries awaiting AI processing |
-| `/admin` | Manage allowed users (admin only) |
+| `/usage` | View your own AI token usage |
+| `/admin` | Manage allowed users, view AI usage and cost (admin only) |
 
 ### Privacy
 

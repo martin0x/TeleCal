@@ -58,6 +58,7 @@ export function createBot() {
         "/edit - Edit a food entry\n" +
         "/delete - Delete a food entry\n" +
         "/pending - View pending estimations\n" +
+        "/usage - See your AI token usage\n" +
         "/settings - Change preferences\n\n" +
         'Tip: Type "cancel" to abort any active conversation.'
     )
