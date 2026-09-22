@@ -147,6 +147,11 @@ limited to a runtime-only SDK break.
 
 ## Accepted, no action needed
 
+- **Existing users keep `openai` as their stored provider — no migration.** Asked
+  and declined 2026-09-22. Their `/log` calls fail while the account has no
+  credits; the branch-1 `/settings` hint lets them switch by hand. Do not propose
+  an `openai` → `gemini` backfill again.
+
 - A third-party source calls `gemini-3.1-flash-lite` "preview" while Google's own
   page says Stable. The live API accepted it and returned a valid structured
   response — that outranks a third-party summary.
