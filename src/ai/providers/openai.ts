@@ -1,6 +1,6 @@
 // src/ai/providers/openai.ts
 import OpenAI from "openai"
-import { AIProvider, EstimationResult, FoodEstimate } from "../types"
+import { AIProvider, ProviderResult, FoodEstimate } from "../types"
 import { config } from "../../config"
 
 const INSTRUCTIONS = `You are a nutrition expert that estimates calories in food.
@@ -53,7 +53,7 @@ export class OpenAIProvider implements AIProvider {
     this.client = client ?? new OpenAI({ apiKey: config.ai.openaiApiKey })
   }
 
-  async estimate(foodDescription: string, context?: string): Promise<EstimationResult> {
+  async estimate(foodDescription: string, context?: string): Promise<ProviderResult> {
     const userMessage = context
       ? `Context from previous conversation: ${context}\n\nFood to estimate: ${foodDescription}`
       : foodDescription
@@ -91,10 +91,20 @@ export class OpenAIProvider implements AIProvider {
     }
 
     return {
-      items: result.items || [],
-      needsClarification: result.needsClarification || false,
-      clarificationQuestion: result.clarificationQuestion || undefined,
-      confidence: result.confidence || "medium",
+      estimate: {
+        items: result.items || [],
+        needsClarification: result.needsClarification || false,
+        clarificationQuestion: result.clarificationQuestion || undefined,
+        confidence: result.confidence || "medium",
+      },
+      usage: {
+        model: response.model ?? "gpt-5.6-luna",
+        inputTokens: response.usage?.input_tokens ?? 0,
+        cachedInputTokens: response.usage?.input_tokens_details?.cached_tokens ?? 0,
+        cacheWriteTokens: response.usage?.input_tokens_details?.cache_write_tokens ?? 0,
+        outputTokens: response.usage?.output_tokens ?? 0,
+        reasoningTokens: response.usage?.output_tokens_details?.reasoning_tokens ?? 0,
+      },
     }
   }
 }

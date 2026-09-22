@@ -1,6 +1,6 @@
 // src/ai/providers/anthropic.ts
 import Anthropic from "@anthropic-ai/sdk"
-import { AIProvider, EstimationResult, FoodEstimate } from "../types"
+import { AIProvider, ProviderResult, FoodEstimate } from "../types"
 import { config } from "../../config"
 
 const SYSTEM_PROMPT = `You are a nutrition expert that estimates calories in food.
@@ -26,13 +26,11 @@ export class AnthropicProvider implements AIProvider {
   name = "anthropic"
   private client: Anthropic
 
-  constructor() {
-    this.client = new Anthropic({
-      apiKey: config.ai.anthropicApiKey,
-    })
+  constructor(client?: Anthropic) {
+    this.client = client ?? new Anthropic({ apiKey: config.ai.anthropicApiKey })
   }
 
-  async estimate(foodDescription: string, context?: string): Promise<EstimationResult> {
+  async estimate(foodDescription: string, context?: string): Promise<ProviderResult> {
     const userMessage = context
       ? `Context from previous conversation: ${context}\n\nFood to estimate: ${foodDescription}`
       : foodDescription
@@ -62,11 +60,27 @@ export class AnthropicProvider implements AIProvider {
       confidence: "high" | "medium" | "low"
     }
 
+    const usage = response.usage as {
+      input_tokens: number
+      output_tokens: number
+      cache_read_input_tokens?: number
+      cache_creation_input_tokens?: number
+    }
+
     return {
-      items: result.items || [],
-      needsClarification: result.needsClarification || false,
-      clarificationQuestion: result.clarificationQuestion,
-      confidence: result.confidence || "medium",
+      estimate: {
+        items: result.items || [],
+        needsClarification: result.needsClarification || false,
+        clarificationQuestion: result.clarificationQuestion,
+        confidence: result.confidence || "medium",
+      },
+      usage: {
+        model: response.model ?? "claude-haiku-4-5-20251001",
+        inputTokens: usage?.input_tokens ?? 0,
+        cachedInputTokens: usage?.cache_read_input_tokens ?? 0,
+        cacheWriteTokens: usage?.cache_creation_input_tokens ?? 0,
+        outputTokens: usage?.output_tokens ?? 0,
+      },
     }
   }
 }

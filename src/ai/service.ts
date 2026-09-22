@@ -59,14 +59,14 @@ export class AIService {
     normalizedFood: string,
     context?: string
   ): Promise<EstimationResult> {
-    const result = await provider.estimate(foodDescription, context)
+    const { estimate } = await provider.estimate(foodDescription, context)
 
     // Cache successful results without clarification needed
-    if (!result.needsClarification && !context && config.features.caching) {
-      this.cache.set(normalizedFood, result)
+    if (!estimate.needsClarification && !context && config.features.caching) {
+      this.cache.set(normalizedFood, estimate)
     }
 
-    return result
+    return estimate
   }
 
   private normalizeFood(food: string): string {

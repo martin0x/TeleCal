@@ -41,10 +41,10 @@ describe("OpenAIProvider", () => {
 
     const result = await provider.estimate("two scrambled eggs")
 
-    expect(result.items).toHaveLength(1)
-    expect(result.items[0].calories).toBe(180)
-    expect(result.needsClarification).toBe(false)
-    expect(result.confidence).toBe("high")
+    expect(result.estimate.items).toHaveLength(1)
+    expect(result.estimate.items[0].calories).toBe(180)
+    expect(result.estimate.needsClarification).toBe(false)
+    expect(result.estimate.confidence).toBe("high")
   })
 
   test("disables server-side storage on every call", async () => {
@@ -83,5 +83,22 @@ describe("OpenAIProvider", () => {
 
     expect(JSON.stringify(calls[0].input)).toContain("grilled chicken")
     expect(calls[0].previous_response_id).toBeUndefined()
+  })
+})
+
+describe("OpenAIProvider usage reporting", () => {
+  test("reports tokens from the Responses usage block", async () => {
+    const { client } = fakeClient(VALID_REPLY)
+    const result = await new OpenAIProvider(client).estimate("two eggs")
+
+    expect(result.usage).toEqual({
+      model: "gpt-5.6-luna",
+      inputTokens: 120,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 45,
+      reasoningTokens: 0,
+    })
+    expect(result.estimate.items).toHaveLength(1)
   })
 })

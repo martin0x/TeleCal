@@ -1,6 +1,6 @@
 // src/ai/providers/gemini.ts
 import { GoogleGenerativeAI } from "@google/generative-ai"
-import { AIProvider, EstimationResult, FoodEstimate } from "../types"
+import { AIProvider, ProviderResult, FoodEstimate } from "../types"
 import { config } from "../../config"
 
 const SYSTEM_PROMPT = `You are a nutrition expert that estimates calories in food.
@@ -26,11 +26,11 @@ export class GeminiProvider implements AIProvider {
   name = "gemini"
   private client: GoogleGenerativeAI
 
-  constructor() {
-    this.client = new GoogleGenerativeAI(config.ai.googleApiKey)
+  constructor(client?: GoogleGenerativeAI) {
+    this.client = client ?? new GoogleGenerativeAI(config.ai.googleApiKey)
   }
 
-  async estimate(foodDescription: string, context?: string): Promise<EstimationResult> {
+  async estimate(foodDescription: string, context?: string): Promise<ProviderResult> {
     const model = this.client.getGenerativeModel({
       model: "gemini-3.1-flash-lite",
       generationConfig: {
@@ -65,11 +65,22 @@ export class GeminiProvider implements AIProvider {
       confidence: "high" | "medium" | "low"
     }
 
+    // usageMetadata is nested under result.response, not on the result itself.
+    const meta = response.usageMetadata
+
     return {
-      items: parsed.items || [],
-      needsClarification: parsed.needsClarification || false,
-      clarificationQuestion: parsed.clarificationQuestion,
-      confidence: parsed.confidence || "medium",
+      estimate: {
+        items: parsed.items || [],
+        needsClarification: parsed.needsClarification || false,
+        clarificationQuestion: parsed.clarificationQuestion,
+        confidence: parsed.confidence || "medium",
+      },
+      usage: {
+        model: "gemini-3.1-flash-lite",
+        inputTokens: meta?.promptTokenCount ?? 0,
+        cachedInputTokens: meta?.cachedContentTokenCount ?? 0,
+        outputTokens: meta?.candidatesTokenCount ?? 0,
+      },
     }
   }
 }

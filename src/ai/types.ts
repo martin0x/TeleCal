@@ -15,7 +15,7 @@ export interface EstimationResult {
 
 export interface AIProvider {
   name: string
-  estimate(foodDescription: string, context?: string): Promise<EstimationResult>
+  estimate(foodDescription: string, context?: string): Promise<ProviderResult>
 }
 
 export interface CachedEstimation {
