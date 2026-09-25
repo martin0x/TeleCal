@@ -1,21 +1,29 @@
 // src/bot/commands/delete.test.ts
-import { describe, test, expect, beforeEach, mock } from "bun:test"
+import { describe, test, expect, beforeEach, mock, spyOn } from "bun:test"
 import type { Context } from "grammy"
 import { createTestDb } from "../../db/test-helpers"
 import { FoodLogsRepository } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
+import { getTodayInTimezone, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { encodeDeleteCallback } from "../utils/callback-data"
-import { deleteAllToken, resolveDeleteCallback, createDeleteCallbackHandler } from "./delete"
+import {
+  deleteAllToken,
+  resolveDeleteCallback,
+  createDeleteCallbackHandler,
+  createDeleteCommand,
+  hasDeleteState,
+} from "./delete"
 
 const OWNER = 42
 const OTHER = 99
 const DATE = "2026-09-25"
 
 let foodLogsRepo: FoodLogsRepository
+let usersRepo: UsersRepository
 
 beforeEach(() => {
   const db = createTestDb()
-  const usersRepo = new UsersRepository(db)
+  usersRepo = new UsersRepository(db)
   usersRepo.upsert(OWNER, "maria")
   usersRepo.upsert(OTHER, "bob")
   foodLogsRepo = new FoodLogsRepository(db)
@@ -154,5 +162,70 @@ describe("createDeleteCallbackHandler", () => {
 
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith("That button has expired.")
     expect(ctx.editMessageReplyMarkup).toHaveBeenCalled()
+  })
+
+  test("if answering the callback query fails, the message is still edited", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {})
+    const [item] = logItems(OWNER, [{ description: "Ramen", calories: 520, emoji: "🍜" }])
+    const ctx = fakeCallbackCtx(encodeDeleteCallback({ action: "one", ownerId: OWNER, itemId: item.id! }), OWNER)
+    ctx.answerCallbackQuery.mockImplementation(() => Promise.reject(new Error("query is too old")))
+
+    await createDeleteCallbackHandler(foodLogsRepo)(ctx as unknown as Context)
+
+    expect(ctx.editMessageText).toHaveBeenCalledWith("🗑 Deleted: 🍜 Ramen — 520 cal", undefined)
+    expect(errorSpy).toHaveBeenCalledTimes(1)
+    errorSpy.mockRestore()
+  })
+})
+
+describe("a stale button press vs. a newer typed /delete session", () => {
+  function fakeCommandCtx(fromId: number) {
+    return {
+      from: { id: fromId, first_name: "Maria" },
+      message: { text: "/delete" },
+      chat: { type: "private" },
+      reply: mock(() => Promise.resolve()),
+    }
+  }
+
+  function fakeCallbackCtx(data: string, fromId: number) {
+    return {
+      from: { id: fromId, first_name: "Maria" },
+      chat: { id: 555, type: "private" },
+      callbackQuery: { data },
+      answerCallbackQuery: mock(() => Promise.resolve(true)),
+      editMessageText: mock(() => Promise.resolve(true)),
+      editMessageReplyMarkup: mock(() => Promise.resolve(true)),
+      reply: mock(() => Promise.resolve()),
+    }
+  }
+
+  test("a stale press for a missing item leaves a newer typed session intact", async () => {
+    const today = getTodayInTimezone(DEFAULT_TIMEZONE)
+    foodLogsRepo.create(OWNER, 555, today, [{ description: "Eggs", calories: 180 }])
+
+    await createDeleteCommand(foodLogsRepo, usersRepo)(fakeCommandCtx(OWNER) as unknown as Context)
+    expect(hasDeleteState(OWNER)).toBe(true)
+
+    const staleCtx = fakeCallbackCtx(
+      encodeDeleteCallback({ action: "one", ownerId: OWNER, itemId: 999999 }),
+      OWNER
+    )
+    await createDeleteCallbackHandler(foodLogsRepo)(staleCtx as unknown as Context)
+
+    expect(hasDeleteState(OWNER)).toBe(true)
+  })
+
+  test("a successful press still clears the typed session", async () => {
+    const today = getTodayInTimezone(DEFAULT_TIMEZONE)
+    const [item] = foodLogsRepo.create(OWNER, 555, today, [{ description: "Eggs", calories: 180 }]).items
+
+    await createDeleteCommand(foodLogsRepo, usersRepo)(fakeCommandCtx(OWNER) as unknown as Context)
+    expect(hasDeleteState(OWNER)).toBe(true)
+
+    const ctx = fakeCallbackCtx(encodeDeleteCallback({ action: "one", ownerId: OWNER, itemId: item.id! }), OWNER)
+    await createDeleteCallbackHandler(foodLogsRepo)(ctx as unknown as Context)
+
+    expect(hasDeleteState(OWNER)).toBe(false)
   })
 })

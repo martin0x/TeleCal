@@ -5,7 +5,7 @@ import { UsersRepository } from "../../db/repositories/users"
 import { getTodayInTimezone, formatDateForDisplay, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { shortHash } from "../../utils/format"
 import { DeleteCallback, encodeDeleteCallback, parseDeleteCallback } from "../utils/callback-data"
-import { stripKeyboard } from "../utils/keyboard"
+import { stripKeyboard, answerCallback } from "../utils/keyboard"
 import { smartReply, smartEdit } from "../utils/smart-reply"
 
 type DeletableItem = FoodItem & { log_id: number }
@@ -250,31 +250,32 @@ export function createDeleteCallbackHandler(foodLogsRepo: FoodLogsRepository) {
   return async (ctx: Context) => {
     const presserId = ctx.from?.id
     if (!presserId) {
-      await ctx.answerCallbackQuery()
+      await answerCallback(ctx)
       return
     }
 
     const parsed = parseDeleteCallback(ctx.callbackQuery?.data ?? "")
     if (!parsed) {
-      await ctx.answerCallbackQuery("That button has expired.")
+      await answerCallback(ctx, "That button has expired.")
       await stripKeyboard(ctx)
       return
     }
 
     const decision = resolveDeleteCallback(parsed, presserId, foodLogsRepo)
     if (decision.kind === "not_owner") {
-      await ctx.answerCallbackQuery("Only the person who started this can confirm it.")
+      await answerCallback(ctx, "Only the person who started this can confirm it.")
       return
     }
 
-    // The press settles this delete flow either way; drop any typed-flow state.
-    clearDeleteState(presserId)
-    await ctx.answerCallbackQuery(decision.toast)
+    await answerCallback(ctx, decision.toast)
 
     if (decision.kind === "gone") {
       await stripKeyboard(ctx)
       return
     }
+
+    // The press resolved this delete flow; drop any typed-flow state.
+    clearDeleteState(presserId)
 
     try {
       await smartEdit(ctx, decision.edit)
