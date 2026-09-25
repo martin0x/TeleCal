@@ -7,10 +7,31 @@ import { FoodLogsRepository, FoodItem } from "../../db/repositories/food-logs"
 import { PendingRepository } from "../../db/repositories/pending"
 import { AIService } from "../../ai/service"
 import { EstimationResult } from "../../ai/types"
+import { formatItemsSummary, shortHash } from "../../utils/format"
+import { formatDateForDisplay } from "../../utils/dates"
 
 export interface LogFlowResult {
   message: string
   action: "prompt" | "done" | "ask_continue" | "continue" | "error"
+  parseMode?: "HTML"
+  /** Set on a confirmation message; the bot layer turns it into the Log/Change/Cancel keyboard. */
+  confirm?: { token: string; totalCalories: number }
+}
+
+export type ConfirmChoice = "log" | "change" | "cancel"
+
+export type ConfirmationOutcome =
+  | { stale: true }
+  | { stale: false; edit: string; toast?: string; followUp?: string }
+
+/**
+ * Fingerprint of a pending estimate, carried in the confirmation buttons. A
+ * press only acts while the session still holds the estimate its message
+ * showed. After "no" and a fresh estimate, the old message's buttons go stale
+ * instead of confirming items the user never saw on that message.
+ */
+export function confirmToken(targetDate: string, pendingItems: string): string {
+  return shortHash(`${targetDate}|${pendingItems}`)
 }
 
 interface ConversationContext {
@@ -212,11 +233,9 @@ export class LogFlow {
         }
       }
 
-      const log = this.foodLogs.create(telegramId, chatId, state.target_date, items)
+      this.commitPending(telegramId, chatId, state.target_date, items)
 
       const totalCalories = items.reduce((sum, item) => sum + item.calories, 0)
-      this.conversations.delete(telegramId)
-
       return {
         message: `Logged ${totalCalories} calories for ${state.target_date}.`,
         action: "done",
@@ -224,8 +243,7 @@ export class LogFlow {
     }
 
     if (input === "no" || input === "n") {
-      // Go back to awaiting input
-      this.conversations.upsert(telegramId, state.chat_id, "awaiting_input", state.target_date)
+      this.backToInput(telegramId, state)
       return {
         message: "Okay, let's try again. What did you eat?",
         action: "prompt",
@@ -233,8 +251,94 @@ export class LogFlow {
     }
 
     return {
-      message: 'Please reply "yes" to log or "no" to try again.',
+      message: 'Tap a button above, or reply "yes" / "no".',
       action: "prompt",
+    }
+  }
+
+  /**
+   * Handles a Log / Change / Cancel button press. Stale unless the session is
+   * still confirming the exact estimate the pressed message showed.
+   */
+  resolveConfirmation(
+    telegramId: number,
+    chatId: number,
+    token: string,
+    choice: ConfirmChoice
+  ): ConfirmationOutcome {
+    const state = this.conversations.get(telegramId)
+    if (
+      !state ||
+      state.state !== "confirming" ||
+      !state.pending_items ||
+      confirmToken(state.target_date, state.pending_items) !== token
+    ) {
+      return { stale: true }
+    }
+
+    const items = safeJsonParse<FoodItem[]>(state.pending_items, [])
+    if (items.length === 0) return { stale: true }
+
+    switch (choice) {
+      case "log":
+        this.commitPending(telegramId, chatId, state.target_date, items)
+        return {
+          stale: false,
+          edit: `✅ Logged to ${formatDateForDisplay(state.target_date)}:\n${formatItemsSummary(items)}`,
+          toast: "Logged ✅",
+        }
+      case "change":
+        this.backToInput(telegramId, state)
+        return {
+          stale: false,
+          edit: `✏️ Not logged — changing:\n${formatItemsSummary(items, { struck: true })}`,
+          followUp: "Okay, let's try again. What did you eat?",
+        }
+      case "cancel":
+        this.conversations.delete(telegramId)
+        return {
+          stale: false,
+          edit: `✖️ Cancelled — not logged:\n${formatItemsSummary(items, { struck: true })}`,
+          toast: "Cancelled",
+        }
+    }
+  }
+
+  // State transitions shared by typed replies and button presses, so the two
+  // paths cannot drift apart.
+
+  private commitPending(
+    telegramId: number,
+    chatId: number,
+    targetDate: string,
+    items: FoodItem[]
+  ): void {
+    this.foodLogs.create(telegramId, chatId, targetDate, items)
+    this.conversations.delete(telegramId)
+  }
+
+  private backToInput(
+    telegramId: number,
+    state: { chat_id: number; target_date: string }
+  ): void {
+    this.conversations.upsert(telegramId, state.chat_id, "awaiting_input", state.target_date)
+  }
+
+  private confirmationResult(
+    header: string,
+    items: FoodItem[],
+    targetDate: string,
+    pendingItems: string,
+    action: "prompt" | "continue"
+  ): LogFlowResult {
+    return {
+      message: `${header}\n${formatItemsSummary(items)}`,
+      action,
+      parseMode: "HTML",
+      confirm: {
+        token: confirmToken(targetDate, pendingItems),
+        totalCalories: items.reduce((sum, item) => sum + item.calories, 0),
+      },
     }
   }
 
@@ -267,24 +371,19 @@ export class LogFlow {
     }
 
     // We have items - move to confirming
-    const itemsDisplay = result.items
-      .map((item) => `${item.emoji ?? "🍽️"} ${item.description} — ${item.calories} cal`)
-      .join("\n")
-
-    const totalCalories = result.items.reduce((sum, item) => sum + item.calories, 0)
+    const pendingItems = JSON.stringify(result.items)
 
     this.conversations.upsert(telegramId, chatId, "confirming", targetDate, {
-      pending_items: JSON.stringify(result.items),
+      pending_items: pendingItems,
     })
 
-    return {
-      message:
-        `Here's what I'll log:\n\n${itemsDisplay}\n` +
-        `─────────────────\n` +
-        `Total: ${totalCalories} cal\n\n` +
-        `Log this? (yes/no)`,
-      action: "prompt",
-    }
+    return this.confirmationResult(
+      "Here's what I'll log:",
+      result.items,
+      targetDate,
+      pendingItems,
+      "prompt"
+    )
   }
 
   private handleAIError(
@@ -356,20 +455,13 @@ export class LogFlow {
               action: "error",
             }
           }
-          const itemsDisplay = items
-            .map((item) => `${item.emoji ?? "🍽️"} ${item.description} — ${item.calories} cal`)
-            .join("\n")
-          const totalCalories = items.reduce((sum, item) => sum + item.calories, 0)
-
-          return {
-            message:
-              `Continuing session for ${state.target_date}.\n\n` +
-              `${itemsDisplay}\n` +
-              `─────────────────\n` +
-              `Total: ${totalCalories} cal\n\n` +
-              `Log this? (yes/no)`,
-            action: "continue",
-          }
+          return this.confirmationResult(
+            `Continuing session for ${state.target_date}.`,
+            items,
+            state.target_date,
+            state.pending_items,
+            "continue"
+          )
         }
         return {
           message: "Something went wrong. Please start over with /log",

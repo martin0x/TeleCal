@@ -1,7 +1,7 @@
 // src/bot/conversations/log-flow.test.ts
 import { describe, test, expect, beforeEach, mock } from "bun:test"
 import { Database } from "bun:sqlite"
-import { LogFlow, LogFlowResult } from "./log-flow"
+import { LogFlow, LogFlowResult, confirmToken } from "./log-flow"
 import { ConversationsRepository } from "../../db/repositories/conversations"
 import { FoodLogsRepository } from "../../db/repositories/food-logs"
 import { PendingRepository } from "../../db/repositories/pending"
@@ -220,5 +220,128 @@ describe("LogFlow", () => {
     const state = conversationsRepo.get(123)
     expect(state?.state).toBe("awaiting_input")
     expect(state?.target_date).toBe("2026-01-31")
+  })
+
+  async function reachConfirming(): Promise<string> {
+    await logFlow.start(123, 456, "2026-01-31", "openai")
+    const result = await logFlow.processInput(123, 456, "grilled chicken", "openai")
+    return result.confirm!.token
+  }
+
+  test("confirmation is an HTML summary with a confirm token", async () => {
+    await logFlow.start(123, 456, "2026-01-31", "openai")
+    const result = await logFlow.processInput(123, 456, "grilled chicken", "openai")
+
+    expect(result.parseMode).toBe("HTML")
+    expect(result.message).toBe(
+      "Here's what I'll log:\n<blockquote>🍗 Chicken — 200 cal</blockquote>\n<b>Total: 200 cal</b>"
+    )
+    const state = conversationsRepo.get(123)!
+    expect(result.confirm).toEqual({
+      token: confirmToken("2026-01-31", state.pending_items!),
+      totalCalories: 200,
+    })
+  })
+
+  test("confirmation escapes AI descriptions", async () => {
+    mockAIService.estimate = mock(() =>
+      Promise.resolve({
+        items: [{ description: "Mac & cheese", calories: 400, emoji: "🧀" }],
+        needsClarification: false,
+        confidence: "high" as const,
+      })
+    )
+    await logFlow.start(123, 456, "2026-01-31", "openai")
+    const result = await logFlow.processInput(123, 456, "mac and cheese", "openai")
+
+    expect(result.message).toContain("Mac &amp; cheese")
+  })
+
+  test("resolveConfirmation log saves the items and describes them", async () => {
+    const token = await reachConfirming()
+    const outcome = logFlow.resolveConfirmation(123, 456, token, "log")
+
+    expect(outcome).toEqual({
+      stale: false,
+      edit: "✅ Logged to Sat, Jan 31:\n<blockquote>🍗 Chicken — 200 cal</blockquote>\n<b>Total: 200 cal</b>",
+      toast: "Logged ✅",
+    })
+    expect(conversationsRepo.get(123)).toBeNull()
+    expect(foodLogsRepo.getByDate(123, "2026-01-31")[0].items[0].calories).toBe(200)
+  })
+
+  test("resolveConfirmation change returns to input without logging", async () => {
+    const token = await reachConfirming()
+    const outcome = logFlow.resolveConfirmation(123, 456, token, "change")
+
+    expect(outcome).toEqual({
+      stale: false,
+      edit:
+        "✏️ Not logged — changing:\n<blockquote><s>🍗 Chicken — 200 cal</s></blockquote>\n" +
+        "<b><s>Total: 200 cal</s></b>",
+      followUp: "Okay, let's try again. What did you eat?",
+    })
+    expect(conversationsRepo.get(123)?.state).toBe("awaiting_input")
+    expect(foodLogsRepo.getByDate(123, "2026-01-31")).toHaveLength(0)
+  })
+
+  test("resolveConfirmation cancel clears the session without logging", async () => {
+    const token = await reachConfirming()
+    const outcome = logFlow.resolveConfirmation(123, 456, token, "cancel")
+
+    expect(outcome).toEqual({
+      stale: false,
+      edit:
+        "✖️ Cancelled — not logged:\n<blockquote><s>🍗 Chicken — 200 cal</s></blockquote>\n" +
+        "<b><s>Total: 200 cal</s></b>",
+      toast: "Cancelled",
+    })
+    expect(conversationsRepo.get(123)).toBeNull()
+    expect(foodLogsRepo.getByDate(123, "2026-01-31")).toHaveLength(0)
+  })
+
+  test("resolveConfirmation is stale with no session", () => {
+    expect(logFlow.resolveConfirmation(123, 456, "abcd1234", "log")).toEqual({ stale: true })
+  })
+
+  test("resolveConfirmation is stale once the session has left confirming", async () => {
+    const token = await reachConfirming()
+    await logFlow.processInput(123, 456, "no", "openai")
+
+    expect(logFlow.resolveConfirmation(123, 456, token, "log")).toEqual({ stale: true })
+  })
+
+  test("an old Log button cannot confirm a newer estimate", async () => {
+    const oldToken = await reachConfirming()
+    await logFlow.processInput(123, 456, "no", "openai")
+    mockAIService.estimate = mock(() =>
+      Promise.resolve({
+        items: [{ description: "Beef", calories: 300, emoji: "🥩" }],
+        needsClarification: false,
+        confidence: "high" as const,
+      })
+    )
+    await logFlow.processInput(123, 456, "beef", "openai")
+
+    expect(logFlow.resolveConfirmation(123, 456, oldToken, "log")).toEqual({ stale: true })
+    expect(foodLogsRepo.getByDate(123, "2026-01-31")).toHaveLength(0)
+    expect(conversationsRepo.get(123)?.state).toBe("confirming")
+  })
+
+  test("resuming a confirming session re-sends the same token", async () => {
+    const token = await reachConfirming()
+    const result = await logFlow.continueOrStartOver(123, 456, "continue", "2026-02-01")
+
+    expect(result.parseMode).toBe("HTML")
+    expect(result.confirm?.token).toBe(token)
+    expect(result.message).toStartWith("Continuing session for 2026-01-31.\n<blockquote>")
+  })
+
+  test("unrecognized text while confirming points to the buttons", async () => {
+    await reachConfirming()
+    const result = await logFlow.processInput(123, 456, "maybe", "openai")
+
+    expect(result.message).toBe('Tap a button above, or reply "yes" / "no".')
+    expect(conversationsRepo.get(123)?.state).toBe("confirming")
   })
 })
