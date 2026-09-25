@@ -162,9 +162,9 @@ is 44 bytes, inside Telegram's 64-byte limit.
 - `LogFlowResult` gains `parseMode?: "HTML"` and
   `confirm?: { token: string; totalCalories: number }`. `confirm` is set on confirmation
   messages; the bot layer turns it into the keyboard.
-- The token is `shortHash(target_date + pending_items)`, computed from the stored
+- The token is `` shortHash(`${target_date}|${pending_items}`) ``, computed from the stored
   `conversation_state` row whenever it is needed. It is never stored, so no schema change.
-- New `resolveConfirmation(telegramId, token, choice: "log" | "change" | "cancel")`
+- New `resolveConfirmation(telegramId, chatId, token, choice: "log" | "change" | "cancel")`
   returns `{ stale: true }`, or `{ edit, toast?, followUp? }`.
 - The typed `yes` / `no` path and the button path share one private state transition, so
   they cannot drift apart. Only the reply copy differs by path.
@@ -178,8 +178,9 @@ is 44 bytes, inside Telegram's 64-byte limit.
     `smartEdit`, `answerCallbackQuery`, then the follow-up via `smartReply`.
 - `src/bot/commands/delete.ts`:
   - Confirm prompts carry the keyboard.
-  - New pure `resolveDeleteCallback(parsed, presserId, foodLogsRepo)` makes the decision.
-  - New `createDeleteCallbackHandler(foodLogsRepo)` acts on that decision and calls
+  - New `resolveDeleteCallback(parsed, presserId, foodLogsRepo)` does the database work and
+    returns what to show; it takes no Telegram context, so it is testable with a real DB.
+  - New `createDeleteCallbackHandler(foodLogsRepo)` does all the Telegram I/O and calls
     `clearDeleteState(ownerId)`.
   - The handler checks against the database, not the in-memory `deleteStates` map, so a
     button still works after a restart.
