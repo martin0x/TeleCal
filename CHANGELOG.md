@@ -13,11 +13,13 @@ tied to release tags.
 - **`/log` confirmation uses buttons.** `✅ Log {total} cal`, `✏️ Change` and
   `✖️ Cancel` replace typing "yes"/"no". After a tap the message is edited in
   place, so it still shows exactly what was confirmed. Typing still works.
-- **`/delete` confirmation uses buttons**: `🗑 Delete` and `✖️ Cancel`. Picking
-  an item is still typed.
+- **`/delete` confirmation uses buttons**: `🗑 Delete`, `🗑 Delete all` and
+  `✖️ Cancel`. Picking an item is still typed.
 - **Item summaries no longer draw a `─` rule**, which wrapped onto a second line
   on narrow screens. Items sit in a quote box with a bold total, and messages
-  carrying one are sent with Telegram's HTML formatting.
+  carrying one are sent with Telegram's HTML formatting. `/today`, `/week` and
+  `/month` likewise separate the total from the list with a blank line instead
+  of a `━` rule, for the same reason.
 - Confirmation buttons only act for the user they were sent to, and only on the
   estimate or items their message shows: an old Log button cannot confirm a
   newer estimate.
