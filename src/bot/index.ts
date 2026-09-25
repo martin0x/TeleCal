@@ -28,6 +28,11 @@ export interface BotContext extends Context {}
 export function createBot() {
   const bot = new Bot<BotContext>(config.telegram.botToken)
 
+  // Without this, grammY's default handler stops polling on the first uncaught error.
+  bot.catch((err) => {
+    console.error(`Error while handling update ${err.ctx.update.update_id}:`, err.error)
+  })
+
   const allowedUsersRepo = new AllowedUsersRepository(db)
   const usersRepo = new UsersRepository(db)
   const foodLogsRepo = new FoodLogsRepository(db)

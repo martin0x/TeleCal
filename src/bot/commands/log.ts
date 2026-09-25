@@ -5,7 +5,7 @@ import { ConversationsRepository } from "../../db/repositories/conversations"
 import { UsersRepository } from "../../db/repositories/users"
 import { getTodayInTimezone, getYesterdayInTimezone, formatDate, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { encodeLogCallback, parseLogCallback, LogAction } from "../utils/callback-data"
-import { stripKeyboard } from "../utils/keyboard"
+import { stripKeyboard, answerCallback } from "../utils/keyboard"
 import { smartReply, smartEdit } from "../utils/smart-reply"
 
 const MONTHS: Record<string, number> = {
@@ -162,32 +162,32 @@ export function createLogCallbackHandler(logFlow: LogFlow) {
     const presserId = ctx.from?.id
     const chatId = ctx.chat?.id
     if (!presserId || !chatId) {
-      await ctx.answerCallbackQuery()
+      await answerCallback(ctx)
       return
     }
 
     const parsed = parseLogCallback(ctx.callbackQuery?.data ?? "")
     if (!parsed) {
-      await ctx.answerCallbackQuery("That button has expired.")
+      await answerCallback(ctx, "That button has expired.")
       await stripKeyboard(ctx)
       return
     }
 
     // Owner check first, so a non-owner learns nothing about the owner's state.
     if (parsed.ownerId !== presserId) {
-      await ctx.answerCallbackQuery("Only the person who started this can confirm it.")
+      await answerCallback(ctx, "Only the person who started this can confirm it.")
       return
     }
 
     const outcome = logFlow.resolveConfirmation(presserId, chatId, parsed.token, LOG_CHOICES[parsed.action])
     if (outcome.stale) {
-      await ctx.answerCallbackQuery("That entry is no longer pending.")
+      await answerCallback(ctx, "That entry is no longer pending.")
       await stripKeyboard(ctx)
       return
     }
 
     // Answer before editing so the client's spinner stops even if the edit fails.
-    await ctx.answerCallbackQuery(outcome.toast)
+    await answerCallback(ctx, outcome.toast)
     try {
       await smartEdit(ctx, outcome.edit, { parse_mode: "HTML" })
     } catch (error) {

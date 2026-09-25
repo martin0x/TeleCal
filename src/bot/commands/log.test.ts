@@ -99,4 +99,15 @@ describe("createLogCallbackHandler", () => {
     expect(errorSpy).toHaveBeenCalledTimes(1)
     errorSpy.mockRestore()
   })
+
+  test("if answering the callback query fails, the message is still edited", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {})
+    const ctx = fakeCallbackCtx("log:ok:42:abcd1234")
+    ctx.answerCallbackQuery.mockImplementation(() => Promise.reject(new Error("query is too old")))
+    const logFlow = fakeLogFlow(LOGGED)
+    await createLogCallbackHandler(logFlow as unknown as LogFlow)(ctx as unknown as Context)
+    expect(ctx.editMessageText).toHaveBeenCalledWith("EDIT", { parse_mode: "HTML" })
+    expect(errorSpy).toHaveBeenCalledTimes(1)
+    errorSpy.mockRestore()
+  })
 })
