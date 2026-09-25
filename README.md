@@ -104,8 +104,8 @@ Calorie data itself is stored only in TeleCal's local SQLite database.
 1. Send `/log` to start a session
 2. Describe what you ate (e.g., "2 eggs and toast with butter")
 3. AI estimates calories and may ask clarifying questions
-4. Confirm with "yes" or retry with "no"
-5. Send "cancel" at any point to exit
+4. Tap **✅ Log** to save it, or **✏️ Change** to describe it again (typing "yes" / "no" also works)
+5. Tap **✖️ Cancel**, or send "cancel" at any point, to exit
 
 ## Testing
 
