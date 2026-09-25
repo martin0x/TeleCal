@@ -13,7 +13,7 @@ import { createAllowlistMiddleware } from "./middleware/allowlist"
 import { createAdminCommand } from "./commands/admin"
 import { createTodayCommand } from "./commands/today"
 import { createWeekCommand, createMonthCommand } from "./commands/stats"
-import { createLogCommand, createLogMessageHandler } from "./commands/log"
+import { createLogCommand, createLogMessageHandler, createLogCallbackHandler } from "./commands/log"
 import { createDeleteCommand, createDeleteMessageHandler, hasDeleteState } from "./commands/delete"
 import { createEditCommand, createEditMessageHandler, hasEditState } from "./commands/edit"
 import { createSettingsCommand, createSettingsCallbackHandler, createSettingsMessageHandler, hasPendingSettings } from "./commands/settings"
@@ -83,6 +83,9 @@ export function createBot() {
     }
     if (data?.startsWith("pending:")) {
       return createPendingCallbackHandler(pendingRepo)(ctx)
+    }
+    if (data?.startsWith("log:")) {
+      return createLogCallbackHandler(logFlow)(ctx)
     }
     return next()
   })

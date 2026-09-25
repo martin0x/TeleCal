@@ -1,10 +1,12 @@
 // src/bot/commands/log.ts
-import { Context } from "grammy"
-import { LogFlow } from "../conversations/log-flow"
+import { Context, InlineKeyboard } from "grammy"
+import { LogFlow, LogFlowResult, ConfirmChoice } from "../conversations/log-flow"
 import { ConversationsRepository } from "../../db/repositories/conversations"
 import { UsersRepository } from "../../db/repositories/users"
 import { getTodayInTimezone, getYesterdayInTimezone, formatDate, DEFAULT_TIMEZONE } from "../../utils/dates"
-import { smartReply } from "../utils/smart-reply"
+import { encodeLogCallback, parseLogCallback, LogAction } from "../utils/callback-data"
+import { stripKeyboard } from "../utils/keyboard"
+import { smartReply, smartEdit } from "../utils/smart-reply"
 
 const MONTHS: Record<string, number> = {
   jan: 0, january: 0,
@@ -121,11 +123,80 @@ export function createLogMessageHandler(
         lower as "continue" | "new",
         getTodayInTimezone(timezone)
       )
-      await smartReply(ctx, result.message)
+      await replyWithResult(ctx, userId, result)
       return
     }
 
     const result = await logFlow.processInput(userId, chatId, text, provider)
-    await smartReply(ctx, result.message)
+    await replyWithResult(ctx, userId, result)
+  }
+}
+
+const LOG_CHOICES: Record<LogAction, ConfirmChoice> = {
+  ok: "log",
+  chg: "change",
+  cxl: "cancel",
+}
+
+export function buildLogConfirmKeyboard(
+  ownerId: number,
+  confirm: { token: string; totalCalories: number }
+): InlineKeyboard {
+  const data = (action: LogAction) => encodeLogCallback({ action, ownerId, token: confirm.token })
+  return new InlineKeyboard()
+    .text(`✅ Log ${confirm.totalCalories} cal`, data("ok"))
+    .row()
+    .text("✏️ Change", data("chg"))
+    .text("✖️ Cancel", data("cxl"))
+}
+
+async function replyWithResult(ctx: Context, ownerId: number, result: LogFlowResult): Promise<void> {
+  const options: NonNullable<Parameters<Context["reply"]>[1]> = {}
+  if (result.parseMode) options.parse_mode = result.parseMode
+  if (result.confirm) options.reply_markup = buildLogConfirmKeyboard(ownerId, result.confirm)
+  await smartReply(ctx, result.message, options)
+}
+
+export function createLogCallbackHandler(logFlow: LogFlow) {
+  return async (ctx: Context) => {
+    const presserId = ctx.from?.id
+    const chatId = ctx.chat?.id
+    if (!presserId || !chatId) {
+      await ctx.answerCallbackQuery()
+      return
+    }
+
+    const parsed = parseLogCallback(ctx.callbackQuery?.data ?? "")
+    if (!parsed) {
+      await ctx.answerCallbackQuery("That button has expired.")
+      await stripKeyboard(ctx)
+      return
+    }
+
+    // Owner check first, so a non-owner learns nothing about the owner's state.
+    if (parsed.ownerId !== presserId) {
+      await ctx.answerCallbackQuery("Only the person who started this can confirm it.")
+      return
+    }
+
+    const outcome = logFlow.resolveConfirmation(presserId, chatId, parsed.token, LOG_CHOICES[parsed.action])
+    if (outcome.stale) {
+      await ctx.answerCallbackQuery("That entry is no longer pending.")
+      await stripKeyboard(ctx)
+      return
+    }
+
+    // Answer before editing so the client's spinner stops even if the edit fails.
+    await ctx.answerCallbackQuery(outcome.toast)
+    try {
+      await smartEdit(ctx, outcome.edit, { parse_mode: "HTML" })
+    } catch (error) {
+      console.error("Failed to edit log confirmation:", error)
+      await smartReply(ctx, outcome.edit, { parse_mode: "HTML" })
+    }
+
+    if (outcome.followUp) {
+      await smartReply(ctx, outcome.followUp)
+    }
   }
 }
