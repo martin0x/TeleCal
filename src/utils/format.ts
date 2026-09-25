@@ -36,7 +36,10 @@ export interface SummaryItem {
 export function formatItemsSummary(items: SummaryItem[], opts: { struck?: boolean } = {}): string {
   const strike = (text: string) => (opts.struck ? `<s>${text}</s>` : text)
   const lines = items
-    .map((item) => `${escapeHtml(item.emoji ?? "🍽️")} ${escapeHtml(item.description)} — ${item.calories} cal`)
+    .map(
+      (item) =>
+        `${escapeHtml(String(item.emoji ?? "🍽️"))} ${escapeHtml(String(item.description))} — ${escapeHtml(String(item.calories))} cal`
+    )
     .join("\n")
   const total = items.reduce((sum, item) => sum + item.calories, 0)
   return `<blockquote>${strike(lines)}</blockquote>\n<b>${strike(`Total: ${total} cal`)}</b>`

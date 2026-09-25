@@ -75,6 +75,12 @@ describe("formatItemsSummary", () => {
   test("contains no width-dependent rule", () => {
     expect(formatItemsSummary(items)).not.toContain("─")
   })
+
+  test("tolerates a non-string description without throwing", () => {
+    expect(
+      formatItemsSummary([{ description: 42 as unknown as string, calories: 1 }])
+    ).toContain("🍽️ 42 — 1 cal")
+  })
 })
 
 describe("shortHash", () => {
