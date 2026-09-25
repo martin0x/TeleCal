@@ -67,7 +67,7 @@ export function createTodayCommand(
       }
     }
 
-    message += `\n━━━━━━━━━━━━━━━━━━\n`
+    message += "\n"
     message += `📊 Total: ${totalCalories} cal`
 
     if (dailyGoal) {

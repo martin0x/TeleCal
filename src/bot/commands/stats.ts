@@ -113,7 +113,7 @@ async function sendStatsMessage(
     }
   }
 
-  message += `\n━━━━━━━━━━━━━━━━━━\n`
+  message += "\n"
   message += `📈 Total: ${totalCalories} cal\n`
   message += `📊 Daily avg: ${avgCalories} cal\n`
   message += `📅 Days tracked: ${daysWithData}/${days}`
