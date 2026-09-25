@@ -48,3 +48,36 @@ test("passes retry call type and the entry's user and chat to the AI service", a
     expect.objectContaining({ telegramId: 42, chatId: -100, callType: "retry" })
   )
 })
+
+test("announces a processed entry as an HTML summary", async () => {
+  const pendingRepo = new PendingRepository(db)
+  const foodLogsRepo = new FoodLogsRepository(db)
+  const usersRepo = new UsersRepository(db)
+  usersRepo.upsert(42, "ray")
+  pendingRepo.create(42, -100, "chicken adobo", "2026-09-21")
+
+  const estimate = mock(() =>
+    Promise.resolve({
+      items: [{ description: "Chicken adobo", calories: 420, emoji: "🍗" }],
+      needsClarification: false,
+      confidence: "high" as const,
+    })
+  )
+  const bot = { api: { sendMessage: mock(() => Promise.resolve()) } }
+
+  const job = createRetryPendingJob(
+    bot as any,
+    pendingRepo,
+    foodLogsRepo,
+    usersRepo,
+    { estimate } as unknown as AIService
+  )
+  await job()
+
+  expect(bot.api.sendMessage).toHaveBeenCalledWith(
+    42,
+    "✅ Processed your saved entry — logged to Mon, Sep 21:\n" +
+      "<blockquote>🍗 Chicken adobo — 420 cal</blockquote>\n<b>Total: 420 cal</b>",
+    { parse_mode: "HTML" }
+  )
+})

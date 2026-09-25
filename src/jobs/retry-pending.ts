@@ -6,29 +6,11 @@ import { UsersRepository } from "../db/repositories/users"
 import { AIService } from "../ai/service"
 import { config } from "../config"
 import { formatDateForDisplay } from "../utils/dates"
+import { formatItemsSummary } from "../utils/format"
 import { redactUserId } from "../utils/logging"
 
 const MAX_RETRIES = 10
 const BATCH_SIZE = 5
-
-function formatConfirmationMessage(
-  items: { description: string; calories: number; emoji?: string }[],
-  targetDate: string
-): string {
-  const itemsDisplay = items
-    .map((item) => `${item.emoji ?? "🍽️"} ${item.description} — ${item.calories} cal`)
-    .join("\n")
-
-  const totalCalories = items.reduce((sum, item) => sum + item.calories, 0)
-
-  return (
-    `✅ Your saved entry from ${formatDateForDisplay(targetDate)} is ready!\n\n` +
-    `${itemsDisplay}\n` +
-    `───────────────\n` +
-    `Total: ${totalCalories} cal\n\n` +
-    `Log this to ${formatDateForDisplay(targetDate)}? (yes/no)`
-  )
-}
 
 export function createRetryPendingJob(
   bot: Bot,
@@ -87,18 +69,11 @@ export function createRetryPendingJob(
         pendingRepo.delete(entry.id)
 
         // Notify the user
-        const totalCalories = result.items.reduce((sum, item) => sum + item.calories, 0)
-        const itemsDisplay = result.items
-          .map((item) => `${item.emoji ?? "🍽️"} ${item.description} — ${item.calories} cal`)
-          .join("\n")
-
         await bot.api.sendMessage(
           entry.telegram_id,
-          `✅ Processed your saved entry!\n\n` +
-            `${itemsDisplay}\n` +
-            `───────────────\n` +
-            `Total: ${totalCalories} cal\n\n` +
-            `Logged to ${formatDateForDisplay(entry.target_date)}.`
+          `✅ Processed your saved entry — logged to ${formatDateForDisplay(entry.target_date)}:\n` +
+            formatItemsSummary(result.items),
+          { parse_mode: "HTML" }
         )
 
         console.log(`Successfully processed entry ${entry.id} for user ${redactUserId(entry.telegram_id)}`)
