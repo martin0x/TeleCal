@@ -14,7 +14,7 @@ import { createAdminCommand } from "./commands/admin"
 import { createTodayCommand } from "./commands/today"
 import { createWeekCommand, createMonthCommand } from "./commands/stats"
 import { createLogCommand, createLogMessageHandler, createLogCallbackHandler } from "./commands/log"
-import { createDeleteCommand, createDeleteMessageHandler, hasDeleteState } from "./commands/delete"
+import { createDeleteCommand, createDeleteMessageHandler, createDeleteCallbackHandler, hasDeleteState } from "./commands/delete"
 import { createEditCommand, createEditMessageHandler, hasEditState } from "./commands/edit"
 import { createSettingsCommand, createSettingsCallbackHandler, createSettingsMessageHandler, hasPendingSettings } from "./commands/settings"
 import { createPendingCommand, createPendingCallbackHandler } from "./commands/pending"
@@ -86,6 +86,9 @@ export function createBot() {
     }
     if (data?.startsWith("log:")) {
       return createLogCallbackHandler(logFlow)(ctx)
+    }
+    if (data?.startsWith("del:")) {
+      return createDeleteCallbackHandler(foodLogsRepo)(ctx)
     }
     return next()
   })

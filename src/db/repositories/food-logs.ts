@@ -179,4 +179,14 @@ export class FoodLogsRepository {
     `)
     return stmt.all(telegramId, targetDate) as (FoodItem & { log_id: number })[]
   }
+
+  getItemForUser(itemId: number, telegramId: number): (FoodItem & { log_id: number }) | null {
+    const stmt = this.db.prepare(`
+      SELECT fi.*, fl.id as log_id
+      FROM food_items fi
+      JOIN food_logs fl ON fl.id = fi.log_id
+      WHERE fi.id = ? AND fl.telegram_id = ?
+    `)
+    return (stmt.get(itemId, telegramId) as (FoodItem & { log_id: number }) | null) ?? null
+  }
 }

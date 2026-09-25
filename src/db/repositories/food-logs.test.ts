@@ -95,4 +95,18 @@ describe("FoodLogsRepository", () => {
     const entries = repo.getByDate(123, "2026-01-31")
     expect(entries[0].items[0].calories).toBe(200)
   })
+
+  test("getItemForUser returns the item only for its owner", () => {
+    const log = repo.create(1, 100, "2026-09-25", [{ description: "Ramen", calories: 520, emoji: "🍜" }])
+    const itemId = log.items[0].id!
+
+    expect(repo.getItemForUser(itemId, 1)).toMatchObject({
+      id: itemId,
+      description: "Ramen",
+      calories: 520,
+      log_id: log.id,
+    })
+    expect(repo.getItemForUser(itemId, 2)).toBeNull()
+    expect(repo.getItemForUser(99999, 1)).toBeNull()
+  })
 })

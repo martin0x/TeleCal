@@ -1,13 +1,18 @@
 // src/bot/commands/delete.ts
-import { Context } from "grammy"
+import { Context, InlineKeyboard } from "grammy"
 import { FoodLogsRepository, FoodItem } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
 import { getTodayInTimezone, formatDateForDisplay, DEFAULT_TIMEZONE } from "../../utils/dates"
-import { smartReply } from "../utils/smart-reply"
+import { shortHash } from "../../utils/format"
+import { DeleteCallback, encodeDeleteCallback, parseDeleteCallback } from "../utils/callback-data"
+import { stripKeyboard } from "../utils/keyboard"
+import { smartReply, smartEdit } from "../utils/smart-reply"
+
+type DeletableItem = FoodItem & { log_id: number }
 
 interface DeleteState {
   targetDate: string
-  items: (FoodItem & { log_id: number })[]
+  items: DeletableItem[]
   pendingAction: "select" | "confirm_single" | "confirm_all"
   selectedItemIndex?: number
 }
@@ -15,10 +20,51 @@ interface DeleteState {
 // Simple in-memory state for delete flow (clears on bot restart)
 const deleteStates = new Map<number, DeleteState>()
 
-function formatItemsList(items: (FoodItem & { log_id: number })[]): string {
-  return items
-    .map((item, i) => `${i + 1}. ${item.emoji ?? "🍽️"} ${item.description} — ${item.calories} cal`)
-    .join("\n")
+const CONFIRM_FALLBACK = 'Tap a button above, or reply "yes" / "cancel".'
+
+function formatItemLine(item: FoodItem): string {
+  return `${item.emoji ?? "🍽️"} ${item.description} — ${item.calories} cal`
+}
+
+function formatItemsList(items: DeletableItem[]): string {
+  return items.map((item, i) => `${i + 1}. ${formatItemLine(item)}`).join("\n")
+}
+
+/**
+ * Fingerprint of a day's items, carried in the "Delete all" button. If an item
+ * is added or removed after the prompt, the press is refused rather than
+ * deleting a different set than the one the user saw.
+ */
+export function deleteAllToken(items: FoodItem[]): string {
+  const ids = items.map((item) => Number(item.id)).sort((a, b) => a - b)
+  return shortHash(ids.join(","))
+}
+
+async function promptConfirmOne(ctx: Context, ownerId: number, item: DeletableItem): Promise<void> {
+  const keyboard = new InlineKeyboard()
+    .text("🗑 Delete", encodeDeleteCallback({ action: "one", ownerId, itemId: Number(item.id) }))
+    .text("✖️ Cancel", encodeDeleteCallback({ action: "cxl", ownerId }))
+  await smartReply(ctx, `Delete this entry?\n\n${formatItemLine(item)}`, { reply_markup: keyboard })
+}
+
+async function promptConfirmAll(
+  ctx: Context,
+  ownerId: number,
+  targetDate: string,
+  items: DeletableItem[]
+): Promise<void> {
+  const totalCalories = items.reduce((sum, item) => sum + item.calories, 0)
+  const keyboard = new InlineKeyboard()
+    .text(
+      "🗑 Delete all",
+      encodeDeleteCallback({ action: "all", ownerId, date: targetDate, token: deleteAllToken(items) })
+    )
+    .text("✖️ Cancel", encodeDeleteCallback({ action: "cxl", ownerId }))
+  await smartReply(
+    ctx,
+    `Delete all ${items.length} entries for ${formatDateForDisplay(targetDate)}? (${totalCalories} cal total)`,
+    { reply_markup: keyboard }
+  )
 }
 
 export function createDeleteCommand(foodLogsRepo: FoodLogsRepository, usersRepo: UsersRepository) {
@@ -40,23 +86,16 @@ export function createDeleteCommand(foodLogsRepo: FoodLogsRepository, usersRepo:
       return
     }
 
-    const totalCalories = items.reduce((sum, item) => sum + item.calories, 0)
-
     // If arg is a number, go straight to confirm for that item
     const itemNum = parseInt(args, 10)
     if (!isNaN(itemNum) && itemNum >= 1 && itemNum <= items.length) {
-      const item = items[itemNum - 1]
       deleteStates.set(userId, {
         targetDate,
         items,
         pendingAction: "confirm_single",
         selectedItemIndex: itemNum - 1,
       })
-      await smartReply(ctx,
-        `Delete this entry?\n\n` +
-          `${item.emoji ?? "🍽️"} ${item.description} — ${item.calories} cal\n\n` +
-          `Type "yes" to confirm or "cancel" to abort.`
-      )
+      await promptConfirmOne(ctx, userId, items[itemNum - 1])
       return
     }
 
@@ -67,10 +106,7 @@ export function createDeleteCommand(foodLogsRepo: FoodLogsRepository, usersRepo:
         items,
         pendingAction: "confirm_all",
       })
-      await smartReply(ctx,
-        `Delete all ${items.length} entries for ${formatDateForDisplay(targetDate)}? (${totalCalories} cal total)\n\n` +
-          `Type "yes" to confirm or "cancel" to abort.`
-      )
+      await promptConfirmAll(ctx, userId, targetDate, items)
       return
     }
 
@@ -121,27 +157,18 @@ export function createDeleteMessageHandler(foodLogsRepo: FoodLogsRepository) {
         // Check for number
         const itemNum = parseInt(text, 10)
         if (!isNaN(itemNum) && itemNum >= 1 && itemNum <= state.items.length) {
-          const item = state.items[itemNum - 1]
           state.pendingAction = "confirm_single"
           state.selectedItemIndex = itemNum - 1
           deleteStates.set(userId, state)
-          await smartReply(ctx,
-            `Delete this entry?\n\n` +
-              `${item.emoji ?? "🍽️"} ${item.description} — ${item.calories} cal\n\n` +
-              `Type "yes" to confirm or "cancel" to abort.`
-          )
+          await promptConfirmOne(ctx, userId, state.items[itemNum - 1])
           return
         }
 
         // Check for "all"
         if (text === "all") {
-          const totalCalories = state.items.reduce((sum, item) => sum + item.calories, 0)
           state.pendingAction = "confirm_all"
           deleteStates.set(userId, state)
-          await smartReply(ctx,
-            `Delete all ${state.items.length} entries for ${formatDateForDisplay(state.targetDate)}? (${totalCalories} cal total)\n\n` +
-              `Type "yes" to confirm or "cancel" to abort.`
-          )
+          await promptConfirmAll(ctx, userId, state.targetDate, state.items)
           return
         }
 
@@ -157,7 +184,7 @@ export function createDeleteMessageHandler(foodLogsRepo: FoodLogsRepository) {
           await smartReply(ctx, `Deleted: ${item.description} (${item.calories} cal)`)
           return
         }
-        await smartReply(ctx, `Type "yes" to confirm or "cancel" to abort.`)
+        await smartReply(ctx, CONFIRM_FALLBACK)
         break
       }
 
@@ -170,9 +197,90 @@ export function createDeleteMessageHandler(foodLogsRepo: FoodLogsRepository) {
           await smartReply(ctx, `Deleted ${count} entries (${totalCalories} cal) for ${formatDateForDisplay(state.targetDate)}.`)
           return
         }
-        await smartReply(ctx, `Type "yes" to confirm or "cancel" to abort.`)
+        await smartReply(ctx, CONFIRM_FALLBACK)
         break
       }
+    }
+  }
+}
+
+export type DeleteDecision =
+  | { kind: "not_owner" }
+  | { kind: "gone"; toast: string }
+  | { kind: "done"; edit: string; toast: string }
+
+/**
+ * Decides a /delete button press and performs the deletion. Everything is
+ * checked against the database rather than deleteStates, so a button still
+ * works after a restart and only ever deletes what its message showed.
+ */
+export function resolveDeleteCallback(
+  cb: DeleteCallback,
+  presserId: number,
+  foodLogsRepo: FoodLogsRepository
+): DeleteDecision {
+  if (cb.ownerId !== presserId) return { kind: "not_owner" }
+
+  switch (cb.action) {
+    case "one": {
+      const item = foodLogsRepo.getItemForUser(cb.itemId, presserId)
+      if (!item) return { kind: "gone", toast: "That entry is no longer there." }
+      foodLogsRepo.deleteItem(cb.itemId)
+      return { kind: "done", edit: `🗑 Deleted: ${formatItemLine(item)}`, toast: "Deleted" }
+    }
+    case "all": {
+      const items = foodLogsRepo.getItemsByDate(presserId, cb.date)
+      if (items.length === 0 || deleteAllToken(items) !== cb.token) {
+        return { kind: "gone", toast: "The list changed — run /delete again." }
+      }
+      const totalCalories = items.reduce((sum, item) => sum + item.calories, 0)
+      foodLogsRepo.deleteAllForDate(presserId, cb.date)
+      return {
+        kind: "done",
+        edit: `🗑 Deleted ${items.length} entries (${totalCalories} cal) for ${formatDateForDisplay(cb.date)}.`,
+        toast: "Deleted",
+      }
+    }
+    case "cxl":
+      return { kind: "done", edit: "✖️ Cancelled — nothing deleted.", toast: "Cancelled" }
+  }
+}
+
+export function createDeleteCallbackHandler(foodLogsRepo: FoodLogsRepository) {
+  return async (ctx: Context) => {
+    const presserId = ctx.from?.id
+    if (!presserId) {
+      await ctx.answerCallbackQuery()
+      return
+    }
+
+    const parsed = parseDeleteCallback(ctx.callbackQuery?.data ?? "")
+    if (!parsed) {
+      await ctx.answerCallbackQuery("That button has expired.")
+      await stripKeyboard(ctx)
+      return
+    }
+
+    const decision = resolveDeleteCallback(parsed, presserId, foodLogsRepo)
+    if (decision.kind === "not_owner") {
+      await ctx.answerCallbackQuery("Only the person who started this can confirm it.")
+      return
+    }
+
+    // The press settles this delete flow either way; drop any typed-flow state.
+    clearDeleteState(presserId)
+    await ctx.answerCallbackQuery(decision.toast)
+
+    if (decision.kind === "gone") {
+      await stripKeyboard(ctx)
+      return
+    }
+
+    try {
+      await smartEdit(ctx, decision.edit)
+    } catch (error) {
+      console.error("Failed to edit delete confirmation:", error)
+      await smartReply(ctx, decision.edit)
     }
   }
 }
