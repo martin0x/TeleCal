@@ -6,6 +6,7 @@ export interface User {
   username: string | null
   ai_provider: string
   daily_goal: number | null
+  daily_protein_goal: number | null
   reminder_time: string | null
   reminder_mention: boolean
   timezone: string
@@ -17,6 +18,7 @@ interface UserRow {
   username: string | null
   ai_provider: string
   daily_goal: number | null
+  daily_protein_goal: number | null
   reminder_time: string | null
   reminder_mention: number
   timezone: string
@@ -49,6 +51,7 @@ export class UsersRepository {
     settings: Partial<{
       ai_provider: string
       daily_goal: number | null
+      daily_protein_goal: number | null
       reminder_time: string | null
       reminder_mention: boolean
       timezone: string
@@ -58,6 +61,7 @@ export class UsersRepository {
     const allowedColumns = [
       "ai_provider",
       "daily_goal",
+      "daily_protein_goal",
       "reminder_time",
       "reminder_mention",
       "timezone",
@@ -74,6 +78,9 @@ export class UsersRepository {
     }
     if (settings.daily_goal !== undefined) {
       columnUpdates.push({ column: "daily_goal", value: settings.daily_goal })
+    }
+    if (settings.daily_protein_goal !== undefined) {
+      columnUpdates.push({ column: "daily_protein_goal", value: settings.daily_protein_goal })
     }
     if (settings.reminder_time !== undefined) {
       columnUpdates.push({

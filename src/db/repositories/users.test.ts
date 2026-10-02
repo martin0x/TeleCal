@@ -17,6 +17,7 @@ describe("UsersRepository", () => {
         -- 'gemini'); a shared createTestDb() helper unifies this in a later branch.
         ai_provider TEXT DEFAULT 'openai',
         daily_goal INTEGER,
+        daily_protein_goal INTEGER,
         reminder_time TEXT,
         reminder_mention INTEGER DEFAULT 1,
         timezone TEXT DEFAULT 'Asia/Manila',
@@ -72,5 +73,16 @@ describe("UsersRepository", () => {
     repo.updateSettings(123, { timezone: "America/New_York" })
     const user = repo.findById(123)
     expect(user?.timezone).toBe("America/New_York")
+  })
+
+  test("round-trips the daily protein goal", () => {
+    repo.upsert(123, "john")
+    expect(repo.findById(123)!.daily_protein_goal).toBeNull()
+
+    repo.updateSettings(123, { daily_protein_goal: 120 })
+    expect(repo.findById(123)!.daily_protein_goal).toBe(120)
+
+    repo.updateSettings(123, { daily_protein_goal: null })
+    expect(repo.findById(123)!.daily_protein_goal).toBeNull()
   })
 })
