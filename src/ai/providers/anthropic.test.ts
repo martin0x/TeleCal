@@ -50,4 +50,31 @@ describe("AnthropicProvider", () => {
 
     expect(result.estimate.items[0].calories).toBe(180)
   })
+
+  test("surfaces protein_g and nulls a missing one", async () => {
+    const reply = JSON.stringify({
+      items: [
+        { description: "Eggs", calories: 180, protein_g: 12, emoji: "🍳" },
+        { description: "Toast", calories: 120, emoji: "🍞" },
+      ],
+      needsClarification: false,
+      confidence: "high",
+    })
+    const result = await new AnthropicProvider(fakeClient(reply)).estimate("eggs and toast")
+    expect(result.estimate.items.map((i) => i.protein_g)).toEqual([12, null])
+  })
+
+  test("asks for protein_g in the system prompt", async () => {
+    const calls: any[] = []
+    const client = {
+      messages: {
+        create: async (args: any) => {
+          calls.push(args)
+          return { model: "claude-haiku-4-5-20251001", content: [{ type: "text", text: VALID_REPLY }], usage: { input_tokens: 1, output_tokens: 1 } }
+        },
+      },
+    } as unknown as Anthropic
+    await new AnthropicProvider(client).estimate("two eggs")
+    expect(calls[0].system).toContain("protein_g")
+  })
 })

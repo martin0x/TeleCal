@@ -3,6 +3,8 @@
 export interface FoodEstimate {
   description: string
   calories: number
+  /** Whole grams. null when the model gave nothing usable; the backfill fills it later. */
+  protein_g: number | null
   emoji?: string
 }
 
@@ -42,6 +44,6 @@ export interface ProviderResult {
   usage: TokenUsage
 }
 
-export type CallType = "estimate" | "clarify" | "edit" | "retry"
+export type CallType = "estimate" | "clarify" | "edit" | "retry" | "backfill"
 
 export type UsageStatus = "ok" | "parse_error" | "no_usage"

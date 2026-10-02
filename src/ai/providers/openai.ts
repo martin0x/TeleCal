@@ -1,9 +1,11 @@
 // src/ai/providers/openai.ts
 import OpenAI from "openai"
-import { AIProvider, ProviderResult, FoodEstimate } from "../types"
+import { AIProvider, ProviderResult } from "../types"
 import { config } from "../../config"
+import { PROTEIN_RULE } from "../prompt"
+import { normalizeItems } from "../parse"
 
-const INSTRUCTIONS = `You are a nutrition expert that estimates calories in food.
+const INSTRUCTIONS = `You are a nutrition expert that estimates calories and protein in food.
 
 Rules:
 - Be accurate but err on the side of slightly higher estimates
@@ -13,7 +15,8 @@ Rules:
 - If quantity or size is unclear, set needsClarification to true and ask a
   specific question in clarificationQuestion
 - When no clarification is needed, return an empty string for
-  clarificationQuestion`
+  clarificationQuestion
+${PROTEIN_RULE}`
 
 /**
  * Strict Structured Outputs requires every property to appear in `required`
@@ -31,9 +34,10 @@ const ESTIMATE_SCHEMA = {
         properties: {
           description: { type: "string" },
           calories: { type: "number" },
+          protein_g: { type: "number" },
           emoji: { type: "string" },
         },
-        required: ["description", "calories", "emoji"],
+        required: ["description", "calories", "protein_g", "emoji"],
         additionalProperties: false,
       },
     },
@@ -84,7 +88,7 @@ export class OpenAIProvider implements AIProvider {
     // No markdown-fence stripping: strict Structured Outputs cannot return
     // fenced or malformed JSON.
     const result = JSON.parse(content) as {
-      items: FoodEstimate[]
+      items: unknown
       needsClarification: boolean
       clarificationQuestion?: string
       confidence: "high" | "medium" | "low"
@@ -92,7 +96,7 @@ export class OpenAIProvider implements AIProvider {
 
     return {
       estimate: {
-        items: result.items || [],
+        items: normalizeItems(result.items),
         needsClarification: result.needsClarification || false,
         clarificationQuestion: result.clarificationQuestion || undefined,
         confidence: result.confidence || "medium",

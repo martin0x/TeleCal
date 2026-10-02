@@ -9,7 +9,7 @@ let db: Database
 let repo: CacheRepository
 
 const RESULT: EstimationResult = {
-  items: [{ description: "Chicken adobo", calories: 420, emoji: "🍗" }],
+  items: [{ description: "Chicken adobo", calories: 420, protein_g: 38, emoji: "🍗" }],
   needsClarification: false,
   confidence: "high",
 }
@@ -30,7 +30,7 @@ test("round-trips a stored estimate", () => {
 
 test("overwrites an existing entry for the same key", () => {
   repo.set("chicken adobo", RESULT)
-  repo.set("chicken adobo", { ...RESULT, items: [{ description: "Adobo", calories: 500 }] })
+  repo.set("chicken adobo", { ...RESULT, items: [{ description: "Adobo", calories: 500, protein_g: 40 }] })
 
   expect(repo.get("chicken adobo")!.items[0].calories).toBe(500)
   expect(db.prepare("SELECT COUNT(*) as n FROM estimation_cache").get()).toEqual({ n: 1 })

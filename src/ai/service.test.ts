@@ -6,7 +6,7 @@ import type { CacheRepository } from "../db/repositories/cache"
 import type { UsageRepository, UsageEntry } from "../db/repositories/usage"
 
 const ESTIMATE: EstimationResult = {
-  items: [{ description: "Chicken adobo", calories: 420, emoji: "🍗" }],
+  items: [{ description: "Chicken adobo", calories: 420, protein_g: 38, emoji: "🍗" }],
   needsClarification: false,
   confidence: "high",
 }

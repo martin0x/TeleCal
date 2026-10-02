@@ -46,4 +46,31 @@ describe("GeminiProvider", () => {
     expect(result.usage.inputTokens).toBe(0)
     expect(result.usage.outputTokens).toBe(0)
   })
+
+  test("surfaces protein_g and nulls a non-numeric one", async () => {
+    const reply = JSON.stringify({
+      items: [
+        { description: "Eggs", calories: 180, protein_g: 12, emoji: "🍳" },
+        { description: "Toast", calories: 120, protein_g: "some", emoji: "🍞" },
+      ],
+      needsClarification: false,
+      confidence: "high",
+    })
+    const result = await new GeminiProvider(fakeClient(reply)).estimate("eggs and toast")
+    expect(result.estimate.items.map((i) => i.protein_g)).toEqual([12, null])
+  })
+
+  test("asks for protein_g in the system instruction", async () => {
+    const seen: any[] = []
+    const client = {
+      getGenerativeModel: (opts: any) => {
+        seen.push(opts)
+        return {
+          generateContent: async () => ({ response: { text: () => VALID_REPLY, usageMetadata: {} } }),
+        }
+      },
+    } as any
+    await new GeminiProvider(client).estimate("two eggs")
+    expect(seen[0].systemInstruction).toContain("protein_g")
+  })
 })

@@ -84,6 +84,32 @@ describe("OpenAIProvider", () => {
     expect(JSON.stringify(calls[0].input)).toContain("grilled chicken")
     expect(calls[0].previous_response_id).toBeUndefined()
   })
+
+  test("requires protein_g in the strict schema", async () => {
+    const { client, calls } = fakeClient(VALID_REPLY)
+    await new OpenAIProvider(client).estimate("two scrambled eggs")
+
+    const itemSchema = calls[0].text.format.schema.properties.items.items
+    expect(itemSchema.properties.protein_g).toEqual({ type: "number" })
+    expect(itemSchema.required).toContain("protein_g")
+  })
+
+  test("surfaces protein_g on each item, rounded", async () => {
+    const reply = JSON.stringify({
+      items: [{ description: "Scrambled eggs", calories: 180, protein_g: 12.6, emoji: "🍳" }],
+      needsClarification: false,
+      clarificationQuestion: "",
+      confidence: "high",
+    })
+    const result = await new OpenAIProvider(fakeClient(reply).client).estimate("two scrambled eggs")
+    expect(result.estimate.items[0].protein_g).toBe(13)
+  })
+
+  test("mentions protein in the instructions", async () => {
+    const { client, calls } = fakeClient(VALID_REPLY)
+    await new OpenAIProvider(client).estimate("two scrambled eggs")
+    expect(calls[0].instructions).toContain("protein_g")
+  })
 })
 
 describe("OpenAIProvider usage reporting", () => {
