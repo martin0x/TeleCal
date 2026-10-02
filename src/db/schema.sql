@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT,
   ai_provider TEXT DEFAULT 'gemini',
   daily_goal INTEGER,
+  daily_protein_goal INTEGER,
   reminder_time TEXT,
   reminder_mention INTEGER DEFAULT 1,
   timezone TEXT DEFAULT 'Asia/Manila',
@@ -35,6 +36,7 @@ CREATE TABLE IF NOT EXISTS food_items (
   log_id INTEGER NOT NULL,
   description TEXT NOT NULL,
   calories INTEGER NOT NULL,
+  protein_g INTEGER,            -- whole grams; null = not yet estimated
   emoji TEXT,
   FOREIGN KEY (log_id) REFERENCES food_logs(id) ON DELETE CASCADE
 );
@@ -87,7 +89,7 @@ CREATE TABLE IF NOT EXISTS ai_usage (
   -- Subset of output_tokens, NEVER added to it. Billed as output. OpenAI only.
   reasoning_tokens INTEGER,
   cost_usd REAL NOT NULL,
-  call_type TEXT NOT NULL,      -- estimate | clarify | edit | retry
+  call_type TEXT NOT NULL,      -- estimate | clarify | edit | retry | backfill
   status TEXT NOT NULL,         -- ok | parse_error | no_usage
   created_at TEXT DEFAULT (datetime('now'))
 );

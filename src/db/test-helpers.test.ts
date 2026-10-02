@@ -46,4 +46,13 @@ describe("createTestDb", () => {
 
     expect(b.prepare("SELECT COUNT(*) as n FROM users").get()).toEqual({ n: 0 })
   })
+
+  test("food_items and users carry the protein columns", () => {
+    const db = createTestDb()
+    const names = (table: string) =>
+      (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name)
+
+    expect(names("food_items")).toContain("protein_g")
+    expect(names("users")).toContain("daily_protein_goal")
+  })
 })
