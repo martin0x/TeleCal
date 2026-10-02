@@ -58,7 +58,7 @@ test("announces a processed entry as an HTML summary", async () => {
 
   const estimate = mock(() =>
     Promise.resolve({
-      items: [{ description: "Chicken adobo", calories: 420, emoji: "🍗" }],
+      items: [{ description: "Chicken adobo", calories: 420, protein_g: 38, emoji: "🍗" }],
       needsClarification: false,
       confidence: "high" as const,
     })
@@ -77,7 +77,7 @@ test("announces a processed entry as an HTML summary", async () => {
   expect(bot.api.sendMessage).toHaveBeenCalledWith(
     42,
     "✅ Processed your saved entry — logged to Mon, Sep 21:\n" +
-      "<blockquote>🍗 Chicken adobo — 420 cal</blockquote>\n<b>Total: 420 cal</b>",
+      "<blockquote>🍗 Chicken adobo — 420 cal · 38 g</blockquote>\n<b>Total: 420 cal · 38 g protein</b>",
     { parse_mode: "HTML" }
   )
 })

@@ -73,7 +73,7 @@ describe("LogFlow", () => {
     mockAIService = {
       estimate: mock(() =>
         Promise.resolve({
-          items: [{ description: "Chicken", calories: 200, emoji: "🍗" }],
+          items: [{ description: "Chicken", calories: 200, protein_g: 25, emoji: "🍗" }],
           needsClarification: false,
           confidence: "high" as const,
         })
@@ -161,7 +161,7 @@ describe("LogFlow", () => {
 
   test("processInput() in confirming with yes logs food", async () => {
     conversationsRepo.upsert(123, 456, "confirming", "2026-01-31", {
-      pending_items: JSON.stringify([{ description: "Chicken", calories: 200, emoji: "🍗" }]),
+      pending_items: JSON.stringify([{ description: "Chicken", calories: 200, protein_g: 25, emoji: "🍗" }]),
     })
 
     const result = await logFlow.processInput(123, 456, "yes", "openai")
@@ -177,7 +177,7 @@ describe("LogFlow", () => {
 
   test("processInput() in confirming with no returns to awaiting", async () => {
     conversationsRepo.upsert(123, 456, "confirming", "2026-01-31", {
-      pending_items: JSON.stringify([{ description: "Chicken", calories: 200 }]),
+      pending_items: JSON.stringify([{ description: "Chicken", calories: 200, protein_g: 25 }]),
     })
 
     const result = await logFlow.processInput(123, 456, "no", "openai")
@@ -235,7 +235,7 @@ describe("LogFlow", () => {
 
     expect(result.parseMode).toBe("HTML")
     expect(result.message).toBe(
-      "Here's what I'll log:\n<blockquote>🍗 Chicken — 200 cal</blockquote>\n<b>Total: 200 cal</b>"
+      "Here's what I'll log:\n<blockquote>🍗 Chicken — 200 cal · 25 g</blockquote>\n<b>Total: 200 cal · 25 g protein</b>"
     )
     const state = conversationsRepo.get(123)!
     expect(result.confirm).toEqual({
@@ -247,7 +247,7 @@ describe("LogFlow", () => {
   test("confirmation escapes AI descriptions", async () => {
     mockAIService.estimate = mock(() =>
       Promise.resolve({
-        items: [{ description: "Mac & cheese", calories: 400, emoji: "🧀" }],
+        items: [{ description: "Mac & cheese", calories: 400, protein_g: 18, emoji: "🧀" }],
         needsClarification: false,
         confidence: "high" as const,
       })
@@ -264,7 +264,7 @@ describe("LogFlow", () => {
 
     expect(outcome).toEqual({
       stale: false,
-      edit: "✅ Logged to Sat, Jan 31:\n<blockquote>🍗 Chicken — 200 cal</blockquote>\n<b>Total: 200 cal</b>",
+      edit: "✅ Logged to Sat, Jan 31:\n<blockquote>🍗 Chicken — 200 cal · 25 g</blockquote>\n<b>Total: 200 cal · 25 g protein</b>",
       toast: "Logged ✅",
     })
     expect(conversationsRepo.get(123)).toBeNull()
@@ -278,8 +278,8 @@ describe("LogFlow", () => {
     expect(outcome).toEqual({
       stale: false,
       edit:
-        "✏️ Not logged — changing:\n<blockquote><s>🍗 Chicken — 200 cal</s></blockquote>\n" +
-        "<b><s>Total: 200 cal</s></b>",
+        "✏️ Not logged — changing:\n<blockquote><s>🍗 Chicken — 200 cal · 25 g</s></blockquote>\n" +
+        "<b><s>Total: 200 cal · 25 g protein</s></b>",
       followUp: "Okay, let's try again. What did you eat?",
     })
     expect(conversationsRepo.get(123)?.state).toBe("awaiting_input")
@@ -293,8 +293,8 @@ describe("LogFlow", () => {
     expect(outcome).toEqual({
       stale: false,
       edit:
-        "✖️ Cancelled — not logged:\n<blockquote><s>🍗 Chicken — 200 cal</s></blockquote>\n" +
-        "<b><s>Total: 200 cal</s></b>",
+        "✖️ Cancelled — not logged:\n<blockquote><s>🍗 Chicken — 200 cal · 25 g</s></blockquote>\n" +
+        "<b><s>Total: 200 cal · 25 g protein</s></b>",
       toast: "Cancelled",
     })
     expect(conversationsRepo.get(123)).toBeNull()
@@ -317,7 +317,7 @@ describe("LogFlow", () => {
     await logFlow.processInput(123, 456, "no", "openai")
     mockAIService.estimate = mock(() =>
       Promise.resolve({
-        items: [{ description: "Beef", calories: 300, emoji: "🥩" }],
+        items: [{ description: "Beef", calories: 300, protein_g: 30, emoji: "🥩" }],
         needsClarification: false,
         confidence: "high" as const,
       })
