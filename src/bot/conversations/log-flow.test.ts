@@ -48,6 +48,7 @@ describe("LogFlow", () => {
         log_id INTEGER NOT NULL,
         description TEXT NOT NULL,
         calories INTEGER NOT NULL,
+        protein_g INTEGER,
         emoji TEXT,
         FOREIGN KEY (log_id) REFERENCES food_logs(id) ON DELETE CASCADE
       )

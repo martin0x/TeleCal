@@ -60,7 +60,7 @@ export function createApiHandlers(deps: ApiDeps) {
       // Fill in missing days with 0
       const daily: Record<string, number> = {}
       for (const date of dateRange) {
-        daily[date] = dailyTotals[date] || 0
+        daily[date] = dailyTotals[date]?.calories ?? 0
       }
 
       return {

@@ -46,7 +46,11 @@ async function sendStatsMessage(
   const startDate = dateRange[0]
   const endDate = dateRange[dateRange.length - 1]
 
-  const dailyTotals = foodLogsRepo.getDailyTotals(userId, startDate, endDate)
+  const dailyTotalsFull = foodLogsRepo.getDailyTotals(userId, startDate, endDate)
+  // Task 12 replaces this with protein-aware rendering.
+  const dailyTotals: Record<string, number> = Object.fromEntries(
+    Object.entries(dailyTotalsFull).map(([date, t]) => [date, t.calories])
+  )
   const dailyGoal = user?.daily_goal
 
   // Calculate stats

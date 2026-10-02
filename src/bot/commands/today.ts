@@ -19,7 +19,7 @@ export function createTodayCommand(
     const timezone = user?.timezone ?? DEFAULT_TIMEZONE
     const today = getTodayInTimezone(timezone)
     const entries = foodLogsRepo.getByDate(userId, today)
-    const totalCalories = foodLogsRepo.getTotalCalories(userId, today)
+    const totalCalories = foodLogsRepo.getTotals(userId, today).calories
     const dailyGoal = user?.daily_goal
 
     if (entries.length === 0) {

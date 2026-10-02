@@ -76,7 +76,7 @@ export function createReminderJob(
       }
 
       try {
-        const totalCalories = foodLogsRepo.getTotalCalories(user.telegram_id, userToday)
+        const totalCalories = foodLogsRepo.getTotals(user.telegram_id, userToday).calories
         const logs = foodLogsRepo.getByDate(user.telegram_id, userToday)
         const hasLogs = logs.length > 0
 
