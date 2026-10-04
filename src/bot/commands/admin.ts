@@ -101,16 +101,23 @@ export async function backfillProtein(
 
   // AIService falls back to the first configured provider if this one is not available.
   const providerName = deps.usersRepo.findById(adminId)?.ai_provider ?? "gemini"
-  const report = await runProteinBackfill(
-    { foodLogsRepo: deps.foodLogsRepo, aiService: deps.aiService },
-    { providerName, telegramId: adminId, chatId }
-  )
+  try {
+    const report = await runProteinBackfill(
+      { foodLogsRepo: deps.foodLogsRepo, aiService: deps.aiService },
+      { providerName, telegramId: adminId, chatId }
+    )
 
-  let done = `Done. Filled ${report.itemsFilled} items.`
-  if (report.unresolved > 0) {
-    done += ` ${report.unresolved} descriptions unresolved — run again to retry.`
+    let done = `Done. Filled ${report.itemsFilled} items.`
+    if (report.unresolved > 0) {
+      done += ` ${report.unresolved} descriptions unresolved — run again to retry.`
+    }
+    await reply(done)
+  } catch (error) {
+    console.error("[backfill] failed:", error)
+    await reply(
+      `Backfill failed: ${error instanceof Error ? error.message : String(error)}. Nothing was lost — run /admin backfill-protein again to retry.`
+    )
   }
-  await reply(done)
 }
 
 export function createAdminCommand(repo: AllowedUsersRepository, usageRepo: UsageRepository, deps: AdminDeps) {

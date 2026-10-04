@@ -1,5 +1,5 @@
 // src/bot/commands/admin-backfill.test.ts
-import { describe, test, expect, beforeEach, mock } from "bun:test"
+import { describe, test, expect, beforeEach, mock, spyOn } from "bun:test"
 import { createTestDb } from "../../db/test-helpers"
 import { FoodLogsRepository } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
@@ -84,5 +84,21 @@ describe("backfillProtein", () => {
     await backfillProtein({ foodLogsRepo, usersRepo, aiService }, ADMIN, 99, reply)
 
     expect(aiService.estimateProtein).toHaveBeenCalledWith(["Rice"], "anthropic", { telegramId: ADMIN, chatId: 99 })
+  })
+
+  test("reports a failure instead of going silent", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {})
+    foodLogsRepo.create(ADMIN, 1, "2026-09-25", [{ description: "Rice", calories: 200 }])
+    foodLogsRepo.setProteinForDescription = () => {
+      throw new Error("disk full")
+    }
+    const aiService = fakeAi(() => [4])
+
+    await backfillProtein({ foodLogsRepo, usersRepo, aiService }, ADMIN, 1, reply)
+
+    expect(replies[0]).toStartWith("Backfilling protein for 1 items")
+    expect(replies[1]).toBe("Backfill failed: disk full. Nothing was lost — run /admin backfill-protein again to retry.")
+    expect(errorSpy).toHaveBeenCalledTimes(1)
+    errorSpy.mockRestore()
   })
 })
