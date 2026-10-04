@@ -2,7 +2,7 @@
 
 A Telegram bot for conversational calorie tracking with AI-powered food estimation.
 
-Describe what you ate in natural language, and TeleCal estimates the calories using AI (OpenAI, Anthropic, or Google Gemini).
+Describe what you ate in natural language, and TeleCal estimates the calories and protein using AI (OpenAI, Anthropic, or Google Gemini).
 
 ## Features
 
@@ -77,20 +77,20 @@ bun run start
 |---------|-------------|
 | `/start` | Welcome message and command list |
 | `/log` | Start logging food |
-| `/today` | View today's calories |
+| `/today` | View today's calories and protein |
 | `/week` | View past 7 days |
 | `/month` | View past 30 days |
 | `/edit` | Edit a logged entry |
 | `/delete` | Delete a logged entry |
-| `/settings` | Change AI provider, daily goal, reminders |
+| `/settings` | Change AI provider, calorie and protein goals, reminders |
 | `/pending` | View entries awaiting AI processing |
 | `/usage` | View your own AI token usage |
-| `/admin` | Manage allowed users, view AI usage and cost (admin only) |
+| `/admin` | Manage allowed users, view AI usage and cost, backfill protein (admin only) |
 
 ### Privacy
 
 Food descriptions are sent to whichever AI provider the user has selected in
-`/settings` (OpenAI, Anthropic, or Google) to estimate calories.
+`/settings` (OpenAI, Anthropic, or Google) to estimate calories and protein.
 
 TeleCal disables server-side retention where the provider offers the option —
 OpenAI calls are made with `store: false`, so requests are not kept in the
@@ -103,7 +103,7 @@ Calorie data itself is stored only in TeleCal's local SQLite database.
 
 1. Send `/log` to start a session
 2. Describe what you ate (e.g., "2 eggs and toast with butter")
-3. AI estimates calories and may ask clarifying questions
+3. AI estimates calories and protein and may ask clarifying questions
 4. Tap **✅ Log** to save it, or **✏️ Change** to describe it again (typing "yes" / "no" also works)
 5. Tap **✖️ Cancel**, or send "cancel" at any point, to exit
 

@@ -45,6 +45,7 @@ bun run scripts/smoke-providers.ts <openai|anthropic|gemini>   # one live API ca
 - Uses `bun:sqlite` (built-in SQLite)
 - Repository pattern for each table
 - Schema in `src/db/schema.sql`
+- `src/db/migrations.ts` adds columns that `IF NOT EXISTS` cannot; runs on every boot after the schema
 
 **Web Server** (`src/web/`):
 - Mini App for viewing charts
@@ -54,6 +55,7 @@ bun run scripts/smoke-providers.ts <openai|anthropic|gemini>   # one live API ca
 **Background Jobs** (`src/jobs/`):
 - `reminders.ts` - Daily reminder notifications
 - `retry-pending.ts` - Retries failed AI estimations from `pending_entries` table
+- `backfill-protein.ts` - Fills `protein_g` on pre-feature rows, 25 descriptions per AI call; run via `/admin backfill-protein`
 
 ### State Machine (LogFlow)
 
@@ -73,8 +75,8 @@ All config via environment variables (see `.env.example`):
 ### Database Tables
 
 - `allowed_users` - Access control allowlist
-- `users` - User preferences (ai_provider, daily_goal, reminder_time)
-- `food_logs` / `food_items` - Log sessions and individual items
+- `users` - User preferences (ai_provider, daily_goal, daily_protein_goal, reminder_time)
+- `food_logs` / `food_items` - Log sessions and individual items (`calories`, nullable `protein_g`)
 - `conversation_state` - Active `/log` conversations
 - `pending_entries` - Failed AI calls awaiting retry
 - `estimation_cache` - Cached AI responses
