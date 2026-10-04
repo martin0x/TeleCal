@@ -240,7 +240,7 @@ describe("LogFlow", () => {
     const state = conversationsRepo.get(123)!
     expect(result.confirm).toEqual({
       token: confirmToken("2026-01-31", state.pending_items!),
-      totalCalories: 200,
+      totals: { calories: 200, protein: 25 },
     })
   })
 

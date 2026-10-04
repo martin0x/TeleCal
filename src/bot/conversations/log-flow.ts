@@ -7,7 +7,7 @@ import { FoodLogsRepository, FoodItem } from "../../db/repositories/food-logs"
 import { PendingRepository } from "../../db/repositories/pending"
 import { AIService } from "../../ai/service"
 import { EstimationResult } from "../../ai/types"
-import { formatItemsSummary, shortHash } from "../../utils/format"
+import { formatItemsSummary, formatTotals, sumTotals, shortHash } from "../../utils/format"
 import { formatDateForDisplay } from "../../utils/dates"
 
 export interface LogFlowResult {
@@ -15,7 +15,7 @@ export interface LogFlowResult {
   action: "prompt" | "done" | "ask_continue" | "continue" | "error"
   parseMode?: "HTML"
   /** Set on a confirmation message; the bot layer turns it into the Log/Change/Cancel keyboard. */
-  confirm?: { token: string; totalCalories: number }
+  confirm?: { token: string; totals: { calories: number; protein: number } }
 }
 
 export type ConfirmChoice = "log" | "change" | "cancel"
@@ -235,9 +235,8 @@ export class LogFlow {
 
       this.commitPending(telegramId, chatId, state.target_date, items)
 
-      const totalCalories = items.reduce((sum, item) => sum + item.calories, 0)
       return {
-        message: `Logged ${totalCalories} calories for ${state.target_date}.`,
+        message: `Logged ${formatTotals(sumTotals(items))} for ${formatDateForDisplay(state.target_date)}.`,
         action: "done",
       }
     }
@@ -337,7 +336,7 @@ export class LogFlow {
       parseMode: "HTML",
       confirm: {
         token: confirmToken(targetDate, pendingItems),
-        totalCalories: items.reduce((sum, item) => sum + item.calories, 0),
+        totals: sumTotals(items),
       },
     }
   }

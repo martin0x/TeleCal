@@ -30,10 +30,10 @@ async function press(data: string, outcome: ConfirmationOutcome, fromId = 42) {
 const LOGGED: ConfirmationOutcome = { stale: false, edit: "EDIT", toast: "Logged ✅" }
 
 describe("buildLogConfirmKeyboard", () => {
-  test("puts Log full-width above Change and Cancel", () => {
-    const keyboard = buildLogConfirmKeyboard(42, { token: "abcd1234", totalCalories: 335 })
+  test("puts Log full-width above Change and Cancel, with both totals on the button", () => {
+    const keyboard = buildLogConfirmKeyboard(42, { token: "abcd1234", totals: { calories: 335, protein: 28 } })
     expect(keyboard.inline_keyboard).toEqual([
-      [{ text: "✅ Log 335 cal", callback_data: "log:ok:42:abcd1234" }],
+      [{ text: "✅ Log 335 cal · 28 g", callback_data: "log:ok:42:abcd1234" }],
       [
         { text: "✏️ Change", callback_data: "log:chg:42:abcd1234" },
         { text: "✖️ Cancel", callback_data: "log:cxl:42:abcd1234" },

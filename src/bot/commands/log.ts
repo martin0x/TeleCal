@@ -140,11 +140,11 @@ const LOG_CHOICES: Record<LogAction, ConfirmChoice> = {
 
 export function buildLogConfirmKeyboard(
   ownerId: number,
-  confirm: { token: string; totalCalories: number }
+  confirm: { token: string; totals: { calories: number; protein: number } }
 ): InlineKeyboard {
   const data = (action: LogAction) => encodeLogCallback({ action, ownerId, token: confirm.token })
   return new InlineKeyboard()
-    .text(`✅ Log ${confirm.totalCalories} cal`, data("ok"))
+    .text(`✅ Log ${confirm.totals.calories} cal · ${confirm.totals.protein} g`, data("ok"))
     .row()
     .text("✏️ Change", data("chg"))
     .text("✖️ Cancel", data("cxl"))
