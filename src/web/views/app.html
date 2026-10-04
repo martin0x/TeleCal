@@ -111,6 +111,70 @@
       margin-top: 4px;
     }
 
+    /* Protein bar under the ring */
+    .protein-wrap {
+      width: 100%;
+      max-width: 280px;
+      margin: 0 auto 8px;
+    }
+
+    .protein-text {
+      font-size: 14px;
+      color: var(--hint-color);
+      text-align: center;
+      margin-bottom: 6px;
+    }
+
+    .protein-text strong {
+      color: var(--text-color);
+    }
+
+    .protein-bar {
+      height: 8px;
+      border-radius: 4px;
+      background: var(--secondary-bg);
+      overflow: hidden;
+    }
+
+    .protein-bar.hidden {
+      display: none;
+    }
+
+    .protein-bar-fill {
+      height: 100%;
+      width: 0;
+      border-radius: 4px;
+      background: var(--link-color);
+      transition: width 0.3s;
+    }
+
+    /* Calories | Protein toggle */
+    .segmented {
+      display: flex;
+      background: var(--secondary-bg);
+      border-radius: 8px;
+      padding: 4px;
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+
+    .segmented button {
+      flex: 1;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--hint-color);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .segmented button.active {
+      background: var(--bg-color);
+      color: var(--text-color);
+    }
+
     /* Chart containers */
     .chart-container {
       position: relative;
@@ -273,10 +337,18 @@
         </div>
       </div>
     </div>
+    <div class="protein-wrap">
+      <div class="protein-text" id="today-protein">--</div>
+      <div class="protein-bar" id="today-protein-bar"><div class="protein-bar-fill" id="today-protein-fill"></div></div>
+    </div>
     <div class="food-log" id="today-log"></div>
   </div>
 
   <div id="week-view" class="view">
+    <div class="segmented" data-view="week">
+      <button data-metric="calories" class="active">Calories</button>
+      <button data-metric="protein">Protein</button>
+    </div>
     <div class="chart-container">
       <canvas id="week-chart"></canvas>
     </div>
@@ -285,6 +357,10 @@
 
   <div id="month-view" class="view">
     <div class="section-title">30-Day Trend</div>
+    <div class="segmented" data-view="month">
+      <button data-metric="calories" class="active">Calories</button>
+      <button data-metric="protein">Protein</button>
+    </div>
     <div class="chart-container">
       <canvas id="month-chart"></canvas>
     </div>
@@ -303,6 +379,18 @@
     let monthData = null;
     let selectedDate = null;
     let charts = {};
+
+    // Which series the week/month charts show. Shared by both views on purpose.
+    let metric = 'calories';
+
+    const METRICS = {
+      calories: { series: (data) => data.daily, goal: (user) => user && user.daily_goal },
+      protein: { series: (data) => data.dailyProtein || {}, goal: (user) => user && user.daily_protein_goal },
+    };
+
+    function proteinText(grams) {
+      return grams === null || grams === undefined ? '? g' : `${grams} g`;
+    }
 
     // API helpers
     async function api(endpoint) {
@@ -352,10 +440,11 @@
 
       const headerText = date ? formatDate(date) : "Today's Log";
       const total = items.reduce((sum, item) => sum + item.calories, 0);
+      const protein = items.reduce((sum, item) => sum + (typeof item.protein_g === 'number' ? item.protein_g : 0), 0);
 
       const headerDiv = document.createElement('div');
       headerDiv.className = 'food-log-header';
-      headerDiv.textContent = `${headerText} • ${total} cal`;
+      headerDiv.textContent = `${headerText} • ${total} cal · ${protein} g protein`;
       container.appendChild(headerDiv);
 
       items.forEach(item => {
@@ -377,7 +466,7 @@
 
         const caloriesDiv = document.createElement('div');
         caloriesDiv.className = 'food-calories';
-        caloriesDiv.textContent = item.calories;
+        caloriesDiv.textContent = `${item.calories} cal · ${proteinText(item.protein_g)}`;
 
         itemDiv.appendChild(emojiDiv);
         itemDiv.appendChild(detailsDiv);
@@ -418,11 +507,34 @@
       document.getElementById('today-percent').textContent = goal ? `${Math.round(percent * 100)}%` : '';
     }
 
+    // Protein under the ring: a slim bar when a goal is set, text alone when not.
+    function renderProteinBar(current, goal) {
+      const text = document.getElementById('today-protein');
+      const bar = document.getElementById('today-protein-bar');
+      const fill = document.getElementById('today-protein-fill');
+
+      text.innerHTML = '';
+      const strong = document.createElement('strong');
+      strong.textContent = current.toLocaleString();
+      text.appendChild(strong);
+
+      if (goal) {
+        text.appendChild(document.createTextNode(` / ${goal.toLocaleString()} g protein`));
+        bar.classList.remove('hidden');
+        fill.style.width = `${Math.round(Math.min(current / goal, 1) * 100)}%`;
+      } else {
+        text.appendChild(document.createTextNode(' g protein'));
+        bar.classList.add('hidden');
+      }
+    }
+
     // Initialize week bar chart
-    function createWeekChart(data, goal) {
+    function createWeekChart(data, user, metric) {
       const ctx = document.getElementById('week-chart').getContext('2d');
+      const series = METRICS[metric].series(data);
+      const goal = METRICS[metric].goal(user);
       const dates = Object.keys(data.daily).sort();
-      const values = dates.map(d => data.daily[d]);
+      const values = dates.map(d => series[d] || 0);
       const labels = dates.map(d => getDayAbbr(d));
 
       const buttonColor = getComputedStyle(document.documentElement).getPropertyValue('--button-color').trim() || '#2481cc';
@@ -475,10 +587,11 @@
     }
 
     // Initialize month line chart
-    function createMonthChart(data) {
+    function createMonthChart(data, metric) {
       const ctx = document.getElementById('month-chart').getContext('2d');
+      const series = METRICS[metric].series(data);
       const dates = Object.keys(data.daily).sort();
-      const values = dates.map(d => data.daily[d]);
+      const values = dates.map(d => series[d] || 0);
 
       const buttonColor = getComputedStyle(document.documentElement).getPropertyValue('--button-color').trim() || '#2481cc';
 
@@ -513,8 +626,9 @@
     }
 
     // Create calendar for month view
-    function createCalendar(data) {
+    function createCalendar(data, metric) {
       const container = document.getElementById('calendar');
+      const series = METRICS[metric].series(data);
       const dates = Object.keys(data.daily).sort();
       const startDate = new Date(dates[0] + 'T00:00:00');
       const endDate = new Date(dates[dates.length - 1] + 'T00:00:00');
@@ -543,7 +657,7 @@
 
       for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const hasData = dataSet.has(dateStr) && data.daily[dateStr] > 0;
+        const hasData = dataSet.has(dateStr) && series[dateStr] > 0;
         const isSelected = dateStr === selectedDate;
 
         const classes = ['calendar-day'];
@@ -604,6 +718,22 @@
       });
     });
 
+    // Calories | Protein toggle. One shared metric: switching on Week also
+    // switches Month, so the two views never disagree.
+    document.querySelectorAll('.segmented button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        metric = btn.dataset.metric;
+        document.querySelectorAll('.segmented button').forEach(b => {
+          b.classList.toggle('active', b.dataset.metric === metric);
+        });
+        if (weekData && userData) createWeekChart(weekData, userData, metric);
+        if (monthData) {
+          createMonthChart(monthData, metric);
+          createCalendar(monthData, metric);
+        }
+      });
+    });
+
     async function loadTabData(tab) {
       try {
         if (tab === 'today') {
@@ -614,6 +744,7 @@
           userData = user;
 
           createProgressChart(today.total, user.daily_goal || 2000);
+          renderProteinBar(today.protein || 0, user.daily_protein_goal);
           renderFoodLog(document.getElementById('today-log'), today.items);
         }
 
@@ -621,7 +752,7 @@
           if (!weekData) weekData = await api('/api/stats?period=week');
           if (!userData) userData = await api('/api/user');
 
-          createWeekChart(weekData, userData.daily_goal);
+          createWeekChart(weekData, userData, metric);
           document.getElementById('week-log').innerHTML = `
             <div class="empty-state">
               <div class="empty-state-icon">👆</div>
@@ -633,8 +764,8 @@
         if (tab === 'month') {
           if (!monthData) monthData = await api('/api/stats?period=month');
 
-          createMonthChart(monthData);
-          createCalendar(monthData);
+          createMonthChart(monthData, metric);
+          createCalendar(monthData, metric);
           document.getElementById('month-log').innerHTML = `
             <div class="empty-state">
               <div class="empty-state-icon">📅</div>
