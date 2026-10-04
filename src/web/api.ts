@@ -1,11 +1,28 @@
 // src/web/api.ts
+// Every change here is additive: Telegram webviews cache app.html, so a stale
+// page must keep working against this server. Never rename or reshape a field.
 import { UsersRepository } from "../db/repositories/users"
-import { FoodLogsRepository } from "../db/repositories/food-logs"
+import { FoodLogsRepository, FoodLog } from "../db/repositories/food-logs"
 import { getTodayInTimezone, getDateRangeInTimezone, DEFAULT_TIMEZONE } from "../utils/dates"
+import { sumTotals } from "../utils/format"
 
 export interface ApiDeps {
   usersRepo: UsersRepository
   foodLogsRepo: FoodLogsRepository
+}
+
+function dayPayload(date: string, entries: FoodLog[]) {
+  const items = entries.flatMap((log) =>
+    log.items.map((item) => ({
+      id: item.id,
+      description: item.description,
+      calories: item.calories,
+      protein_g: item.protein_g ?? null,
+      emoji: item.emoji,
+    }))
+  )
+  const totals = sumTotals(items)
+  return { date, total: totals.calories, protein: totals.protein, items }
 }
 
 export function createApiHandlers(deps: ApiDeps) {
@@ -16,6 +33,7 @@ export function createApiHandlers(deps: ApiDeps) {
       const user = usersRepo.findById(telegramId)
       return {
         daily_goal: user?.daily_goal ?? null,
+        daily_protein_goal: user?.daily_protein_goal ?? null,
         username: user?.username ?? null,
       }
     },
@@ -24,22 +42,7 @@ export function createApiHandlers(deps: ApiDeps) {
       const user = usersRepo.findById(telegramId)
       const timezone = user?.timezone ?? DEFAULT_TIMEZONE
       const today = getTodayInTimezone(timezone)
-      const entries = foodLogsRepo.getByDate(telegramId, today)
-      const items = entries.flatMap((log) =>
-        log.items.map((item) => ({
-          id: item.id,
-          description: item.description,
-          calories: item.calories,
-          emoji: item.emoji,
-        }))
-      )
-      const total = items.reduce((sum, item) => sum + item.calories, 0)
-
-      return {
-        date: today,
-        total,
-        items,
-      }
+      return dayPayload(today, foodLogsRepo.getByDate(telegramId, today))
     },
 
     getStats(telegramId: number, period: "week" | "month") {
@@ -51,42 +54,26 @@ export function createApiHandlers(deps: ApiDeps) {
       const startDate = dateRange[0]
       const endDate = dateRange[dateRange.length - 1]
 
-      const dailyTotals = foodLogsRepo.getDailyTotals(
-        telegramId,
-        startDate,
-        endDate
-      )
+      const dailyTotals = foodLogsRepo.getDailyTotals(telegramId, startDate, endDate)
 
       // Fill in missing days with 0
       const daily: Record<string, number> = {}
+      const dailyProtein: Record<string, number> = {}
       for (const date of dateRange) {
         daily[date] = dailyTotals[date]?.calories ?? 0
+        dailyProtein[date] = dailyTotals[date]?.protein ?? 0
       }
 
       return {
         start: startDate,
         end: endDate,
         daily,
+        dailyProtein,
       }
     },
 
     getDay(telegramId: number, date: string) {
-      const entries = foodLogsRepo.getByDate(telegramId, date)
-      const items = entries.flatMap((log) =>
-        log.items.map((item) => ({
-          id: item.id,
-          description: item.description,
-          calories: item.calories,
-          emoji: item.emoji,
-        }))
-      )
-      const total = items.reduce((sum, item) => sum + item.calories, 0)
-
-      return {
-        date,
-        total,
-        items,
-      }
+      return dayPayload(date, foodLogsRepo.getByDate(telegramId, date))
     },
   }
 }
