@@ -69,7 +69,7 @@ export function createBot() {
     )
   })
 
-  bot.command("admin", createAdminCommand(allowedUsersRepo, usageRepo))
+  bot.command("admin", createAdminCommand(allowedUsersRepo, usageRepo, { foodLogsRepo, usersRepo, aiService }))
   bot.command("usage", createUsageCommand(usageRepo))
   bot.command("today", createTodayCommand(foodLogsRepo, usersRepo))
   bot.command("week", createWeekCommand(foodLogsRepo, usersRepo))

@@ -5,6 +5,10 @@ import { AllowedUsersRepository } from "../../db/repositories/allowed-users"
 import { smartReply } from "../utils/smart-reply"
 import { UsageRepository, type UserUsageRow, type ModelUsageRow } from "../../db/repositories/usage"
 import { formatUsd, formatTokens } from "../../utils/format"
+import { FoodLogsRepository } from "../../db/repositories/food-logs"
+import { UsersRepository } from "../../db/repositories/users"
+import { AIService } from "../../ai/service"
+import { runProteinBackfill, DEFAULT_CHUNK_SIZE } from "../../jobs/backfill-protein"
 
 const MAX_USER_ROWS = 10
 
@@ -64,7 +68,52 @@ export function formatAdminUsage(
   return message.trimEnd()
 }
 
-export function createAdminCommand(repo: AllowedUsersRepository, usageRepo: UsageRepository) {
+export interface AdminDeps {
+  foodLogsRepo: FoodLogsRepository
+  usersRepo: UsersRepository
+  aiService: AIService
+}
+
+/**
+ * /admin backfill-protein. Separated from the command so it can be tested
+ * without the admin gate, which reads config.adminUsers from the environment.
+ * Usage rows are attributed to the admin who ran it.
+ */
+export async function backfillProtein(
+  deps: AdminDeps,
+  adminId: number,
+  chatId: number | null,
+  reply: (text: string) => Promise<void>
+): Promise<void> {
+  const descriptions = deps.foodLogsRepo.listDescriptionsMissingProtein()
+  if (descriptions.length === 0) {
+    await reply("Nothing to backfill — every item has protein.")
+    return
+  }
+  if (deps.aiService.getAvailableProviders().length === 0) {
+    await reply("No AI provider configured.")
+    return
+  }
+
+  const items = deps.foodLogsRepo.countItemsMissingProtein()
+  const calls = Math.ceil(descriptions.length / DEFAULT_CHUNK_SIZE)
+  await reply(`Backfilling protein for ${items} items across ${descriptions.length} descriptions (${calls} AI calls)…`)
+
+  // AIService falls back to the first configured provider if this one is not available.
+  const providerName = deps.usersRepo.findById(adminId)?.ai_provider ?? "gemini"
+  const report = await runProteinBackfill(
+    { foodLogsRepo: deps.foodLogsRepo, aiService: deps.aiService },
+    { providerName, telegramId: adminId, chatId }
+  )
+
+  let done = `Done. Filled ${report.itemsFilled} items.`
+  if (report.unresolved > 0) {
+    done += ` ${report.unresolved} descriptions unresolved — run again to retry.`
+  }
+  await reply(done)
+}
+
+export function createAdminCommand(repo: AllowedUsersRepository, usageRepo: UsageRepository, deps: AdminDeps) {
   return async (ctx: Context) => {
     const userId = ctx.from?.id
     if (!userId || !config.adminUsers.includes(userId)) {
@@ -82,7 +131,8 @@ export function createAdminCommand(repo: AllowedUsersRepository, usageRepo: Usag
           "/admin add <user_id>\n" +
           "/admin remove <user_id>\n" +
           "/admin list\n" +
-          "/admin usage [7d|30d|all]"
+          "/admin usage [7d|30d|all]\n" +
+          "/admin backfill-protein"
       )
       return
     }
@@ -126,6 +176,11 @@ export function createAdminCommand(repo: AllowedUsersRepository, usageRepo: Usag
         const users = usageRepo.getAllUserTotals(days)
         const models = usageRepo.getModelBreakdown(days)
         await smartReply(ctx, formatAdminUsage(users, models, days))
+        break
+      }
+
+      case "backfill-protein": {
+        await backfillProtein(deps, userId, ctx.chat?.id ?? null, (text) => smartReply(ctx, text))
         break
       }
 
