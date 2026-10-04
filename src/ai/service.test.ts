@@ -35,6 +35,9 @@ function fakeProvider(result: ProviderResult | Error): AIProvider {
       if (result instanceof Error) throw result
       return result
     },
+    estimateProtein: async () => {
+      throw new Error("not used in this test")
+    },
   }
 }
 

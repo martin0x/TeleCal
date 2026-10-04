@@ -25,3 +25,20 @@ ${PROTEIN_RULE}
 Example input: "chicken sandwich and fries"
 Example output:
 {"items":[{"description":"Chicken sandwich","calories":450,"protein_g":28,"emoji":"🥪"},{"description":"French fries (medium)","calories":365,"protein_g":4,"emoji":"🍟"}],"needsClarification":false,"confidence":"medium"}`
+
+export const PROTEIN_BATCH_PROMPT = `You are a nutrition expert. You will receive a numbered list of food descriptions, one per line, in the form "1. <description>".
+
+For each line, estimate the grams of protein, using common portion sizes when none is given.
+
+Respond with ONLY a JSON object (no markdown, no explanation) of the form:
+{"items":[{"index":1,"protein_g":14},{"index":2,"protein_g":0}]}
+
+Rules:
+- Return exactly one entry per input line, using that line's number as index
+- protein_g is a whole number of grams
+- Never skip a line; if unsure, give your best estimate`
+
+/** "1. Chicken adobo\n2. Rice" — newlines inside a description are collapsed so lines stay lines. */
+export function formatProteinBatchInput(descriptions: string[]): string {
+  return descriptions.map((d, i) => `${i + 1}. ${d.replace(/\s+/g, " ").trim()}`).join("\n")
+}

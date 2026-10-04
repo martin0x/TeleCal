@@ -13,10 +13,9 @@ export function coerceProtein(value: unknown): number | null {
 /** Items from a parsed estimate, each with protein_g coerced. Non-arrays become []. */
 export function normalizeItems(items: unknown): FoodEstimate[] {
   if (!Array.isArray(items)) return []
-  return items.map((item) => {
-    const raw = item as Record<string, unknown>
-    return { ...(raw as unknown as FoodEstimate), protein_g: coerceProtein(raw.protein_g) }
-  })
+  return items
+    .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+    .map((raw) => ({ ...(raw as unknown as FoodEstimate), protein_g: coerceProtein(raw.protein_g) }))
 }
 
 /** Strips a markdown code fence that prose-prompted models sometimes wrap JSON in. */
@@ -26,4 +25,21 @@ export function stripFences(text: string): string {
     s = s.replace(/```json?\n?/g, "").replace(/```$/g, "").trim()
   }
   return s
+}
+
+/**
+ * Maps a batch reply `{items:[{index, protein_g}]}` back onto the inputs by
+ * 1-based index. Anything missing, malformed or out of range stays null, which
+ * the backfill reports as unresolved.
+ */
+export function alignProteinBatch(reply: unknown, count: number): (number | null)[] {
+  const out: (number | null)[] = new Array(count).fill(null)
+  const items = (reply as { items?: unknown } | null)?.items
+  if (!Array.isArray(items)) return out
+  for (const entry of items) {
+    const index = (entry as { index?: unknown } | null)?.index
+    if (typeof index !== "number" || !Number.isInteger(index) || index < 1 || index > count) continue
+    out[index - 1] = coerceProtein((entry as { protein_g?: unknown }).protein_g)
+  }
+  return out
 }

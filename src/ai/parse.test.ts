@@ -1,6 +1,6 @@
 // src/ai/parse.test.ts
 import { describe, test, expect } from "bun:test"
-import { coerceProtein, normalizeItems, stripFences } from "./parse"
+import { coerceProtein, normalizeItems, stripFences, alignProteinBatch } from "./parse"
 
 describe("coerceProtein", () => {
   test("rounds finite numbers to whole grams and clamps at zero", () => {
@@ -43,6 +43,12 @@ describe("normalizeItems", () => {
     expect(normalizeItems(undefined)).toEqual([])
     expect(normalizeItems("nope")).toEqual([])
   })
+
+  test("drops array elements that are not objects", () => {
+    expect(normalizeItems([null, "x", 7, { description: "Rice", calories: 200, protein_g: 4 }])).toEqual([
+      { description: "Rice", calories: 200, protein_g: 4 },
+    ])
+  })
 })
 
 describe("stripFences", () => {
@@ -52,5 +58,22 @@ describe("stripFences", () => {
 
   test("leaves bare JSON alone", () => {
     expect(stripFences('  {"a":1} ')).toBe('{"a":1}')
+  })
+})
+
+describe("alignProteinBatch", () => {
+  test("maps entries back onto inputs by 1-based index", () => {
+    const reply = { items: [{ index: 2, protein_g: 4 }, { index: 1, protein_g: 28.2 }] }
+    expect(alignProteinBatch(reply, 2)).toEqual([28, 4])
+  })
+
+  test("leaves missing, duplicate-free gaps and out-of-range indices as null", () => {
+    const reply = { items: [{ index: 1, protein_g: 10 }, { index: 5, protein_g: 99 }, { index: "2", protein_g: 3 }] }
+    expect(alignProteinBatch(reply, 3)).toEqual([10, null, null])
+  })
+
+  test("returns all nulls for garbage", () => {
+    expect(alignProteinBatch(null, 2)).toEqual([null, null])
+    expect(alignProteinBatch({ items: "x" }, 2)).toEqual([null, null])
   })
 })

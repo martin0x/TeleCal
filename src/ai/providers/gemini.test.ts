@@ -74,3 +74,31 @@ describe("GeminiProvider", () => {
     expect(seen[0].systemInstruction).toContain("protein_g")
   })
 })
+
+describe("GeminiProvider.estimateProtein", () => {
+  test("sends the batch prompt and aligns the reply", async () => {
+    const seen: { opts: any; input?: string } = { opts: null }
+    const client = {
+      getGenerativeModel: (opts: any) => {
+        seen.opts = opts
+        return {
+          generateContent: async (input: string) => {
+            seen.input = input
+            return {
+              response: {
+                text: () => JSON.stringify({ items: [{ index: 1, protein_g: 38 }, { index: 2, protein_g: 4 }] }),
+                usageMetadata: { promptTokenCount: 80, candidatesTokenCount: 20 },
+              },
+            }
+          },
+        }
+      },
+    } as any
+    const result = await new GeminiProvider(client).estimateProtein(["Chicken adobo", "Rice"])
+
+    expect(seen.opts.systemInstruction).toContain("numbered list")
+    expect(seen.input).toBe("1. Chicken adobo\n2. Rice")
+    expect(result.protein).toEqual([38, 4])
+    expect(result.usage).toMatchObject({ inputTokens: 80, outputTokens: 20 })
+  })
+})

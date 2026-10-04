@@ -1,9 +1,11 @@
 // src/ai/providers/gemini.ts
 import { GoogleGenerativeAI } from "@google/generative-ai"
-import { AIProvider, ProviderResult } from "../types"
+import { AIProvider, ProviderResult, ProteinBatchResult, TokenUsage } from "../types"
 import { config } from "../../config"
-import { ESTIMATE_JSON_PROMPT } from "../prompt"
-import { normalizeItems, stripFences } from "../parse"
+import { ESTIMATE_JSON_PROMPT, PROTEIN_BATCH_PROMPT, formatProteinBatchInput } from "../prompt"
+import { normalizeItems, stripFences, alignProteinBatch } from "../parse"
+
+const MODEL = "gemini-3.1-flash-lite"
 
 export class GeminiProvider implements AIProvider {
   name = "gemini"
@@ -13,37 +15,49 @@ export class GeminiProvider implements AIProvider {
     this.client = client ?? new GoogleGenerativeAI(config.ai.googleApiKey)
   }
 
-  async estimate(foodDescription: string, context?: string): Promise<ProviderResult> {
-    const model = this.client.getGenerativeModel({
-      model: "gemini-3.1-flash-lite",
+  private model(systemInstruction: string) {
+    return this.client.getGenerativeModel({
+      model: MODEL,
       generationConfig: {
         temperature: 0.3,
         responseMimeType: "application/json",
       },
-      systemInstruction: ESTIMATE_JSON_PROMPT,
+      systemInstruction,
     })
+  }
 
+  private async generate(systemInstruction: string, input: string): Promise<{ text: string; usage: TokenUsage }> {
+    const result = await this.model(systemInstruction).generateContent(input)
+    const response = result.response
+    const text = response.text()
+    if (!text) {
+      throw new Error("No response from Gemini")
+    }
+    // usageMetadata is nested under result.response, not on the result itself.
+    const meta = response.usageMetadata
+    return {
+      text,
+      usage: {
+        model: MODEL,
+        inputTokens: meta?.promptTokenCount ?? 0,
+        cachedInputTokens: meta?.cachedContentTokenCount ?? 0,
+        outputTokens: meta?.candidatesTokenCount ?? 0,
+      },
+    }
+  }
+
+  async estimate(foodDescription: string, context?: string): Promise<ProviderResult> {
     const userMessage = context
       ? `Context from previous conversation: ${context}\n\nFood to estimate: ${foodDescription}`
       : foodDescription
 
-    const result = await model.generateContent(userMessage)
-    const response = result.response
-    const content = response.text()
-
-    if (!content) {
-      throw new Error("No response from Gemini")
-    }
-
-    const parsed = JSON.parse(stripFences(content)) as {
+    const { text, usage } = await this.generate(ESTIMATE_JSON_PROMPT, userMessage)
+    const parsed = JSON.parse(stripFences(text)) as {
       items: unknown
       needsClarification: boolean
       clarificationQuestion?: string
       confidence: "high" | "medium" | "low"
     }
-
-    // usageMetadata is nested under result.response, not on the result itself.
-    const meta = response.usageMetadata
 
     return {
       estimate: {
@@ -52,12 +66,15 @@ export class GeminiProvider implements AIProvider {
         clarificationQuestion: parsed.clarificationQuestion,
         confidence: parsed.confidence || "medium",
       },
-      usage: {
-        model: "gemini-3.1-flash-lite",
-        inputTokens: meta?.promptTokenCount ?? 0,
-        cachedInputTokens: meta?.cachedContentTokenCount ?? 0,
-        outputTokens: meta?.candidatesTokenCount ?? 0,
-      },
+      usage,
+    }
+  }
+
+  async estimateProtein(descriptions: string[]): Promise<ProteinBatchResult> {
+    const { text, usage } = await this.generate(PROTEIN_BATCH_PROMPT, formatProteinBatchInput(descriptions))
+    return {
+      protein: alignProteinBatch(JSON.parse(stripFences(text)), descriptions.length),
+      usage,
     }
   }
 }

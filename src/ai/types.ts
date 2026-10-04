@@ -18,6 +18,8 @@ export interface EstimationResult {
 export interface AIProvider {
   name: string
   estimate(foodDescription: string, context?: string): Promise<ProviderResult>
+  /** Protein for many descriptions in one call; the caller chunks. */
+  estimateProtein(descriptions: string[]): Promise<ProteinBatchResult>
 }
 
 export interface CachedEstimation {
@@ -41,6 +43,12 @@ export interface TokenUsage {
 
 export interface ProviderResult {
   estimate: EstimationResult
+  usage: TokenUsage
+}
+
+export interface ProteinBatchResult {
+  /** Aligned with the input array. null where the model gave nothing usable. */
+  protein: (number | null)[]
   usage: TokenUsage
 }
 

@@ -112,6 +112,28 @@ describe("OpenAIProvider", () => {
   })
 })
 
+describe("OpenAIProvider.estimateProtein", () => {
+  const BATCH_REPLY = JSON.stringify({ items: [{ index: 1, protein_g: 38 }, { index: 2, protein_g: 4 }] })
+
+  test("numbers the descriptions, uses a strict schema, and aligns the reply", async () => {
+    const { client, calls } = fakeClient(BATCH_REPLY)
+    const result = await new OpenAIProvider(client).estimateProtein(["Chicken adobo", "Rice"])
+
+    expect(calls[0].input).toBe("1. Chicken adobo\n2. Rice")
+    expect(calls[0].store).toBe(false)
+    expect(calls[0].text.format.strict).toBe(true)
+    expect(calls[0].text.format.name).toBe("protein_batch")
+    expect(result.protein).toEqual([38, 4])
+    expect(result.usage.inputTokens).toBe(120)
+  })
+
+  test("leaves unanswered indices null", async () => {
+    const { client } = fakeClient(JSON.stringify({ items: [{ index: 2, protein_g: 4 }] }))
+    const result = await new OpenAIProvider(client).estimateProtein(["Mystery", "Rice"])
+    expect(result.protein).toEqual([null, 4])
+  })
+})
+
 describe("OpenAIProvider usage reporting", () => {
   test("reports tokens from the Responses usage block", async () => {
     const { client } = fakeClient(VALID_REPLY)

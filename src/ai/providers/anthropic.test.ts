@@ -78,3 +78,27 @@ describe("AnthropicProvider", () => {
     expect(calls[0].system).toContain("protein_g")
   })
 })
+
+describe("AnthropicProvider.estimateProtein", () => {
+  test("sends the batch prompt and aligns the reply", async () => {
+    const calls: any[] = []
+    const client = {
+      messages: {
+        create: async (args: any) => {
+          calls.push(args)
+          return {
+            model: "claude-haiku-4-5-20251001",
+            content: [{ type: "text", text: "```json\n" + JSON.stringify({ items: [{ index: 1, protein_g: 38 }] }) + "\n```" }],
+            usage: { input_tokens: 90, output_tokens: 12 },
+          }
+        },
+      },
+    } as unknown as Anthropic
+    const result = await new AnthropicProvider(client).estimateProtein(["Chicken adobo", "Rice"])
+
+    expect(calls[0].system).toContain("numbered list")
+    expect(calls[0].messages[0].content).toBe("1. Chicken adobo\n2. Rice")
+    expect(result.protein).toEqual([38, null])
+    expect(result.usage).toMatchObject({ inputTokens: 90, outputTokens: 12 })
+  })
+})

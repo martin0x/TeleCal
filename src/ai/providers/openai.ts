@@ -1,9 +1,9 @@
 // src/ai/providers/openai.ts
 import OpenAI from "openai"
-import { AIProvider, ProviderResult } from "../types"
+import { AIProvider, ProviderResult, ProteinBatchResult, TokenUsage } from "../types"
 import { config } from "../../config"
-import { PROTEIN_RULE } from "../prompt"
-import { normalizeItems } from "../parse"
+import { PROTEIN_RULE, PROTEIN_BATCH_PROMPT, formatProteinBatchInput } from "../prompt"
+import { normalizeItems, alignProteinBatch } from "../parse"
 
 const INSTRUCTIONS = `You are a nutrition expert that estimates calories and protein in food.
 
@@ -49,6 +49,50 @@ const ESTIMATE_SCHEMA = {
   additionalProperties: false,
 } as const
 
+const PROTEIN_BATCH_SCHEMA = {
+  type: "object",
+  properties: {
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          index: { type: "integer" },
+          protein_g: { type: "number" },
+        },
+        required: ["index", "protein_g"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["items"],
+  additionalProperties: false,
+} as const
+
+const MODEL = "gpt-5.6-luna"
+
+/** The subset of a Responses API result that usage accounting reads. */
+interface ResponsesUsageSource {
+  model?: string
+  usage?: {
+    input_tokens?: number
+    output_tokens?: number
+    input_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number }
+    output_tokens_details?: { reasoning_tokens?: number }
+  }
+}
+
+function usageFrom(response: ResponsesUsageSource): TokenUsage {
+  return {
+    model: response.model ?? MODEL,
+    inputTokens: response.usage?.input_tokens ?? 0,
+    cachedInputTokens: response.usage?.input_tokens_details?.cached_tokens ?? 0,
+    cacheWriteTokens: response.usage?.input_tokens_details?.cache_write_tokens ?? 0,
+    outputTokens: response.usage?.output_tokens ?? 0,
+    reasoningTokens: response.usage?.output_tokens_details?.reasoning_tokens ?? 0,
+  }
+}
+
 export class OpenAIProvider implements AIProvider {
   name = "openai"
   private client: OpenAI
@@ -63,7 +107,7 @@ export class OpenAIProvider implements AIProvider {
       : foodDescription
 
     const response = await this.client.responses.create({
-      model: "gpt-5.6-luna",
+      model: MODEL,
       instructions: INSTRUCTIONS,
       input: userMessage,
       reasoning: { effort: "none" },
@@ -101,14 +145,35 @@ export class OpenAIProvider implements AIProvider {
         clarificationQuestion: result.clarificationQuestion || undefined,
         confidence: result.confidence || "medium",
       },
-      usage: {
-        model: response.model ?? "gpt-5.6-luna",
-        inputTokens: response.usage?.input_tokens ?? 0,
-        cachedInputTokens: response.usage?.input_tokens_details?.cached_tokens ?? 0,
-        cacheWriteTokens: response.usage?.input_tokens_details?.cache_write_tokens ?? 0,
-        outputTokens: response.usage?.output_tokens ?? 0,
-        reasoningTokens: response.usage?.output_tokens_details?.reasoning_tokens ?? 0,
+      usage: usageFrom(response),
+    }
+  }
+
+  async estimateProtein(descriptions: string[]): Promise<ProteinBatchResult> {
+    const response = await this.client.responses.create({
+      model: MODEL,
+      instructions: PROTEIN_BATCH_PROMPT,
+      input: formatProteinBatchInput(descriptions),
+      reasoning: { effort: "none" },
+      store: false,
+      text: {
+        format: {
+          type: "json_schema",
+          name: "protein_batch",
+          schema: PROTEIN_BATCH_SCHEMA,
+          strict: true,
+        },
       },
+    })
+
+    const content = response.output_text
+    if (!content) {
+      throw new Error("No response from OpenAI")
+    }
+
+    return {
+      protein: alignProteinBatch(JSON.parse(content), descriptions.length),
+      usage: usageFrom(response),
     }
   }
 }
