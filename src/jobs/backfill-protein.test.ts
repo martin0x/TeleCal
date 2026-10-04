@@ -20,6 +20,11 @@ describe("chunk", () => {
     expect(chunk([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]])
     expect(chunk([], 2)).toEqual([])
   })
+
+  test("treats a size below 1 as 1 instead of looping forever", () => {
+    expect(chunk([1, 2, 3], 0)).toEqual([[1], [2], [3]])
+    expect(chunk([1, 2], -5)).toEqual([[1], [2]])
+  })
 })
 
 describe("runProteinBackfill", () => {

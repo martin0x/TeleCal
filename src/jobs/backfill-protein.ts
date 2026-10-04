@@ -34,10 +34,14 @@ export interface BackfillDeps {
 export const DEFAULT_CHUNK_SIZE = 25
 export const DEFAULT_PAUSE_MS = 500
 
+/**
+ * Splits an array into chunks of the given size. Sizes below 1 are treated as 1.
+ */
 export function chunk<T>(items: T[], size: number): T[][] {
+  const step = Math.max(1, Math.floor(size))
   const out: T[][] = []
-  for (let i = 0; i < items.length; i += size) {
-    out.push(items.slice(i, i + size))
+  for (let i = 0; i < items.length; i += step) {
+    out.push(items.slice(i, i + step))
   }
   return out
 }
