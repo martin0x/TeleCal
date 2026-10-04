@@ -92,6 +92,8 @@ bun run start
 Food descriptions are sent to whichever AI provider the user has selected in
 `/settings` (OpenAI, Anthropic, or Google) to estimate calories and protein.
 
+The one-off `/admin backfill-protein` command sends the descriptions of items logged before protein tracking existed to the **admin's** selected provider, not each user's.
+
 TeleCal disables server-side retention where the provider offers the option —
 OpenAI calls are made with `store: false`, so requests are not kept in the
 OpenAI organization's logs. Providers may still retain request content

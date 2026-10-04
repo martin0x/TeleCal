@@ -42,6 +42,12 @@ describe("parseEditInput", () => {
     expect(parseEditInput("two eggs and toast")).toEqual({ kind: "describe", text: "two eggs and toast" })
     expect(parseEditInput("200 grams of rice")).toEqual({ kind: "describe", text: "200 grams of rice" })
   })
+
+  test("a number with a calorie unit still sets calories", () => {
+    expect(parseEditInput("250 cal")).toEqual({ kind: "calories", value: 250 })
+    expect(parseEditInput("250kcal")).toEqual({ kind: "calories", value: 250 })
+    expect(parseEditInput("250 Calories")).toEqual({ kind: "calories", value: 250 })
+  })
 })
 
 describe("edit flow", () => {
@@ -69,7 +75,7 @@ describe("edit flow", () => {
     expect(ctx.reply).toHaveBeenCalledWith(
       "Editing: 🍜 Ramen — 520 cal · 22 g\n\n" +
         "What would you like to change?\n" +
-        "• Type a number to set calories (e.g. 200)\n" +
+        "• Type a number to set calories (e.g. 200 or 200 cal)\n" +
         "• Type a number with g to set protein (e.g. 18g)\n" +
         "• Or describe the food to re-estimate\n" +
         '• Type "cancel" to abort',

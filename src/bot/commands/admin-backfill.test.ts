@@ -101,4 +101,50 @@ describe("backfillProtein", () => {
     expect(errorSpy).toHaveBeenCalledTimes(1)
     errorSpy.mockRestore()
   })
+
+  test("refuses to start a second run while one is in flight", async () => {
+    foodLogsRepo.create(ADMIN, 1, "2026-09-25", [{ description: "Rice", calories: 200 }])
+    let release!: (v: (number | null)[]) => void
+    const gate = new Promise<(number | null)[]>((r) => (release = r))
+    const aiService = {
+      estimateProtein: mock(() => gate),
+      getAvailableProviders: () => ["gemini"],
+      hasProvider: (name: string) => name === "gemini",
+    } as unknown as AIService
+
+    const first = backfillProtein({ foodLogsRepo, usersRepo, aiService }, ADMIN, 1, reply)
+
+    const replies2: string[] = []
+    const reply2 = async (text: string) => {
+      replies2.push(text)
+    }
+    await backfillProtein({ foodLogsRepo, usersRepo, aiService }, ADMIN, 1, reply2)
+
+    expect(replies2).toEqual(["A backfill is already running — wait for its Done message."])
+
+    release([4])
+    await first
+
+    expect(replies[replies.length - 1]).toBe("Done. Filled 1 items.")
+  })
+
+  test("clears the running flag after a failure", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {})
+    foodLogsRepo.create(ADMIN, 1, "2026-09-25", [{ description: "Rice", calories: 200 }])
+    foodLogsRepo.setProteinForDescription = () => {
+      throw new Error("disk full")
+    }
+    const aiService = fakeAi(() => [4])
+
+    await backfillProtein({ foodLogsRepo, usersRepo, aiService }, ADMIN, 1, reply)
+
+    const replies2: string[] = []
+    const reply2 = async (text: string) => {
+      replies2.push(text)
+    }
+    await backfillProtein({ foodLogsRepo, usersRepo, aiService }, ADMIN, 1, reply2)
+
+    expect(replies2[0]).not.toBe("A backfill is already running — wait for its Done message.")
+    errorSpy.mockRestore()
+  })
 })

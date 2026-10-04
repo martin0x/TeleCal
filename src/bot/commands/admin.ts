@@ -74,6 +74,12 @@ export interface AdminDeps {
   aiService: AIService
 }
 
+// grammY's polling handles updates sequentially, so an admin command that
+// awaits a long-running job would stall every other user's update for the
+// duration. This guard makes a second /admin backfill-protein a no-op while
+// one is already in flight, rather than running two overlapping backfills.
+let backfillRunning = false
+
 /**
  * /admin backfill-protein. Separated from the command so it can be tested
  * without the admin gate, which reads config.adminUsers from the environment.
@@ -85,38 +91,47 @@ export async function backfillProtein(
   chatId: number | null,
   reply: (text: string) => Promise<void>
 ): Promise<void> {
-  const descriptions = deps.foodLogsRepo.listDescriptionsMissingProtein()
-  if (descriptions.length === 0) {
-    await reply("Nothing to backfill — every item has protein.")
+  if (backfillRunning) {
+    await reply("A backfill is already running — wait for its Done message.")
     return
   }
-  if (deps.aiService.getAvailableProviders().length === 0) {
-    await reply("No AI provider configured.")
-    return
-  }
-
-  const items = deps.foodLogsRepo.countItemsMissingProtein()
-  const calls = Math.ceil(descriptions.length / DEFAULT_CHUNK_SIZE)
-  await reply(`Backfilling protein for ${items} items across ${descriptions.length} descriptions (${calls} AI calls)…`)
-
-  // AIService falls back to the first configured provider if this one is not available.
-  const providerName = deps.usersRepo.findById(adminId)?.ai_provider ?? "gemini"
+  backfillRunning = true
   try {
-    const report = await runProteinBackfill(
-      { foodLogsRepo: deps.foodLogsRepo, aiService: deps.aiService },
-      { providerName, telegramId: adminId, chatId }
-    )
-
-    let done = `Done. Filled ${report.itemsFilled} items.`
-    if (report.unresolved > 0) {
-      done += ` ${report.unresolved} descriptions unresolved — run again to retry.`
+    const descriptions = deps.foodLogsRepo.listDescriptionsMissingProtein()
+    if (descriptions.length === 0) {
+      await reply("Nothing to backfill — every item has protein.")
+      return
     }
-    await reply(done)
-  } catch (error) {
-    console.error("[backfill] failed:", error)
-    await reply(
-      `Backfill failed: ${error instanceof Error ? error.message : String(error)}. Nothing was lost — run /admin backfill-protein again to retry.`
-    )
+    if (deps.aiService.getAvailableProviders().length === 0) {
+      await reply("No AI provider configured.")
+      return
+    }
+
+    const items = deps.foodLogsRepo.countItemsMissingProtein()
+    const calls = Math.ceil(descriptions.length / DEFAULT_CHUNK_SIZE)
+    await reply(`Backfilling protein for ${items} items across ${descriptions.length} descriptions (${calls} AI calls)…`)
+
+    // AIService falls back to the first configured provider if this one is not available.
+    const providerName = deps.usersRepo.findById(adminId)?.ai_provider ?? "gemini"
+    try {
+      const report = await runProteinBackfill(
+        { foodLogsRepo: deps.foodLogsRepo, aiService: deps.aiService },
+        { providerName, telegramId: adminId, chatId }
+      )
+
+      let done = `Done. Filled ${report.itemsFilled} items.`
+      if (report.unresolved > 0) {
+        done += ` ${report.unresolved} descriptions unresolved — run again to retry.`
+      }
+      await reply(done)
+    } catch (error) {
+      console.error("[backfill] failed:", error)
+      await reply(
+        `Backfill failed: ${error instanceof Error ? error.message : String(error)}. Nothing was lost — run /admin backfill-protein again to retry.`
+      )
+    }
+  } finally {
+    backfillRunning = false
   }
 }
 
@@ -187,7 +202,11 @@ export function createAdminCommand(repo: AllowedUsersRepository, usageRepo: Usag
       }
 
       case "backfill-protein": {
-        await backfillProtein(deps, userId, ctx.chat?.id ?? null, (text) => smartReply(ctx, text))
+        // Runs in the background: grammY handles updates sequentially, and a full
+        // backfill can take a minute. ctx.reply still works after the handler returns.
+        void backfillProtein(deps, userId, ctx.chat?.id ?? null, (text) => smartReply(ctx, text)).catch((error) =>
+          console.error("[backfill] unhandled:", error)
+        )
         break
       }
 

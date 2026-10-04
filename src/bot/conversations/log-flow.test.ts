@@ -271,6 +271,19 @@ describe("LogFlow", () => {
     expect(foodLogsRepo.getByDate(123, "2026-01-31")[0].items[0].calories).toBe(200)
   })
 
+  test("a confirming session saved before protein tracking still logs, showing ? g", () => {
+    const pendingItems = JSON.stringify([{ description: "Chicken", calories: 200, emoji: "🍗" }])
+    conversationsRepo.upsert(123, 456, "confirming", "2026-01-31", { pending_items: pendingItems })
+
+    const outcome = logFlow.resolveConfirmation(123, 456, confirmToken("2026-01-31", pendingItems), "log")
+
+    expect(outcome.stale).toBe(false)
+    if (outcome.stale) return
+    expect(outcome.edit).toContain("🍗 Chicken — 200 cal · ? g")
+    expect(outcome.edit).toContain("Total: 200 cal · 0 g protein")
+    expect(foodLogsRepo.getByDate(123, "2026-01-31")[0].items[0].protein_g).toBeNull()
+  })
+
   test("resolveConfirmation change returns to input without logging", async () => {
     const token = await reachConfirming()
     const outcome = logFlow.resolveConfirmation(123, 456, token, "change")

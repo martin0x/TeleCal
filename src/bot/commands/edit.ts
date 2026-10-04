@@ -25,7 +25,7 @@ function editPrompt(item: FoodItem): string {
   return (
     `Editing: ${formatItemLine(item)}\n\n` +
     `What would you like to change?\n` +
-    `• Type a number to set calories (e.g. 200)\n` +
+    `• Type a number to set calories (e.g. 200 or 200 cal)\n` +
     `• Type a number with g to set protein (e.g. 18g)\n` +
     `• Or describe the food to re-estimate\n` +
     `• Type "cancel" to abort`
@@ -47,7 +47,7 @@ export function parseEditInput(text: string): EditInput {
     return { kind: "protein", value }
   }
 
-  const calories = text.match(/^\s*(\d+)\s*$/)
+  const calories = text.match(/^\s*(\d+)\s*(?:k?cal(?:ories)?)?\s*$/i)
   if (calories) {
     const value = parseInt(calories[1], 10)
     if (value < 1 || value > 9999) return { kind: "invalid", message: "Calories must be between 1 and 9999." }

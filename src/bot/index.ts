@@ -57,7 +57,7 @@ export function createBot() {
         "Track your calories and protein with AI-powered estimation.\n\n" +
         "Commands:\n" +
         "/log - Log what you ate\n" +
-        "/today - See today's calories\n" +
+        "/today - See today's calories and protein\n" +
         "/week - See past 7 days\n" +
         "/month - See past 30 days\n" +
         "/edit - Edit a food entry\n" +
