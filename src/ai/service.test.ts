@@ -167,3 +167,81 @@ describe("usage recording", () => {
     expect(cache.store.size).toBe(0)
   })
 })
+
+describe("protein-aware cache", () => {
+  test("treats a cached result without protein_g as a miss and overwrites it", async () => {
+    const stale = {
+      items: [{ description: "Chicken adobo", calories: 420, emoji: "🍗" }],
+      needsClarification: false,
+      confidence: "high",
+    } as unknown as EstimationResult
+    cache.set("chicken adobo", stale)
+    service = build(fakeProvider(OK_RESULT))
+
+    const result = await service.estimate("chicken adobo", "openai", OPTS)
+
+    expect(result).toEqual(ESTIMATE)
+    expect(usage.rows).toHaveLength(1)
+    expect(cache.store.get("chicken adobo")).toEqual(ESTIMATE)
+  })
+
+  test("does not cache a result with unknown protein", async () => {
+    const partial: EstimationResult = {
+      ...ESTIMATE,
+      items: [{ description: "Mystery", calories: 100, protein_g: null }],
+    }
+    service = build(fakeProvider({ ...OK_RESULT, estimate: partial }))
+
+    await service.estimate("mystery", "openai", OPTS)
+
+    expect(cache.store.size).toBe(0)
+  })
+})
+
+describe("estimateProtein", () => {
+  function batchProvider(protein: (number | null)[]): AIProvider {
+    return {
+      name: "openai",
+      estimate: async () => {
+        throw new Error("not used")
+      },
+      estimateProtein: async () => ({ protein, usage: OK_RESULT.usage }),
+    }
+  }
+
+  test("returns the aligned protein array and records one backfill row", async () => {
+    service = build(batchProvider([38, null]))
+
+    const result = await service.estimateProtein(["Chicken adobo", "Mystery"], "openai", { telegramId: 7, chatId: null })
+
+    expect(result).toEqual([38, null])
+    expect(usage.rows).toHaveLength(1)
+    expect(usage.rows[0]).toMatchObject({ telegramId: 7, chatId: null, callType: "backfill", status: "ok" })
+  })
+
+  test("never touches the cache", async () => {
+    cache.set("chicken adobo", ESTIMATE)
+    service = build(batchProvider([1]))
+
+    await service.estimateProtein(["Chicken adobo"], "openai", { telegramId: 7, chatId: null })
+
+    expect(cache.store.size).toBe(1)
+    expect(usage.rows).toHaveLength(1)
+  })
+
+  test("records parse_error on a SyntaxError and rethrows", async () => {
+    const broken: AIProvider = {
+      name: "openai",
+      estimate: async () => {
+        throw new Error("not used")
+      },
+      estimateProtein: async () => {
+        throw new SyntaxError("Unexpected token")
+      },
+    }
+    service = build(broken)
+
+    await expect(service.estimateProtein(["x"], "openai", { telegramId: 7, chatId: null })).rejects.toThrow()
+    expect(usage.rows[0]).toMatchObject({ callType: "backfill", status: "parse_error" })
+  })
+})

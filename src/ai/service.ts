@@ -1,5 +1,5 @@
 // src/ai/service.ts
-import { AIProvider, EstimationResult } from "./types"
+import { AIProvider, EstimationResult, ProteinBatchResult } from "./types"
 import { OpenAIProvider } from "./providers/openai"
 import { AnthropicProvider } from "./providers/anthropic"
 import { GeminiProvider } from "./providers/gemini"
@@ -14,6 +14,20 @@ export interface EstimateOptions {
   chatId: number | null
   callType: CallType
   context?: string
+}
+
+export interface ProteinOptions {
+  telegramId: number
+  chatId: number | null
+}
+
+/**
+ * Cached results written before protein tracking have no protein_g. Treating
+ * them as misses lets the cache heal itself one description at a time instead
+ * of needing a wipe or a version key.
+ */
+export function isCurrentShape(result: EstimationResult): boolean {
+  return result.items.every((item) => typeof item.protein_g === "number" && Number.isFinite(item.protein_g))
 }
 
 export class AIService {
@@ -44,15 +58,49 @@ export class AIService {
     // Check cache first (only if no context and caching enabled)
     if (!opts.context && config.features.caching) {
       const cached = this.cache.get(normalizedFood)
-      if (cached) return cached // nothing billed, nothing recorded
+      if (cached && isCurrentShape(cached)) return cached // nothing billed, nothing recorded
     }
 
+    const provider = this.resolveProvider(providerName)
+    return this.estimateWithProvider(provider, foodDescription, normalizedFood, opts)
+  }
+
+  /**
+   * Protein for many descriptions in one billed call. No cache: the backfill
+   * is the only caller and it only asks about rows that have no protein yet.
+   */
+  async estimateProtein(
+    descriptions: string[],
+    providerName: string,
+    opts: ProteinOptions
+  ): Promise<(number | null)[]> {
+    const provider = this.resolveProvider(providerName)
+    const recordOpts: EstimateOptions = { ...opts, callType: "backfill" }
+
+    let result: ProteinBatchResult
+    try {
+      result = await provider.estimateProtein(descriptions)
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        this.recordSafely(provider.name, { model: "unknown", inputTokens: 0, outputTokens: 0 }, recordOpts, "parse_error")
+      }
+      throw error
+    }
+
+    this.recordSafely(provider.name, result.usage, recordOpts, this.statusFor(result.usage))
+    return result.protein
+  }
+
+  private resolveProvider(providerName: string): AIProvider {
     const provider = this.providers.get(providerName) ?? this.providers.values().next().value
     if (!provider) {
       throw new Error("No AI provider configured")
     }
+    return provider
+  }
 
-    return this.estimateWithProvider(provider, foodDescription, normalizedFood, opts)
+  private statusFor(usage: TokenUsage): UsageStatus {
+    return usage.inputTokens === 0 && usage.outputTokens === 0 ? "no_usage" : "ok"
   }
 
   private async estimateWithProvider(
@@ -79,12 +127,12 @@ export class AIService {
       throw error
     }
 
-    const status: UsageStatus =
-      result.usage.inputTokens === 0 && result.usage.outputTokens === 0 ? "no_usage" : "ok"
-    this.recordSafely(provider.name, result.usage, opts, status)
+    this.recordSafely(provider.name, result.usage, opts, this.statusFor(result.usage))
 
     const estimate = result.estimate
-    if (!estimate.needsClarification && !opts.context && config.features.caching) {
+    // A result with unknown protein is not worth keeping: the next ask should
+    // get another chance at a complete answer.
+    if (!estimate.needsClarification && !opts.context && config.features.caching && isCurrentShape(estimate)) {
       this.cache.set(normalizedFood, estimate)
     }
 
