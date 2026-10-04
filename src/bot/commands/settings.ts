@@ -6,16 +6,17 @@ import { isValidTimezone, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { smartReply } from "../utils/smart-reply"
 
 // Track users waiting for goal/reminder/timezone input
-const pendingSettings = new Map<number, "goal" | "reminder" | "timezone">()
+const pendingSettings = new Map<number, "goal" | "protein" | "reminder" | "timezone">()
 
-function createMainKeyboard(): InlineKeyboard {
+export function createMainKeyboard(): InlineKeyboard {
   return new InlineKeyboard()
     .text("Change Provider", "settings:provider")
-    .text("Set Daily Goal", "settings:goal")
+    .text("Set Calorie Goal", "settings:goal")
     .row()
+    .text("Set Protein Goal", "settings:protein")
     .text("Set Reminder", "settings:reminder")
-    .text("Set Timezone", "settings:timezone")
     .row()
+    .text("Set Timezone", "settings:timezone")
     .text("Close", "settings:close")
 }
 
@@ -31,15 +32,17 @@ function createProviderKeyboard(currentProvider: string, availableProviders: str
   return keyboard
 }
 
-function formatSettings(user: {
+export function formatSettings(user: {
   ai_provider: string
   daily_goal: number | null
+  daily_protein_goal: number | null
   reminder_time: string | null
   reminder_mention: boolean
   timezone: string
 }): string {
   const provider = user.ai_provider.charAt(0).toUpperCase() + user.ai_provider.slice(1)
-  const goal = user.daily_goal ? `${user.daily_goal.toLocaleString()} cal` : "Not set"
+  const goal = user.daily_goal ? `${user.daily_goal.toLocaleString("en-US")} cal` : "Not set"
+  const proteinGoal = user.daily_protein_goal ? `${user.daily_protein_goal} g` : "Not set"
   const reminder = user.reminder_time
     ? `${user.reminder_time} (mention: ${user.reminder_mention ? "on" : "off"})`
     : "Off"
@@ -48,7 +51,8 @@ function formatSettings(user: {
   return (
     `⚙️ Your Settings\n\n` +
     `AI Provider: ${provider}\n` +
-    `Daily Goal: ${goal}\n` +
+    `Calorie Goal: ${goal}\n` +
+    `Protein Goal: ${proteinGoal}\n` +
     `Reminder: ${reminder}\n` +
     `Timezone: ${timezone}`
   )
@@ -105,8 +109,18 @@ export function createSettingsCallbackHandler(usersRepo: UsersRepository, aiServ
       case "goal": {
         pendingSettings.set(userId, "goal")
         await ctx.editMessageText(
-          "⚙️ Set Daily Goal\n\n" +
+          "⚙️ Set Calorie Goal\n\n" +
             "Enter your daily calorie goal (e.g., 2000), or 'off' to clear it."
+        )
+        await ctx.answerCallbackQuery()
+        break
+      }
+
+      case "protein": {
+        pendingSettings.set(userId, "protein")
+        await ctx.editMessageText(
+          "⚙️ Set Protein Goal\n\n" +
+            "Enter your daily protein goal in grams (e.g., 120), or 'off' to clear it."
         )
         await ctx.answerCallbackQuery()
         break
@@ -205,7 +219,27 @@ export function createSettingsMessageHandler(usersRepo: UsersRepository) {
 
       usersRepo.updateSettings(userId, { daily_goal: goal })
       pendingSettings.delete(userId)
-      await smartReply(ctx, `Daily goal set to ${goal.toLocaleString()} cal. Use /settings to view settings.`)
+      await smartReply(ctx, `Daily goal set to ${goal.toLocaleString("en-US")} cal. Use /settings to view settings.`)
+      return
+    }
+
+    if (pending === "protein") {
+      if (lower === "off" || lower === "clear") {
+        usersRepo.updateSettings(userId, { daily_protein_goal: null })
+        pendingSettings.delete(userId)
+        await smartReply(ctx, "Protein goal cleared. Use /settings to view settings.")
+        return
+      }
+
+      const goal = parseInt(text, 10)
+      if (isNaN(goal) || goal < 10 || goal > 500) {
+        await smartReply(ctx, "Please enter a number between 10 and 500, or 'off' to clear.")
+        return
+      }
+
+      usersRepo.updateSettings(userId, { daily_protein_goal: goal })
+      pendingSettings.delete(userId)
+      await smartReply(ctx, `Daily protein goal set to ${goal} g. Use /settings to view settings.`)
       return
     }
 
