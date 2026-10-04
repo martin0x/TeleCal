@@ -54,7 +54,7 @@ export function createBot() {
   bot.command("start", async (ctx) => {
     await smartReply(ctx,
       "Welcome to TeleCal! 🍽️\n\n" +
-        "Track your calories with AI-powered estimation.\n\n" +
+        "Track your calories and protein with AI-powered estimation.\n\n" +
         "Commands:\n" +
         "/log - Log what you ate\n" +
         "/today - See today's calories\n" +

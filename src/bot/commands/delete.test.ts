@@ -31,7 +31,7 @@ beforeEach(() => {
 
 function logItems(
   telegramId: number,
-  items: { description: string; calories: number; emoji?: string }[]
+  items: { description: string; calories: number; protein_g?: number | null; emoji?: string }[]
 ) {
   return foodLogsRepo.create(telegramId, 555, DATE, items).items
 }
@@ -46,7 +46,7 @@ describe("deleteAllToken", () => {
 
 describe("resolveDeleteCallback", () => {
   test("refuses a press by someone other than the owner", () => {
-    const [item] = logItems(OWNER, [{ description: "Ramen", calories: 520, emoji: "🍜" }])
+    const [item] = logItems(OWNER, [{ description: "Ramen", calories: 520, protein_g: 22, emoji: "🍜" }])
     const decision = resolveDeleteCallback({ action: "one", ownerId: OWNER, itemId: item.id! }, OTHER, foodLogsRepo)
 
     expect(decision).toEqual({ kind: "not_owner" })
@@ -54,10 +54,10 @@ describe("resolveDeleteCallback", () => {
   })
 
   test("deletes one item", () => {
-    const [item] = logItems(OWNER, [{ description: "Ramen", calories: 520, emoji: "🍜" }])
+    const [item] = logItems(OWNER, [{ description: "Ramen", calories: 520, protein_g: 22, emoji: "🍜" }])
     const decision = resolveDeleteCallback({ action: "one", ownerId: OWNER, itemId: item.id! }, OWNER, foodLogsRepo)
 
-    expect(decision).toEqual({ kind: "done", edit: "🗑 Deleted: 🍜 Ramen — 520 cal", toast: "Deleted" })
+    expect(decision).toEqual({ kind: "done", edit: "🗑 Deleted: 🍜 Ramen — 520 cal · 22 g", toast: "Deleted" })
     expect(foodLogsRepo.getItemsByDate(OWNER, DATE)).toHaveLength(0)
   })
 
@@ -76,8 +76,8 @@ describe("resolveDeleteCallback", () => {
 
   test("deletes all of the day's items when the list is unchanged", () => {
     const items = logItems(OWNER, [
-      { description: "Eggs", calories: 180, emoji: "🍳" },
-      { description: "Toast", calories: 150, emoji: "🍞" },
+      { description: "Eggs", calories: 180, protein_g: 12, emoji: "🍳" },
+      { description: "Toast", calories: 150, protein_g: 4, emoji: "🍞" },
     ])
     const decision = resolveDeleteCallback(
       { action: "all", ownerId: OWNER, date: DATE, token: deleteAllToken(items) },
@@ -87,7 +87,7 @@ describe("resolveDeleteCallback", () => {
 
     expect(decision).toEqual({
       kind: "done",
-      edit: "🗑 Deleted 2 entries (330 cal) for Fri, Sep 25.",
+      edit: "🗑 Deleted 2 entries (330 cal · 16 g protein) for Fri, Sep 25.",
       toast: "Deleted",
     })
     expect(foodLogsRepo.getItemsByDate(OWNER, DATE)).toHaveLength(0)
@@ -133,7 +133,7 @@ describe("createDeleteCallbackHandler", () => {
   }
 
   test("a press by someone else is refused without touching the message", async () => {
-    const [item] = logItems(OWNER, [{ description: "Ramen", calories: 520 }])
+    const [item] = logItems(OWNER, [{ description: "Ramen", calories: 520, protein_g: 22, emoji: "🍜" }])
     const ctx = await press(encodeDeleteCallback({ action: "one", ownerId: OWNER, itemId: item.id! }), OTHER)
 
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith("Only the person who started this can confirm it.")
@@ -142,11 +142,11 @@ describe("createDeleteCallbackHandler", () => {
   })
 
   test("a successful press edits the message in place", async () => {
-    const [item] = logItems(OWNER, [{ description: "Ramen", calories: 520, emoji: "🍜" }])
+    const [item] = logItems(OWNER, [{ description: "Ramen", calories: 520, protein_g: 22, emoji: "🍜" }])
     const ctx = await press(encodeDeleteCallback({ action: "one", ownerId: OWNER, itemId: item.id! }))
 
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith("Deleted")
-    expect(ctx.editMessageText).toHaveBeenCalledWith("🗑 Deleted: 🍜 Ramen — 520 cal", undefined)
+    expect(ctx.editMessageText).toHaveBeenCalledWith("🗑 Deleted: 🍜 Ramen — 520 cal · 22 g", undefined)
   })
 
   test("a stale press strips the keyboard", async () => {
@@ -166,13 +166,13 @@ describe("createDeleteCallbackHandler", () => {
 
   test("if answering the callback query fails, the message is still edited", async () => {
     const errorSpy = spyOn(console, "error").mockImplementation(() => {})
-    const [item] = logItems(OWNER, [{ description: "Ramen", calories: 520, emoji: "🍜" }])
+    const [item] = logItems(OWNER, [{ description: "Ramen", calories: 520, protein_g: 22, emoji: "🍜" }])
     const ctx = fakeCallbackCtx(encodeDeleteCallback({ action: "one", ownerId: OWNER, itemId: item.id! }), OWNER)
     ctx.answerCallbackQuery.mockImplementation(() => Promise.reject(new Error("query is too old")))
 
     await createDeleteCallbackHandler(foodLogsRepo)(ctx as unknown as Context)
 
-    expect(ctx.editMessageText).toHaveBeenCalledWith("🗑 Deleted: 🍜 Ramen — 520 cal", undefined)
+    expect(ctx.editMessageText).toHaveBeenCalledWith("🗑 Deleted: 🍜 Ramen — 520 cal · 22 g", undefined)
     expect(errorSpy).toHaveBeenCalledTimes(1)
     errorSpy.mockRestore()
   })

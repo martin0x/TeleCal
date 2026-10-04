@@ -3,7 +3,7 @@ import { Context, InlineKeyboard } from "grammy"
 import { FoodLogsRepository, FoodItem } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
 import { getTodayInTimezone, formatDateForDisplay, DEFAULT_TIMEZONE } from "../../utils/dates"
-import { shortHash } from "../../utils/format"
+import { shortHash, formatItemLine, formatTotals, sumTotals } from "../../utils/format"
 import { DeleteCallback, encodeDeleteCallback, parseDeleteCallback } from "../utils/callback-data"
 import { stripKeyboard, answerCallback } from "../utils/keyboard"
 import { smartReply, smartEdit } from "../utils/smart-reply"
@@ -21,10 +21,6 @@ interface DeleteState {
 const deleteStates = new Map<number, DeleteState>()
 
 const CONFIRM_FALLBACK = 'Tap a button above, or reply "yes" / "cancel".'
-
-function formatItemLine(item: FoodItem): string {
-  return `${item.emoji ?? "🍽️"} ${item.description} — ${item.calories} cal`
-}
 
 function formatItemsList(items: DeletableItem[]): string {
   return items.map((item, i) => `${i + 1}. ${formatItemLine(item)}`).join("\n")
@@ -53,7 +49,6 @@ async function promptConfirmAll(
   targetDate: string,
   items: DeletableItem[]
 ): Promise<void> {
-  const totalCalories = items.reduce((sum, item) => sum + item.calories, 0)
   const keyboard = new InlineKeyboard()
     .text(
       "🗑 Delete all",
@@ -62,7 +57,7 @@ async function promptConfirmAll(
     .text("✖️ Cancel", encodeDeleteCallback({ action: "cxl", ownerId }))
   await smartReply(
     ctx,
-    `Delete all ${items.length} entries for ${formatDateForDisplay(targetDate)}? (${totalCalories} cal total)`,
+    `Delete all ${items.length} entries for ${formatDateForDisplay(targetDate)}? (${formatTotals(sumTotals(items))} total)`,
     { reply_markup: keyboard }
   )
 }
@@ -181,7 +176,7 @@ export function createDeleteMessageHandler(foodLogsRepo: FoodLogsRepository) {
           const item = state.items[state.selectedItemIndex!]
           foodLogsRepo.deleteItem(item.id!)
           deleteStates.delete(userId)
-          await smartReply(ctx, `Deleted: ${item.description} (${item.calories} cal)`)
+          await smartReply(ctx, `Deleted: ${formatItemLine(item)}`)
           return
         }
         await smartReply(ctx, CONFIRM_FALLBACK)
@@ -191,10 +186,9 @@ export function createDeleteMessageHandler(foodLogsRepo: FoodLogsRepository) {
       case "confirm_all": {
         if (text === "yes" || text === "y") {
           const count = state.items.length
-          const totalCalories = state.items.reduce((sum, item) => sum + item.calories, 0)
           foodLogsRepo.deleteAllForDate(userId, state.targetDate)
           deleteStates.delete(userId)
-          await smartReply(ctx, `Deleted ${count} entries (${totalCalories} cal) for ${formatDateForDisplay(state.targetDate)}.`)
+          await smartReply(ctx, `Deleted ${count} entries (${formatTotals(sumTotals(state.items))}) for ${formatDateForDisplay(state.targetDate)}.`)
           return
         }
         await smartReply(ctx, CONFIRM_FALLBACK)
@@ -233,11 +227,10 @@ export function resolveDeleteCallback(
       if (items.length === 0 || deleteAllToken(items) !== cb.token) {
         return { kind: "gone", toast: "The list changed — run /delete again." }
       }
-      const totalCalories = items.reduce((sum, item) => sum + item.calories, 0)
       foodLogsRepo.deleteAllForDate(presserId, cb.date)
       return {
         kind: "done",
-        edit: `🗑 Deleted ${items.length} entries (${totalCalories} cal) for ${formatDateForDisplay(cb.date)}.`,
+        edit: `🗑 Deleted ${items.length} entries (${formatTotals(sumTotals(items))}) for ${formatDateForDisplay(cb.date)}.`,
         toast: "Deleted",
       }
     }
