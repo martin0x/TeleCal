@@ -175,8 +175,8 @@ export function createAdminCommand(
           return
         }
         repo.add(targetId, userId)
-        // Close any pending request so the two paths can't disagree.
-        accessRequestsRepo.decide(targetId, "approved", userId)
+        // Close any open request (pending or declined) so the two paths can't disagree.
+        accessRequestsRepo.markApproved(targetId, userId)
         await smartReply(ctx, `✓ Added user ${targetId} to allowlist`)
         break
       }

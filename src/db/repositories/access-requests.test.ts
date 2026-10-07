@@ -62,6 +62,34 @@ describe("decide", () => {
   })
 })
 
+describe("markApproved", () => {
+  test("approves a pending request", () => {
+    repo.request(USER, "maria", "Maria")
+    repo.markApproved(USER, ADMIN)
+    expect(repo.find(USER)).toMatchObject({ status: "approved", decided_by: ADMIN })
+    expect(repo.find(USER)?.decided_at).not.toBeNull()
+  })
+
+  test("approves a declined request", () => {
+    repo.request(USER, "maria", "Maria")
+    repo.decide(USER, "declined", ADMIN)
+    repo.markApproved(USER, 2)
+    expect(repo.find(USER)).toMatchObject({ status: "approved", decided_by: 2 })
+  })
+
+  test("leaves decided_by unchanged when already approved", () => {
+    repo.request(USER, "maria", "Maria")
+    repo.decide(USER, "approved", ADMIN)
+    repo.markApproved(USER, 2)
+    expect(repo.find(USER)).toMatchObject({ status: "approved", decided_by: ADMIN })
+  })
+
+  test("is a no-op when there is no row", () => {
+    repo.markApproved(USER, ADMIN)
+    expect(repo.find(USER)).toBeNull()
+  })
+})
+
 describe("listPending", () => {
   test("lists only pending requests, capped by limit", () => {
     repo.request(1, "a", "A")
