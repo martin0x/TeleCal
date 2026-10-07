@@ -44,12 +44,15 @@ export function formatAccessRequest(
 ): string {
   const name = req.first_name?.trim() || "Unknown"
   const handle = req.username ? ` (@${req.username})` : ""
-  return `Access request: ${name}${handle}, id ${req.telegram_id}`
+  return `Access request from id ${req.telegram_id}: ${name}${handle}`
 }
 
 export type NotifyAdmins = (req: AccessRequest) => Promise<void>
 
 export function createAdminNotifier(api: Pick<Api, "sendMessage">, adminIds: number[]): NotifyAdmins {
+  if (adminIds.length === 0) {
+    console.warn("[access] ADMIN_USERS is empty: access requests will be stored but nobody can approve them")
+  }
   return async (req) => {
     for (const adminId of adminIds) {
       try {

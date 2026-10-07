@@ -62,18 +62,42 @@ describe("keyboards and parsing", () => {
 })
 
 describe("formatAccessRequest", () => {
-  test("includes name, handle and id", () => {
+  test("includes id first, then name and handle", () => {
     expect(formatAccessRequest({ telegram_id: USER, username: "maria", first_name: "Maria" })).toBe(
-      "Access request: Maria (@maria), id 42"
+      "Access request from id 42: Maria (@maria)"
     )
   })
 
   test("copes with missing names", () => {
-    expect(formatAccessRequest({ telegram_id: USER, username: null, first_name: null })).toBe("Access request: Unknown, id 42")
+    expect(formatAccessRequest({ telegram_id: USER, username: null, first_name: null })).toBe(
+      "Access request from id 42: Unknown"
+    )
   })
 })
 
 describe("createAdminNotifier", () => {
+  test("warns once at creation when there are no admins to notify", () => {
+    const warnSpy = spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      createAdminNotifier({ sendMessage: mock(() => Promise.resolve({})) } as unknown as Pick<Api, "sendMessage">, [])
+      expect(warnSpy).toHaveBeenCalledWith(
+        "[access] ADMIN_USERS is empty: access requests will be stored but nobody can approve them"
+      )
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  test("does not warn when there are admins", () => {
+    const warnSpy = spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      createAdminNotifier({ sendMessage: mock(() => Promise.resolve({})) } as unknown as Pick<Api, "sendMessage">, [ADMIN])
+      expect(warnSpy).not.toHaveBeenCalled()
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   test("messages every admin with decision buttons and survives a failed send", async () => {
     accessRequestsRepo.request(USER, "maria", "Maria")
     const sendMessage = mock((chatId: number) => (chatId === 2 ? Promise.reject(new Error("blocked")) : Promise.resolve({})))
@@ -84,7 +108,7 @@ describe("createAdminNotifier", () => {
     expect(sendMessage).toHaveBeenCalledTimes(3)
     const [chatId, text, options] = sendMessage.mock.calls[0] as unknown as [number, string, { reply_markup: unknown }]
     expect(chatId).toBe(ADMIN)
-    expect(text).toBe("Access request: Maria (@maria), id 42")
+    expect(text).toBe("Access request from id 42: Maria (@maria)")
     expect(options.reply_markup).toEqual(decisionKeyboard(USER))
   })
 })
@@ -102,7 +126,7 @@ describe("sendPendingRequests", () => {
     const reply = mock(() => Promise.resolve())
     await sendPendingRequests(accessRequestsRepo, reply)
     expect(reply).toHaveBeenCalledTimes(2)
-    expect(reply.mock.calls[0]).toEqual(["Access request: Maria (@maria), id 42", decisionKeyboard(USER)] as never)
+    expect(reply.mock.calls[0]).toEqual(["Access request from id 42: Maria (@maria)", decisionKeyboard(USER)] as never)
   })
 })
 
@@ -117,7 +141,7 @@ describe("createAccessDecisionHandler", () => {
 
     expect(allowedUsersRepo.isAllowed(USER)).toBe(true)
     expect(accessRequestsRepo.find(USER)?.status).toBe("approved")
-    expect(ctx.editMessageText).toHaveBeenCalledWith("Access request: Maria (@maria), id 42\n\nApproved by @boss", undefined)
+    expect(ctx.editMessageText).toHaveBeenCalledWith("Access request from id 42: Maria (@maria)\n\nApproved by @boss", undefined)
     expect(ctx.api.sendMessage).toHaveBeenCalledWith(USER, APPROVED_MESSAGE)
   })
 
@@ -127,7 +151,7 @@ describe("createAccessDecisionHandler", () => {
 
     expect(allowedUsersRepo.isAllowed(USER)).toBe(false)
     expect(accessRequestsRepo.find(USER)?.status).toBe("declined")
-    expect(ctx.editMessageText).toHaveBeenCalledWith("Access request: Maria (@maria), id 42\n\nDeclined by @boss", undefined)
+    expect(ctx.editMessageText).toHaveBeenCalledWith("Access request from id 42: Maria (@maria)\n\nDeclined by @boss", undefined)
     expect(ctx.api.sendMessage).toHaveBeenCalledWith(USER, DECLINED_MESSAGE)
   })
 
