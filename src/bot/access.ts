@@ -1,0 +1,137 @@
+// src/bot/access.ts
+// The access-request flow: a non-allowlisted user taps Request access (see the
+// allowlist middleware), admins get a DM with Approve / Decline, and the
+// decision handler here applies it.
+import { InlineKeyboard, type Api, type Context } from "grammy"
+import type { AccessRequest, AccessRequestsRepository } from "../db/repositories/access-requests"
+import type { AllowedUsersRepository } from "../db/repositories/allowed-users"
+import { HELP_TEXT } from "./help"
+import { smartEdit } from "./utils/smart-reply"
+
+export const ACCESS_REQUEST_DATA = "access:req"
+
+export const INVITE_PROMPT = "TeleCal is invite-only while in beta. Want in?"
+export const REQUEST_SENT = "Request sent. You'll get a message here once you're approved."
+export const REQUEST_PENDING = "Your request is in. You'll get a message here once you're approved."
+export const ALREADY_PENDING = "Already requested. Hang tight."
+export const NOT_APPROVED = "Your request wasn't approved."
+export const INVITE_ONLY = "TeleCal is invite-only."
+export const APPROVED_MESSAGE = `You're in.\n\n${HELP_TEXT}`
+export const DECLINED_MESSAGE = "Thanks for your interest. TeleCal can't take you on right now."
+
+const MAX_PENDING_SHOWN = 10
+
+export function requestAccessKeyboard(): InlineKeyboard {
+  return new InlineKeyboard().text("Request access", ACCESS_REQUEST_DATA)
+}
+
+export function decisionKeyboard(telegramId: number): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("Approve", `access:ok:${telegramId}`)
+    .text("Decline", `access:no:${telegramId}`)
+}
+
+export function parseDecision(
+  data: string | undefined
+): { status: "approved" | "declined"; telegramId: number } | null {
+  const match = data?.match(/^access:(ok|no):(\d+)$/)
+  if (!match) return null
+  return { status: match[1] === "ok" ? "approved" : "declined", telegramId: Number(match[2]) }
+}
+
+export function formatAccessRequest(
+  req: Pick<AccessRequest, "telegram_id" | "username" | "first_name">
+): string {
+  const name = req.first_name?.trim() || "Unknown"
+  const handle = req.username ? ` (@${req.username})` : ""
+  return `Access request: ${name}${handle}, id ${req.telegram_id}`
+}
+
+export type NotifyAdmins = (req: AccessRequest) => Promise<void>
+
+export function createAdminNotifier(api: Pick<Api, "sendMessage">, adminIds: number[]): NotifyAdmins {
+  return async (req) => {
+    for (const adminId of adminIds) {
+      try {
+        await api.sendMessage(adminId, formatAccessRequest(req), {
+          reply_markup: decisionKeyboard(req.telegram_id),
+        })
+      } catch (error) {
+        // Usually an admin who never started the bot. /admin requests still lists it.
+        console.error(`[access] could not notify admin ${adminId}:`, error)
+      }
+    }
+  }
+}
+
+/** /admin requests: one message per pending request, each with its own buttons. */
+export async function sendPendingRequests(
+  repo: AccessRequestsRepository,
+  reply: (text: string, keyboard?: InlineKeyboard) => Promise<void>
+): Promise<void> {
+  const pending = repo.listPending(MAX_PENDING_SHOWN)
+  if (pending.length === 0) {
+    await reply("No pending requests.")
+    return
+  }
+  for (const req of pending) {
+    await reply(formatAccessRequest(req), decisionKeyboard(req.telegram_id))
+  }
+}
+
+export interface AccessDecisionDeps {
+  accessRequestsRepo: AccessRequestsRepository
+  allowedUsersRepo: AllowedUsersRepository
+  adminIds: number[]
+}
+
+/** Handles access: callbacks that get past the allowlist (admins and allowlisted users). */
+export function createAccessDecisionHandler(deps: AccessDecisionDeps) {
+  const { accessRequestsRepo, allowedUsersRepo, adminIds } = deps
+
+  return async (ctx: Context): Promise<void> => {
+    const data = ctx.callbackQuery?.data
+    if (data === ACCESS_REQUEST_DATA) {
+      await ctx.answerCallbackQuery({ text: "You already have access." })
+      return
+    }
+
+    const decision = parseDecision(data)
+    if (!decision) {
+      await ctx.answerCallbackQuery()
+      return
+    }
+
+    const adminId = ctx.from?.id
+    if (!adminId || !adminIds.includes(adminId)) {
+      await ctx.answerCallbackQuery({ text: "Admins only." })
+      return
+    }
+
+    const decided = accessRequestsRepo.decide(decision.telegramId, decision.status, adminId)
+    if (!decided) {
+      const current = accessRequestsRepo.find(decision.telegramId)
+      await ctx.answerCallbackQuery({ text: current ? `Already ${current.status}.` : "Request not found." })
+      return
+    }
+
+    if (decided.status === "approved") {
+      allowedUsersRepo.add(decided.telegram_id, adminId)
+    }
+
+    await ctx.answerCallbackQuery()
+    const by = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name ?? String(adminId)
+    const verb = decided.status === "approved" ? "Approved" : "Declined"
+    await smartEdit(ctx, `${formatAccessRequest(decided)}\n\n${verb} by ${by}`)
+
+    try {
+      await ctx.api.sendMessage(
+        decided.telegram_id,
+        decided.status === "approved" ? APPROVED_MESSAGE : DECLINED_MESSAGE
+      )
+    } catch (error) {
+      // The decision stands; the user just won't hear about it until they message the bot.
+      console.error(`[access] could not message user ${decided.telegram_id}:`, error)
+    }
+  }
+}
