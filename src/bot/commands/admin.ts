@@ -9,6 +9,8 @@ import { FoodLogsRepository } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
 import { AIService } from "../../ai/service"
 import { runProteinBackfill, DEFAULT_CHUNK_SIZE } from "../../jobs/backfill-protein"
+import { AccessRequestsRepository } from "../../db/repositories/access-requests"
+import { sendPendingRequests } from "../access"
 
 const MAX_USER_ROWS = 10
 
@@ -135,7 +137,12 @@ export async function backfillProtein(
   }
 }
 
-export function createAdminCommand(repo: AllowedUsersRepository, usageRepo: UsageRepository, deps: AdminDeps) {
+export function createAdminCommand(
+  repo: AllowedUsersRepository,
+  usageRepo: UsageRepository,
+  deps: AdminDeps,
+  accessRequestsRepo: AccessRequestsRepository
+) {
   return async (ctx: Context) => {
     const userId = ctx.from?.id
     if (!userId || !config.adminUsers.includes(userId)) {
@@ -153,6 +160,7 @@ export function createAdminCommand(repo: AllowedUsersRepository, usageRepo: Usag
           "/admin add <user_id>\n" +
           "/admin remove <user_id>\n" +
           "/admin list\n" +
+          "/admin requests\n" +
           "/admin usage [7d|30d|all]\n" +
           "/admin backfill-protein"
       )
@@ -167,6 +175,8 @@ export function createAdminCommand(repo: AllowedUsersRepository, usageRepo: Usag
           return
         }
         repo.add(targetId, userId)
+        // Close any pending request so the two paths can't disagree.
+        accessRequestsRepo.decide(targetId, "approved", userId)
         await smartReply(ctx, `✓ Added user ${targetId} to allowlist`)
         break
       }
@@ -206,6 +216,13 @@ export function createAdminCommand(repo: AllowedUsersRepository, usageRepo: Usag
         // backfill can take a minute. ctx.reply still works after the handler returns.
         void backfillProtein(deps, userId, ctx.chat?.id ?? null, (text) => smartReply(ctx, text)).catch((error) =>
           console.error("[backfill] unhandled:", error)
+        )
+        break
+      }
+
+      case "requests": {
+        await sendPendingRequests(accessRequestsRepo, (text, keyboard) =>
+          smartReply(ctx, text, keyboard ? { reply_markup: keyboard } : undefined)
         )
         break
       }

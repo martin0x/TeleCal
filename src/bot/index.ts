@@ -9,7 +9,10 @@ import { ConversationsRepository } from "../db/repositories/conversations"
 import { PendingRepository } from "../db/repositories/pending"
 import { CacheRepository } from "../db/repositories/cache"
 import { UsageRepository } from "../db/repositories/usage"
+import { AccessRequestsRepository } from "../db/repositories/access-requests"
 import { createAllowlistMiddleware } from "./middleware/allowlist"
+import { createAccessDecisionHandler, createAdminNotifier } from "./access"
+import { HELP_TEXT } from "./help"
 import { createAdminCommand } from "./commands/admin"
 import { createTodayCommand } from "./commands/today"
 import { createWeekCommand, createMonthCommand } from "./commands/stats"
@@ -42,7 +45,15 @@ export function createBot() {
   const aiService = new AIService(new CacheRepository(db), usageRepo)
   const logFlow = new LogFlow(conversationsRepo, foodLogsRepo, pendingRepo, aiService)
 
-  bot.use(createAllowlistMiddleware(allowedUsersRepo))
+  const accessRequestsRepo = new AccessRequestsRepository(db)
+  bot.use(
+    createAllowlistMiddleware({
+      allowedUsersRepo,
+      accessRequestsRepo,
+      adminIds: config.adminUsers,
+      notifyAdmins: createAdminNotifier(bot.api, config.adminUsers),
+    })
+  )
 
   bot.use(async (ctx, next) => {
     if (ctx.from) {
@@ -52,24 +63,10 @@ export function createBot() {
   })
 
   bot.command("start", async (ctx) => {
-    await smartReply(ctx,
-      "Welcome to TeleCal! 🍽️\n\n" +
-        "Track your calories and protein with AI-powered estimation.\n\n" +
-        "Commands:\n" +
-        "/log - Log what you ate\n" +
-        "/today - See today's calories and protein\n" +
-        "/week - See past 7 days\n" +
-        "/month - See past 30 days\n" +
-        "/edit - Edit a food entry\n" +
-        "/delete - Delete a food entry\n" +
-        "/pending - View pending estimations\n" +
-        "/usage - See your AI token usage\n" +
-        "/settings - Change preferences\n\n" +
-        'Tip: Type "cancel" to abort any active conversation.'
-    )
+    await smartReply(ctx, HELP_TEXT)
   })
 
-  bot.command("admin", createAdminCommand(allowedUsersRepo, usageRepo, { foodLogsRepo, usersRepo, aiService }))
+  bot.command("admin", createAdminCommand(allowedUsersRepo, usageRepo, { foodLogsRepo, usersRepo, aiService }, accessRequestsRepo))
   bot.command("usage", createUsageCommand(usageRepo))
   bot.command("today", createTodayCommand(foodLogsRepo, usersRepo))
   bot.command("week", createWeekCommand(foodLogsRepo, usersRepo))
@@ -94,6 +91,9 @@ export function createBot() {
     }
     if (data?.startsWith("del:")) {
       return createDeleteCallbackHandler(foodLogsRepo)(ctx)
+    }
+    if (data?.startsWith("access:")) {
+      return createAccessDecisionHandler({ accessRequestsRepo, allowedUsersRepo, adminIds: config.adminUsers })(ctx)
     }
     return next()
   })
