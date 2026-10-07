@@ -119,10 +119,15 @@ export function createAccessDecisionHandler(deps: AccessDecisionDeps) {
       allowedUsersRepo.add(decided.telegram_id, adminId)
     }
 
-    await ctx.answerCallbackQuery()
-    const by = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name ?? String(adminId)
-    const verb = decided.status === "approved" ? "Approved" : "Declined"
-    await smartEdit(ctx, `${formatAccessRequest(decided)}\n\n${verb} by ${by}`)
+    try {
+      await ctx.answerCallbackQuery()
+      const by = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name ?? String(adminId)
+      const verb = decided.status === "approved" ? "Approved" : "Declined"
+      await smartEdit(ctx, `${formatAccessRequest(decided)}\n\n${verb} by ${by}`)
+    } catch (error) {
+      // The decision stands either way; keep going so the user still hears about it.
+      console.error("[access] could not update the admin message:", error)
+    }
 
     try {
       await ctx.api.sendMessage(

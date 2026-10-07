@@ -1,5 +1,5 @@
 // src/bot/access.test.ts
-import { describe, test, expect, beforeEach, mock } from "bun:test"
+import { describe, test, expect, beforeEach, mock, spyOn } from "bun:test"
 import type { Api, Context } from "grammy"
 import { createTestDb } from "../db/test-helpers"
 import { AccessRequestsRepository } from "../db/repositories/access-requests"
@@ -157,9 +157,22 @@ describe("createAccessDecisionHandler", () => {
   })
 
   test("still succeeds when the user can't be messaged", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {})
     const ctx = decisionCtx(`access:ok:${USER}`, admin)
     ctx.api.sendMessage = mock(() => Promise.reject(new Error("bot was blocked by the user")))
     await handler()(ctx as unknown as Context)
     expect(allowedUsersRepo.isAllowed(USER)).toBe(true)
+    errorSpy.mockRestore()
+  })
+
+  test("still messages the user when the admin message can't be edited", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {})
+    const ctx = decisionCtx(`access:ok:${USER}`, admin)
+    ctx.editMessageText = mock(() => Promise.reject(new Error("message to edit not found")))
+    await handler()(ctx as unknown as Context)
+
+    expect(allowedUsersRepo.isAllowed(USER)).toBe(true)
+    expect(ctx.api.sendMessage).toHaveBeenCalledWith(USER, APPROVED_MESSAGE)
+    errorSpy.mockRestore()
   })
 })
