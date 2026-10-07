@@ -147,10 +147,11 @@ src/
 ├── db/               # SQLite database
 │   ├── schema.sql    # Database schema
 │   └── repositories/ # Data access layer
-├── web/              # Mini App web server
+├── web/              # Landing page and Mini App web server
 │   ├── server.ts     # Bun HTTP server
 │   ├── auth.ts       # Telegram auth validation
-│   └── views/        # Frontend
+│   ├── public/       # Landing page images (served at /assets/*)
+│   └── views/        # landing.html, app.html
 └── jobs/             # Background jobs
     ├── reminders.ts  # Daily notifications
     └── retry-pending.ts # Retry failed AI calls
