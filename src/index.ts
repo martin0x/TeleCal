@@ -13,8 +13,17 @@ console.log("Database initialized")
 
 const { bot, usersRepo, foodLogsRepo, pendingRepo, aiService } = createBot()
 
+// Fetches the bot's own username (getMe) for the landing page's t.me links.
+// bot.start() below reuses it instead of calling getMe again.
+await bot.init()
+
 // Start web server
-const webServer = startWebServer({ usersRepo, foodLogsRepo })
+const webServer = startWebServer({
+  usersRepo,
+  foodLogsRepo,
+  botUsername: bot.botInfo.username,
+  baseUrl: config.web.baseUrl,
+})
 console.log(`Web server running on port ${config.web.port}`)
 
 // Start background jobs

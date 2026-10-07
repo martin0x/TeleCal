@@ -1,4 +1,6 @@
 // src/web/server.ts
+import { readFileSync } from "fs"
+import { join } from "path"
 import { config } from "../config"
 import { UsersRepository } from "../db/repositories/users"
 import { FoodLogsRepository } from "../db/repositories/food-logs"
@@ -8,48 +10,101 @@ import { createApiHandlers } from "./api"
 export interface WebServerDeps {
   usersRepo: UsersRepository
   foodLogsRepo: FoodLogsRepository
+  /** Without the @. Fills {{BOT_USERNAME}} in the landing page. */
+  botUsername: string
+  /** APP_URL without a trailing slash. Fills {{BASE_URL}}. */
+  baseUrl: string
+}
+
+const VIEWS_DIR = join(import.meta.dir, "views")
+const PUBLIC_DIR = join(import.meta.dir, "public")
+
+// The name pattern is the traversal guard: no slashes, dots only before the extension.
+const ASSET_PATH = /^\/assets\/([a-z0-9-]+\.(svg|png|jpg))$/
+const ASSET_TYPES: Record<string, string> = {
+  svg: "image/svg+xml",
+  png: "image/png",
+  jpg: "image/jpeg",
+}
+
+function escapeAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+}
+
+export function renderLanding(template: string, values: { botUsername: string; baseUrl: string }): string {
+  return template
+    .replaceAll("{{BOT_USERNAME}}", escapeAttribute(values.botUsername))
+    .replaceAll("{{BASE_URL}}", escapeAttribute(values.baseUrl))
+}
+
+function loadLanding(values: { botUsername: string; baseUrl: string }): string | null {
+  try {
+    return renderLanding(readFileSync(join(VIEWS_DIR, "landing.html"), "utf-8"), values)
+  } catch (error) {
+    console.error("[web] landing page unavailable:", error)
+    return null
+  }
+}
+
+export function createFetchHandler(deps: WebServerDeps) {
+  const { usersRepo, foodLogsRepo } = deps
+  const api = createApiHandlers({ usersRepo, foodLogsRepo })
+  // Rendered once: the template and both values are fixed for the process lifetime.
+  const landing = loadLanding({ botUsername: deps.botUsername, baseUrl: deps.baseUrl })
+
+  return async (request: Request): Promise<Response> => {
+    const url = new URL(request.url)
+    const path = url.pathname
+
+    if (path === "/" || path === "/index.html") {
+      if (landing === null) {
+        return new Response("Service unavailable", { status: 503 })
+      }
+      return new Response(landing, {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      })
+    }
+
+    if (path === "/app" || path === "/app/") {
+      return serveMiniApp()
+    }
+
+    const asset = path.match(ASSET_PATH)
+    if (asset) {
+      return serveAsset(asset[1], asset[2])
+    }
+
+    // API routes require authentication
+    if (path.startsWith("/api/")) {
+      const initData = extractAuthHeader(request)
+      const user = initData
+        ? validateInitData(initData, config.telegram.botToken)
+        : null
+
+      if (!user) {
+        return jsonResponse({ error: "Unauthorized" }, 401)
+      }
+
+      return handleApiRoute(path, url, user, api)
+    }
+
+    return new Response("Not found", { status: 404 })
+  }
 }
 
 export function startWebServer(deps: WebServerDeps) {
-  const { usersRepo, foodLogsRepo } = deps
-  const api = createApiHandlers({ usersRepo, foodLogsRepo })
-
-  const server = Bun.serve({
+  return Bun.serve({
     port: config.web.port,
-    fetch: async (request) => {
-      const url = new URL(request.url)
-      const path = url.pathname
-
-      // Serve Mini App HTML
-      if (path === "/" || path === "/index.html") {
-        return serveHtml()
-      }
-
-      // API routes require authentication
-      if (path.startsWith("/api/")) {
-        const initData = extractAuthHeader(request)
-        const user = initData
-          ? validateInitData(initData, config.telegram.botToken)
-          : null
-
-        if (!user) {
-          return jsonResponse({ error: "Unauthorized" }, 401)
-        }
-
-        return handleApiRoute(path, url, user, api)
-      }
-
-      // 404 for everything else
-      return new Response("Not found", { status: 404 })
-    },
+    fetch: createFetchHandler(deps),
   })
-
-  return server
 }
 
-async function serveHtml(): Promise<Response> {
-  const htmlPath = new URL("./views/app.html", import.meta.url).pathname
-  const file = Bun.file(htmlPath)
+async function serveMiniApp(): Promise<Response> {
+  const file = Bun.file(join(VIEWS_DIR, "app.html"))
 
   if (!(await file.exists())) {
     return new Response("Mini App not found", { status: 404 })
@@ -57,6 +112,21 @@ async function serveHtml(): Promise<Response> {
 
   return new Response(file, {
     headers: { "Content-Type": "text/html; charset=utf-8" },
+  })
+}
+
+async function serveAsset(name: string, extension: string): Promise<Response> {
+  const file = Bun.file(join(PUBLIC_DIR, name))
+
+  if (!(await file.exists())) {
+    return new Response("Not found", { status: 404 })
+  }
+
+  return new Response(file, {
+    headers: {
+      "Content-Type": ASSET_TYPES[extension],
+      "Cache-Control": "public, max-age=86400",
+    },
   })
 }
 
