@@ -9,6 +9,11 @@ set -euo pipefail
 OUT=src/web/public
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
+if [ ! -x "$CHROME" ]; then
+  echo "error: Google Chrome not found at $CHROME" >&2
+  exit 1
+fi
+
 "$CHROME" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=1 \
   --window-size=1200,630 --screenshot="$OUT/og.png" "file://$PWD/scripts/og.html" 2>/dev/null
 echo "wrote $OUT/og.png"
