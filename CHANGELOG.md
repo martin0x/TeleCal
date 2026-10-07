@@ -8,8 +8,25 @@ tied to release tags.
 
 ## [Unreleased]
 
+### Added
+
+- **Public landing page at `/`**, with a Request access button.
+- **In-bot access requests.** Strangers get a Request access button; admins
+  get Approve/Decline in one tap.
+- **`/admin requests`** — lists pending access requests, each with its own
+  Approve/Decline buttons.
+- **`scripts/build-landing-assets.sh`** — rebuilds the landing page's images
+  (the `og:image` preview and phone screenshots) from raw screenshots dropped
+  in `scripts/screenshots/`.
+
 ### Changed
 
+- **The Mini App moved to `/app`.** Old View Charts buttons redirect
+  automatically.
+- **Non-allowlisted users now get an invite prompt** instead of
+  "⛔ invite-only".
+- **`/admin add` also approves any open access request** for that user,
+  pending or declined, so the two paths can't disagree.
 - **`/log` confirmation uses buttons.** `✅ Log {total} cal`, `✏️ Change` and
   `✖️ Cancel` replace typing "yes"/"no". After a tap the message is edited in
   place, so it still shows exactly what was confirmed. Typing still works.
