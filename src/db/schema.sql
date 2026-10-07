@@ -7,6 +7,17 @@ CREATE TABLE IF NOT EXISTS allowed_users (
   added_at TEXT DEFAULT (datetime('now'))
 );
 
+-- Access requests from non-allowlisted users (deep link from the landing page)
+CREATE TABLE IF NOT EXISTS access_requests (
+  telegram_id INTEGER PRIMARY KEY,
+  username TEXT,
+  first_name TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',   -- pending | approved | declined
+  requested_at TEXT DEFAULT (datetime('now')),
+  decided_at TEXT,
+  decided_by INTEGER
+);
+
 -- Users and their preferences
 CREATE TABLE IF NOT EXISTS users (
   telegram_id INTEGER PRIMARY KEY,
