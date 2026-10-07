@@ -46,6 +46,21 @@ describe("routes", () => {
     expect(body).not.toContain("{{")
   })
 
+  test("/ carries Open Graph and Twitter card tags with absolute image URLs", async () => {
+    const body = await (await get("/")).text()
+    const meta = (key: string) =>
+      body.match(new RegExp(`<meta (?:property|name)="${key}" content="([^"]*)">`))?.[1]
+
+    expect(meta("og:image")).toBe("https://telecal.example/assets/og.png")
+    expect(meta("og:image:type")).toBe("image/png")
+    expect(meta("og:image:alt")).toStartWith("TeleCal: track calories by just texting.")
+    expect(meta("og:locale")).toBe("en_US")
+    expect(meta("twitter:image")).toBe(meta("og:image"))
+    expect(meta("twitter:image:alt")).toBe(meta("og:image:alt"))
+    expect(meta("twitter:title")).toBe(meta("og:title"))
+    expect(meta("twitter:description")).toBe(meta("og:description"))
+  })
+
   test("/ redirects Telegram Web App launches to /app", async () => {
     const body = await (await get("/")).text()
     expect(body).toContain('location.replace("/app" + location.hash)')
