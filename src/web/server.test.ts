@@ -66,6 +66,12 @@ describe("routes", () => {
     expect(res.headers.get("Cache-Control")).toBe("public, max-age=86400")
   })
 
+  test("/assets/og.png is served as PNG", async () => {
+    const res = await get("/assets/og.png")
+    expect(res.status).toBe(200)
+    expect(res.headers.get("Content-Type")).toBe("image/png")
+  })
+
   test("asset paths outside the pattern are 404", async () => {
     for (const path of ["/assets/../config.ts", "/assets/%2e%2e%2fconfig.ts", "/assets/x.html", "/assets/missing.png", "/assets/Favicon.svg"]) {
       expect((await get(path)).status).toBe(404)
