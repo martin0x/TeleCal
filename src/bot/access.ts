@@ -11,6 +11,8 @@ import { smartEdit } from "./utils/smart-reply"
 export const ACCESS_REQUEST_DATA = "access:req"
 
 export const INVITE_PROMPT = "TeleCal is invite-only while in beta. Want in?"
+export const GROUP_INVITE_PROMPT =
+  "TeleCal is invite-only while in beta. Message me privately to request access."
 export const REQUEST_SENT = "Request sent. You'll get a message here once you're approved."
 export const REQUEST_PENDING = "Your request is in. You'll get a message here once you're approved."
 export const ALREADY_PENDING = "Already requested. Hang tight."
@@ -23,6 +25,11 @@ const MAX_PENDING_SHOWN = 10
 
 export function requestAccessKeyboard(): InlineKeyboard {
   return new InlineKeyboard().text("Request access", ACCESS_REQUEST_DATA)
+}
+
+/** For groups: a stranger must DM the bot to request access (see GROUP_INVITE_PROMPT). */
+export function privateRequestKeyboard(botUsername: string): InlineKeyboard {
+  return new InlineKeyboard().url("Request access", `https://t.me/${botUsername}?start=access`)
 }
 
 export function decisionKeyboard(telegramId: number): InlineKeyboard {

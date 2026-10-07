@@ -5,11 +5,13 @@ import { AccessRequestsRepository } from "../../db/repositories/access-requests"
 import {
   ACCESS_REQUEST_DATA,
   ALREADY_PENDING,
+  GROUP_INVITE_PROMPT,
   INVITE_ONLY,
   INVITE_PROMPT,
   NOT_APPROVED,
   REQUEST_PENDING,
   REQUEST_SENT,
+  privateRequestKeyboard,
   requestAccessKeyboard,
   type NotifyAdmins,
 } from "../access"
@@ -68,10 +70,29 @@ export function createAllowlistMiddleware(deps: AllowlistDeps) {
       return
     }
 
-    if (!ctx.chat) return
+    // Drops my_chat_member, edited_message, channel posts, etc. — anything
+    // that isn't a chat message has no text to reply to and nowhere sane to
+    // reply into.
+    if (!ctx.message) return
 
-    if (accessRequestsRepo.find(userId)?.status === "pending") {
+    if (ctx.chat?.type !== "private") {
+      // Only reply to commands, and only with a DM link: a group reply's
+      // "Request access" button would file the request from the group, and
+      // the eventual approval DM would 403 if the stranger never opened a
+      // private chat with the bot. No access request is created from here.
+      if (ctx.message.text?.startsWith("/")) {
+        await smartReply(ctx, GROUP_INVITE_PROMPT, { reply_markup: privateRequestKeyboard(ctx.me.username) })
+      }
+      return
+    }
+
+    const existing = accessRequestsRepo.find(userId)
+    if (existing?.status === "pending") {
       await smartReply(ctx, REQUEST_PENDING)
+      return
+    }
+    if (existing?.status === "declined") {
+      await smartReply(ctx, NOT_APPROVED)
       return
     }
     await smartReply(ctx, INVITE_PROMPT, { reply_markup: requestAccessKeyboard() })

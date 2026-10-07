@@ -6,13 +6,16 @@ import { AccessRequestsRepository } from "../../db/repositories/access-requests"
 import { AllowedUsersRepository } from "../../db/repositories/allowed-users"
 import {
   ALREADY_PENDING,
+  GROUP_INVITE_PROMPT,
   INVITE_ONLY,
   INVITE_PROMPT,
   NOT_APPROVED,
   REQUEST_PENDING,
   REQUEST_SENT,
+  privateRequestKeyboard,
   requestAccessKeyboard,
 } from "../access"
+import { personalizeMessage } from "../utils/smart-reply"
 import { createAllowlistMiddleware } from "./allowlist"
 
 const ADMIN = 1
@@ -37,6 +40,16 @@ function messageCtx(userId: number, text = "/start") {
     from: { id: userId, first_name: "Maria", username: "maria" },
     chat: { id: userId, type: "private" },
     message: { text },
+    reply: mock(() => Promise.resolve()),
+  }
+}
+
+function groupMessageCtx(userId: number, text: string) {
+  return {
+    from: { id: userId, first_name: "Maria", username: "maria" },
+    chat: { id: -100, type: "group" },
+    message: { text },
+    me: { username: "TeleCalBot" },
     reply: mock(() => Promise.resolve()),
   }
 }
@@ -91,6 +104,38 @@ describe("strangers", () => {
     const ctx = messageCtx(STRANGER)
     await run(ctx)
     expect(ctx.reply).toHaveBeenCalledWith(REQUEST_PENDING, undefined)
+  })
+
+  test("a declined stranger is told so, without a button", async () => {
+    accessRequestsRepo.request(STRANGER, "maria", "Maria")
+    accessRequestsRepo.decide(STRANGER, "declined", ADMIN)
+    const ctx = messageCtx(STRANGER)
+    await run(ctx)
+    expect(ctx.reply).toHaveBeenCalledWith(NOT_APPROVED, undefined)
+  })
+
+  test("a private non-message update (e.g. my_chat_member) gets no reply", async () => {
+    const ctx = { from: { id: STRANGER, first_name: "Maria" }, chat: { id: STRANGER, type: "private" } }
+    const next = await run(ctx)
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  test("a group command from a stranger gets the group invite prompt with a private-request link", async () => {
+    const ctx = groupMessageCtx(STRANGER, "/log")
+    const next = await run(ctx)
+    expect(next).not.toHaveBeenCalled()
+    // smartReply personalizes group messages with the sender's name.
+    expect(ctx.reply).toHaveBeenCalledWith(personalizeMessage(GROUP_INVITE_PROMPT, "Maria"), {
+      reply_markup: privateRequestKeyboard("TeleCalBot"),
+    })
+  })
+
+  test("non-command text in a group gets no reply and creates no request", async () => {
+    const ctx = groupMessageCtx(STRANGER, "just chatting")
+    const next = await run(ctx)
+    expect(next).not.toHaveBeenCalled()
+    expect(ctx.reply).not.toHaveBeenCalled()
+    expect(accessRequestsRepo.find(STRANGER)).toBeNull()
   })
 
   test("Request access creates a request, confirms it and notifies admins once", async () => {
