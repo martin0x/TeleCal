@@ -9,10 +9,11 @@ Describe what you ate in natural language, and TeleCal estimates the calories an
 - **Conversational logging** - Multi-turn conversations with AI clarification when needed
 - **Multiple AI providers** - Choose between OpenAI, Anthropic Claude, or Google Gemini
 - **Statistics** - View daily, weekly, and monthly calorie summaries
-- **Mini App** - Interactive charts via Telegram Web App
+- **Landing page** - Public page at `/` with a Request access button that deep-links into the bot
+- **Mini App** - Interactive charts via Telegram Web App, served at `/app`
 - **Daily reminders** - Optional notifications to log meals
 - **Estimation caching** - Faster responses for repeated foods
-- **Access control** - Allowlist system for private use
+- **Access control** - Allowlist, plus in-bot access requests that admins approve with one tap
 
 ## Requirements
 
@@ -85,7 +86,7 @@ bun run start
 | `/settings` | Change AI provider, calorie and protein goals, reminders |
 | `/pending` | View entries awaiting AI processing |
 | `/usage` | View your own AI token usage |
-| `/admin` | Manage allowed users, view AI usage and cost, backfill protein (admin only) |
+| `/admin` | Manage allowed users and access requests, view AI usage and cost, backfill protein (admin only) |
 
 ### Privacy
 
@@ -108,6 +109,14 @@ Calorie data itself is stored only in TeleCal's local SQLite database.
 3. AI estimates calories and protein and may ask clarifying questions
 4. Tap **✅ Log** to save it, or **✏️ Change** to describe it again (typing "yes" / "no" also works)
 5. Tap **✖️ Cancel**, or send "cancel" at any point, to exit
+
+## Landing page assets
+
+`src/web/public/` holds the landing page's images. To regenerate them (macOS, needs Google Chrome):
+
+1. Put raw phone screenshots in `scripts/screenshots/` as `shot-log`, `shot-today` and `shot-charts` (any image format).
+2. Run `bash scripts/build-landing-assets.sh`. It renders `og.png` from `scripts/og.html` and writes 720 px JPEGs.
+3. Commit the files in `src/web/public/`.
 
 ## Testing
 
