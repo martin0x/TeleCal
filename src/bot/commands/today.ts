@@ -67,7 +67,7 @@ export function createTodayCommand(
     await smartReply(ctx, message, isPrivateChat ? {
       reply_markup: {
         inline_keyboard: [[
-          { text: "📈 View Charts", web_app: { url: config.web.appUrl } }
+          { text: "📈 View Charts", web_app: { url: config.web.miniAppUrl } }
         ]]
       }
     } : {})
@@ -78,7 +78,7 @@ export function createTodayCommand(
         await ctx.api.sendMessage(userId, "📈 Here's your chart view:", {
           reply_markup: {
             inline_keyboard: [[
-              { text: "📈 View Charts", web_app: { url: config.web.appUrl } }
+              { text: "📈 View Charts", web_app: { url: config.web.miniAppUrl } }
             ]]
           }
         })

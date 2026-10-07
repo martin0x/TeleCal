@@ -23,3 +23,21 @@ describe("config", () => {
     expect(config.features.caching).toBe(true)
   })
 })
+
+describe("baseUrlFrom", () => {
+  test("strips trailing slashes", async () => {
+    const { baseUrlFrom } = await import("./config")
+    expect(baseUrlFrom("https://telecal.example/")).toBe("https://telecal.example")
+    expect(baseUrlFrom("https://telecal.example//")).toBe("https://telecal.example")
+  })
+
+  test("leaves a clean URL alone", async () => {
+    const { baseUrlFrom } = await import("./config")
+    expect(baseUrlFrom("https://telecal.example")).toBe("https://telecal.example")
+  })
+
+  test("miniAppUrl is the base URL plus /app", async () => {
+    const { config, baseUrlFrom } = await import("./config")
+    expect(config.web.miniAppUrl).toBe(baseUrlFrom(config.web.appUrl) + "/app")
+  })
+})

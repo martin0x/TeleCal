@@ -24,6 +24,13 @@ function getEnvArray(key: string, defaultValue: number[] = []): number[] {
   return value.split(",").map((s) => parseInt(s.trim(), 10))
 }
 
+/** APP_URL without trailing slashes, so paths can be appended safely. */
+export function baseUrlFrom(appUrl: string): string {
+  return appUrl.replace(/\/+$/, "")
+}
+
+const appUrl = getEnv("APP_URL", "http://localhost:3000")
+
 export const config = {
   telegram: {
     botToken: getEnv("TELEGRAM_BOT_TOKEN"),
@@ -35,7 +42,10 @@ export const config = {
     googleApiKey: getEnv("GOOGLE_API_KEY", ""),
   },
   web: {
-    appUrl: getEnv("APP_URL", "http://localhost:3000"),
+    appUrl,
+    baseUrl: baseUrlFrom(appUrl),
+    // The landing page owns "/"; the Mini App is served at /app.
+    miniAppUrl: `${baseUrlFrom(appUrl)}/app`,
     port: getEnvNumber("PORT", 3000),
   },
   features: {
