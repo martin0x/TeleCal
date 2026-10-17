@@ -34,7 +34,7 @@ bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--protein]   # one
 - `index.ts` - Bot setup, middleware chain, command registration
 - `commands/` - Command handlers (log, today, week, month, edit, delete, settings, pending, admin)
 - `conversations/log-flow.ts` - State machine for `/log` flow (awaiting_input → clarifying → confirming)
-- `middleware/allowlist.ts` - Access control via allowed_users table
+- `middleware/allowlist.ts` - Gate: allowlisted users pass; strangers get an invite prompt and can file an access request (`access.ts` handles admin Approve/Decline)
 
 **AI Service** (`src/ai/`):
 - `service.ts` - Provider abstraction with caching layer
@@ -48,9 +48,9 @@ bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--protein]   # one
 - `src/db/migrations.ts` adds columns that `IF NOT EXISTS` cannot; runs on every boot after the schema
 
 **Web Server** (`src/web/`):
-- Mini App for viewing charts
+- Landing page at `/` (`views/landing.html`, `{{BOT_USERNAME}}`/`{{BASE_URL}}` filled at startup); images in `public/` served at `/assets/*`
+- Mini App at `/app` (`views/app.html`); `config.web.miniAppUrl` points the View Charts buttons there
 - `auth.ts` - Telegram initData validation for secure auth
-- Single-page app at `views/app.html`
 
 **Analytics** (`src/analytics/`):
 - PostHog wrapper (`createAnalytics`); does nothing unless `POSTHOG_API_KEY` is set. Callers pass raw Telegram IDs; only `hashTelegramId` (HMAC with `POSTHOG_ID_SECRET`) leaves the process
@@ -83,6 +83,7 @@ All config via environment variables (see `.env.example`):
 ### Database Tables
 
 - `allowed_users` - Access control allowlist
+- `access_requests` - Requests from non-allowlisted users (pending → approved | declined)
 - `users` - User preferences (ai_provider, daily_goal, daily_protein_goal, reminder_time)
 - `food_logs` / `food_items` - Log sessions and individual items (`calories`, nullable `protein_g`)
 - `conversation_state` - Active `/log` conversations
@@ -99,3 +100,17 @@ import { Database } from "bun:sqlite"
 ```
 
 Test files are co-located with source: `src/**/*.test.ts`
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues on martin0x/TeleCal via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default canonical labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one root `CONTEXT.md` plus `docs/adr/`. See `docs/agents/domain.md`.
