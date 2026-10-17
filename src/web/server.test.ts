@@ -46,6 +46,14 @@ describe("routes", () => {
     expect(body).not.toContain("{{")
   })
 
+  test("/ has a privacy FAQ entry that names PostHog", async () => {
+    const body = await (await get("/")).text()
+    const entry = body.match(/<details id="privacy"[\s\S]*?<\/details>/)?.[0] ?? ""
+
+    expect(entry).toContain("PostHog")
+    expect(entry).not.toContain("Nothing else about you is shared")
+  })
+
   test("/ carries Open Graph and Twitter card tags with absolute image URLs", async () => {
     const body = await (await get("/")).text()
     const meta = (key: string) =>

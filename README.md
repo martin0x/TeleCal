@@ -100,7 +100,32 @@ OpenAI calls are made with `store: false`, so requests are not kept in the
 OpenAI organization's logs. Providers may still retain request content
 separately for abuse monitoring under their own policies.
 
-Calorie data itself is stored only in TeleCal's local SQLite database.
+Calorie data itself is stored in TeleCal's local SQLite database.
+
+#### Analytics (PostHog)
+
+TeleCal uses [PostHog](https://posthog.com) Cloud (US region) for error
+tracking and analytics. Decisions and reasoning are in
+[ADR 0001](docs/adr/0001-posthog-integration.md). PostHog receives:
+
+- **Error reports**, with stack traces. They can include message text, for
+  example an AI reply that failed to parse.
+- **One event per AI call**: the full prompt (including the food description)
+  and the AI's output, plus provider, model, token counts, cost and latency.
+- **Page views** from the landing page (cookieless) and the Mini App, and
+  totals for access requests and approvals.
+
+Users are identified by an HMAC-SHA256 of their Telegram ID, keyed with a
+server-side secret (`POSTHOG_ID_SECRET`). Raw Telegram IDs, usernames and names
+are never sent, and no person properties are set. Every event carries an
+`environment` tag (`production` or `development`).
+
+Existing users were told with a one-time message (`/admin announce-privacy`);
+`/start` and the landing page FAQ link to the same summary.
+
+**Deleting a user's data.** On request, run `/admin posthog-id <telegram_id>`
+to get the user's PostHog ID, then in PostHog open **People**, search for that
+ID, and delete the person. Deleting a person also deletes their events.
 
 ### Logging Flow
 

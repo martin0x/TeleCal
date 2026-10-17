@@ -10,6 +10,7 @@ import { PendingRepository } from "../db/repositories/pending"
 import { CacheRepository } from "../db/repositories/cache"
 import { UsageRepository } from "../db/repositories/usage"
 import { AccessRequestsRepository } from "../db/repositories/access-requests"
+import { AnnouncementsRepository } from "../db/repositories/announcements"
 import { createAllowlistMiddleware } from "./middleware/allowlist"
 import { createAccessDecisionHandler, createAdminNotifier } from "./access"
 import { HELP_TEXT } from "./help"
@@ -46,6 +47,7 @@ export function createBot() {
   const logFlow = new LogFlow(conversationsRepo, foodLogsRepo, pendingRepo, aiService)
 
   const accessRequestsRepo = new AccessRequestsRepository(db)
+  const announcementsRepo = new AnnouncementsRepository(db)
   bot.use(
     createAllowlistMiddleware({
       allowedUsersRepo,
@@ -66,7 +68,7 @@ export function createBot() {
     await smartReply(ctx, HELP_TEXT)
   })
 
-  bot.command("admin", createAdminCommand(allowedUsersRepo, usageRepo, { foodLogsRepo, usersRepo, aiService }, accessRequestsRepo))
+  bot.command("admin", createAdminCommand(allowedUsersRepo, usageRepo, { foodLogsRepo, usersRepo, aiService, announcementsRepo }, accessRequestsRepo))
   bot.command("usage", createUsageCommand(usageRepo))
   bot.command("today", createTodayCommand(foodLogsRepo, usersRepo))
   bot.command("week", createWeekCommand(foodLogsRepo, usersRepo))

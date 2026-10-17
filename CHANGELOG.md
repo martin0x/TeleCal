@@ -13,6 +13,9 @@ tied to release tags.
 - **Public landing page at `/`**, with a Request access button.
 - **In-bot access requests.** Strangers get a Request access button; admins
   get Approve/Decline in one tap.
+- **`/admin announce-privacy [confirm]`**: previews, then sends, a one-time
+  privacy notice to every allowlisted user and admin. Receipts are stored per
+  user, so re-running only retries people it couldn't reach.
 - **`/admin requests`** — lists pending access requests, each with its own
   Approve/Decline buttons.
 - **`scripts/build-landing-assets.sh`** — rebuilds the landing page's images
@@ -21,6 +24,14 @@ tied to release tags.
 
 ### Changed
 
+- **Privacy: PostHog analytics (US) is now a data processor.** It will
+  receive error reports, each AI call's full prompt and output (so food
+  descriptions), and page views (cookieless on the landing page), under a hashed Telegram ID. The
+  README Privacy section, the landing page FAQ ("What happens to my data?")
+  and `/start` say so, and `/admin announce-privacy` sends existing users a
+  one-time notice. OpenAI calls keep `store: false`, but the 0.2.0 note
+  calling it "a privacy requirement" no longer holds on its own, since
+  PostHog now receives the same prompts.
 - **Graceful shutdown on Railway redeploys.** SIGTERM is now handled like
   SIGINT, and `railway.json` sets `drainingSeconds: 10` (Railway's default is
   0, i.e. an immediate SIGKILL) so queued analytics events are flushed before

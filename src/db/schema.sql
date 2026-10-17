@@ -18,6 +18,15 @@ CREATE TABLE IF NOT EXISTS access_requests (
   decided_by INTEGER
 );
 
+-- One row per user per one-off announcement (e.g. a privacy notice), so a
+-- broadcast can be re-run without messaging anyone twice
+CREATE TABLE IF NOT EXISTS announcements_sent (
+  announcement TEXT NOT NULL,
+  telegram_id INTEGER NOT NULL,
+  sent_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (announcement, telegram_id)
+);
+
 -- Users and their preferences
 CREATE TABLE IF NOT EXISTS users (
   telegram_id INTEGER PRIMARY KEY,

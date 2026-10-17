@@ -12,6 +12,8 @@ import { runProteinBackfill, DEFAULT_CHUNK_SIZE } from "../../jobs/backfill-prot
 import { AccessRequestsRepository } from "../../db/repositories/access-requests"
 import { sendPendingRequests } from "../access"
 import { hashTelegramId } from "../../analytics"
+import { AnnouncementsRepository } from "../../db/repositories/announcements"
+import { sendAnnouncement, type AnnounceDeps } from "../../jobs/announce"
 
 const MAX_USER_ROWS = 10
 
@@ -75,6 +77,7 @@ export interface AdminDeps {
   foodLogsRepo: FoodLogsRepository
   usersRepo: UsersRepository
   aiService: AIService
+  announcementsRepo: AnnouncementsRepository
 }
 
 // grammY's polling handles updates sequentially, so an admin command that
@@ -89,7 +92,7 @@ let backfillRunning = false
  * Usage rows are attributed to the admin who ran it.
  */
 export async function backfillProtein(
-  deps: AdminDeps,
+  deps: Pick<AdminDeps, "foodLogsRepo" | "usersRepo" | "aiService">,
   adminId: number,
   chatId: number | null,
   reply: (text: string) => Promise<void>
@@ -138,6 +141,79 @@ export async function backfillProtein(
   }
 }
 
+/** Receipts key: changing it would send the notice to everyone again. */
+export const PRIVACY_ANNOUNCEMENT = "posthog-privacy-2026-10"
+
+export function privacyNoticeText(baseUrl: string): string {
+  return (
+    "A privacy update from TeleCal\n\n" +
+    "TeleCal is adding analytics through PostHog (servers in the US). Once it's on, PostHog receives:\n" +
+    "• error reports, which can include the text of your messages\n" +
+    "• for each meal estimate, what you described and the AI's reply, plus the model, cost and response time\n" +
+    "• page views from the website and the charts page\n\n" +
+    "You're identified by a one-way code made from your Telegram ID, never your name or username.\n\n" +
+    "Nothing changes in how you use TeleCal. To have your PostHog data deleted, ask the admin who gave you access.\n\n" +
+    `Details: ${baseUrl}/#privacy`
+  )
+}
+
+interface AnnouncePrivacyDeps extends Omit<AnnounceDeps, "announcementsRepo"> {
+  allowedUsersRepo: AllowedUsersRepository
+  announcementsRepo: AnnouncementsRepository
+  adminIds: number[]
+}
+
+let announceRunning = false
+
+/**
+ * /admin announce-privacy [confirm]. Without confirm it only previews, since a
+ * broadcast can't be taken back. Goes to allowlisted users and admins (who pass
+ * the gate without being on the allowlist), each at most once.
+ */
+export async function announcePrivacy(
+  deps: AnnouncePrivacyDeps,
+  arg: string | undefined,
+  baseUrl: string,
+  reply: (text: string) => Promise<void>
+): Promise<void> {
+  const text = privacyNoticeText(baseUrl)
+  const recipients = [...new Set([...deps.allowedUsersRepo.listAll().map((u) => u.telegram_id), ...deps.adminIds])]
+  const pending = recipients.filter((id) => !deps.announcementsRepo.hasReceived(PRIVACY_ANNOUNCEMENT, id))
+
+  if (arg?.toLowerCase() !== "confirm") {
+    await reply(
+      `Preview of the privacy notice:\n\n${text}\n\n` +
+        `It would go to ${pending.length} users (${recipients.length - pending.length} already have it). ` +
+        "Send it with /admin announce-privacy confirm"
+    )
+    return
+  }
+
+  if (pending.length === 0) {
+    await reply(`Everyone has already received the privacy notice (${recipients.length} users).`)
+    return
+  }
+  if (announceRunning) {
+    await reply("The privacy notice is already being sent — wait for its report.")
+    return
+  }
+
+  announceRunning = true
+  try {
+    const report = await sendAnnouncement(PRIVACY_ANNOUNCEMENT, text, pending, deps)
+    let message = `Privacy notice sent to ${report.sent} users.`
+    if (report.failed.length > 0) {
+      const lines = report.failed.map((f) => `• ${f.telegramId}: ${f.reason}`)
+      message +=
+        ` Couldn't reach ${report.failed.length}:\n${lines.join("\n")}\n` +
+        "Run /admin announce-privacy confirm again to retry them."
+    }
+    await reply(message)
+  } finally {
+    announceRunning = false
+  }
+}
+
 /** Maps a Telegram ID to its PostHog distinct ID, e.g. to delete a user's data on request. */
 export function posthogIdReply(arg: string | undefined, idSecret: string): string {
   const targetId = Number(arg)
@@ -172,7 +248,8 @@ export function createAdminCommand(
           "/admin requests\n" +
           "/admin usage [7d|30d|all]\n" +
           "/admin backfill-protein\n" +
-          "/admin posthog-id <user_id>"
+          "/admin posthog-id <user_id>\n" +
+          "/admin announce-privacy [confirm]"
       )
       return
     }
@@ -233,6 +310,20 @@ export function createAdminCommand(
       case "requests": {
         await sendPendingRequests(accessRequestsRepo, (text, keyboard) =>
           smartReply(ctx, text, keyboard ? { reply_markup: keyboard } : undefined)
+        )
+        break
+      }
+
+      case "announce-privacy": {
+        const announceDeps = {
+          allowedUsersRepo: repo,
+          announcementsRepo: deps.announcementsRepo,
+          adminIds: config.adminUsers,
+          send: (telegramId: number, text: string) => ctx.api.sendMessage(telegramId, text),
+        }
+        // In the background, like backfill-protein: a rate-limit wait would stall every update.
+        void announcePrivacy(announceDeps, args[1], config.web.baseUrl, (text) => smartReply(ctx, text)).catch((error) =>
+          console.error("[announce] unhandled:", error)
         )
         break
       }

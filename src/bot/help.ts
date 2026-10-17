@@ -1,5 +1,7 @@
 // src/bot/help.ts
 // Shared by /start and the access-approval message.
+import { config } from "../config"
+
 export const HELP_TEXT =
   "Welcome to TeleCal! 🍽️\n\n" +
   "Track your calories and protein with AI-powered estimation.\n\n" +
@@ -13,4 +15,5 @@ export const HELP_TEXT =
   "/pending - View pending estimations\n" +
   "/usage - See your AI token usage\n" +
   "/settings - Change preferences\n\n" +
-  'Tip: Type "cancel" to abort any active conversation.'
+  'Tip: Type "cancel" to abort any active conversation.\n\n' +
+  `Privacy: what TeleCal stores and shares → ${config.web.baseUrl}/#privacy`

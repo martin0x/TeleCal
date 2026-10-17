@@ -240,7 +240,7 @@
   <div class="faq">
     <details open><summary>How accurate are the estimates?</summary><p>They're AI estimates from your description, not lab measurements. For common foods they land close, and more detail (portion, cooking method) makes them better. TeleCal is a tracking aid, not medical advice.</p></details>
     <details><summary>Does it know local dishes?</summary><p>Yes. Describe anything, like sinigang, a Jollibee Chickenjoy meal or your mom's pasta, and it will ask about portions when it needs to.</p></details>
-    <details><summary>What happens to my data?</summary><p>Your food log is stored on TeleCal's server. To estimate a meal, its description is sent to an AI provider (OpenAI, Anthropic or Google). Nothing else about you is shared.</p></details>
+    <details id="privacy"><summary>What happens to my data?</summary><p>Your food log is stored on TeleCal's server. To estimate a meal, its description is sent to an AI provider (OpenAI, Anthropic or Google).</p><p>TeleCal also uses PostHog, an analytics service with servers in the US. It receives error reports, which can include message text; each meal description with the AI's reply, cost and response time; and page views from this site and the charts page. You're identified by a one-way code made from your Telegram ID, never your name or username.</p><p>To have your data deleted, ask the admin who approved your access.</p></details>
     <details><summary>Why Telegram?</summary><p>You already have it open. There's nothing to install, no new account, and it works the same on your phone, desktop and the web.</p></details>
     <details><summary>Can I fix a mistake or log yesterday's dinner?</summary><p>Yes. Edit or delete today's entries, and log to yesterday or any past date with <b>/log yesterday</b> or <b>/log jan 31</b>.</p></details>
     <details><summary>How do I get access?</summary><p>Tap Request access. It opens TeleCal in Telegram, where you send a request with one tap. You'll get a message in the same chat once you're approved.</p></details>
@@ -262,5 +262,14 @@
   <span>© 2026 TeleCal</span>
 </div></footer>
 
+<script>
+  // Links like /#privacy (from the bot's /start text) should land on an open answer.
+  function openFromHash() {
+    var target = location.hash && document.getElementById(location.hash.slice(1))
+    if (target && target.tagName === "DETAILS") { target.open = true; target.scrollIntoView() }
+  }
+  openFromHash()
+  window.addEventListener("hashchange", openFromHash)
+</script>
 </body>
 </html>
