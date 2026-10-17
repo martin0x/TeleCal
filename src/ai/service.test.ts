@@ -1,9 +1,10 @@
 // src/ai/service.test.ts
-import { describe, test, expect, beforeEach } from "bun:test"
+import { describe, test, expect, beforeEach, spyOn } from "bun:test"
 import { AIService } from "./service"
 import type { AIProvider, ProviderResult, EstimationResult } from "./types"
 import type { CacheRepository } from "../db/repositories/cache"
 import type { UsageRepository, UsageEntry } from "../db/repositories/usage"
+import { FakeAnalytics } from "../analytics/test-helpers"
 
 const ESTIMATE: EstimationResult = {
   items: [{ description: "Chicken adobo", calories: 420, protein_g: 38, emoji: "🍗" }],
@@ -55,13 +56,15 @@ const OK_RESULT: ProviderResult = {
 
 let usage: FakeUsageRepo
 let cache: FakeCacheRepo
+let analytics: FakeAnalytics
 let service: AIService
 
 /** Installs a fake provider, bypassing the config-driven provider map. */
 function build(provider: AIProvider): AIService {
   const s = new AIService(
     cache as unknown as CacheRepository,
-    usage as unknown as UsageRepository
+    usage as unknown as UsageRepository,
+    analytics
   )
   // @ts-expect-error - reaching into the private provider map for testing
   s.providers.set("openai", provider)
@@ -71,6 +74,7 @@ function build(provider: AIProvider): AIService {
 beforeEach(() => {
   usage = new FakeUsageRepo()
   cache = new FakeCacheRepo()
+  analytics = new FakeAnalytics()
 })
 
 const OPTS = { telegramId: 42, chatId: -100, callType: "estimate" as const }
@@ -243,5 +247,70 @@ describe("estimateProtein", () => {
 
     await expect(service.estimateProtein(["x"], "openai", { telegramId: 7, chatId: null })).rejects.toThrow()
     expect(usage.rows[0]).toMatchObject({ callType: "backfill", status: "parse_error" })
+  })
+})
+
+describe("error reporting", () => {
+  test("a failed provider call is reported with the user, provider and call type", async () => {
+    const error = new Error("503 Service Unavailable")
+    service = build(fakeProvider(error))
+
+    await expect(service.estimate("chicken adobo", "openai", OPTS)).rejects.toThrow()
+
+    expect(analytics.exceptions).toEqual([
+      { error, telegramId: 42, properties: { source: "ai", provider: "openai", call_type: "estimate", status: "request_failed" } },
+    ])
+  })
+
+  test("an unparseable reply is reported as parse_error", async () => {
+    service = build(fakeProvider(new SyntaxError("Unexpected token }")))
+
+    await expect(service.estimate("chicken adobo", "openai", OPTS)).rejects.toThrow()
+
+    expect(analytics.exceptions[0].properties).toMatchObject({ status: "parse_error" })
+  })
+
+  test("a failed protein batch is reported with call type backfill", async () => {
+    const error = new Error("timeout")
+    service = build({
+      name: "openai",
+      estimate: async () => {
+        throw new Error("not used")
+      },
+      estimateProtein: async () => {
+        throw error
+      },
+    })
+
+    await expect(service.estimateProtein(["x"], "openai", { telegramId: 7, chatId: null })).rejects.toThrow()
+
+    expect(analytics.exceptions).toEqual([
+      { error, telegramId: 7, properties: { source: "ai", provider: "openai", call_type: "backfill", status: "request_failed" } },
+    ])
+  })
+
+  test("a failed usage write is reported", async () => {
+    const errorLog = spyOn(console, "error").mockImplementation(() => {})
+    const error = new Error("disk full")
+    const s = new AIService(
+      cache as unknown as CacheRepository,
+      { record: () => { throw error } } as unknown as UsageRepository,
+      analytics
+    )
+    // @ts-expect-error - private map
+    s.providers.set("openai", fakeProvider(OK_RESULT))
+
+    await s.estimate("chicken adobo", "openai", OPTS)
+
+    expect(analytics.exceptions).toEqual([{ error, telegramId: 42, properties: { source: "usage", call_type: "estimate" } }])
+    errorLog.mockRestore()
+  })
+
+  test("a successful call reports nothing", async () => {
+    service = build(fakeProvider(OK_RESULT))
+
+    await service.estimate("chicken adobo", "openai", OPTS)
+
+    expect(analytics.exceptions).toEqual([])
   })
 })

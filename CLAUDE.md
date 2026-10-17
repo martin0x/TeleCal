@@ -14,6 +14,7 @@ bun run start    # Production start
 bun test         # Run all tests
 bun test src/ai  # Run tests in specific directory
 bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--protein]   # one live API call to verify a provider; --protein exercises the batch call
+bun run scripts/smoke-posthog.ts   # sends one test exception to PostHog; needs POSTHOG_API_KEY and POSTHOG_ID_SECRET
 ```
 
 `smoke-providers.ts` needs `TELEGRAM_BOT_TOKEN` set even though it makes no Telegram calls — it imports `AIService`, which imports `src/config.ts`, which throws on a missing token.
@@ -56,6 +57,7 @@ bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--protein]   # one
 - PostHog wrapper (`createAnalytics`); does nothing unless `POSTHOG_API_KEY` is set. Callers pass raw Telegram IDs; only `hashTelegramId` (HMAC with `POSTHOG_ID_SECRET`) leaves the process
 - Every event carries `environment` (`POSTHOG_ENVIRONMENT`) because one PostHog project serves prod and testing
 - Capturing never throws into the caller; `FakeAnalytics` in `test-helpers.ts` for tests
+- Error tracking: `bot.catch` (`src/bot/errors.ts`), process handlers (`src/process-errors.ts`), AI failures in `AIService`, and the jobs. Each error object is reported once, from the first catch that sees it; expected Telegram errors (blocked bot, "message is not modified") are skipped via `isExpectedTelegramError`
 - `src/shutdown.ts` handles SIGINT and SIGTERM and awaits the analytics flush before exit
 - Decisions and the privacy line: `docs/adr/0001-posthog-integration.md`
 

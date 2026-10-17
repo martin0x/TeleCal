@@ -3,6 +3,7 @@ import { describe, test, expect, beforeEach, mock, spyOn } from "bun:test"
 import { createTestDb } from "../db/test-helpers"
 import { FoodLogsRepository } from "../db/repositories/food-logs"
 import { chunk, runProteinBackfill } from "./backfill-protein"
+import { FakeAnalytics } from "../analytics/test-helpers"
 
 let foodLogsRepo: FoodLogsRepository
 let db: any
@@ -93,5 +94,23 @@ describe("runProteinBackfill", () => {
 
     expect(estimateProtein).not.toHaveBeenCalled()
     expect(report).toEqual({ descriptions: 0, calls: 0, itemsFilled: 0, unresolved: 0 })
+  })
+})
+
+describe("runProteinBackfill error reporting", () => {
+  test("a failed chunk is reported and the run carries on", async () => {
+    foodLogsRepo.create(1, 1, "2026-09-25", [{ description: "Rice", calories: 200 }])
+    const error = new Error("timeout")
+    const analytics = new FakeAnalytics()
+    const errorLog = spyOn(console, "error").mockImplementation(() => {})
+
+    const report = await runProteinBackfill(
+      { foodLogsRepo, aiService: { estimateProtein: mock(() => Promise.reject(error)) } as any, analytics },
+      OPTS
+    )
+
+    expect(report.unresolved).toBe(1)
+    expect(analytics.exceptions).toEqual([{ error, telegramId: 1, properties: { source: "backfill", chunk: 1, chunks: 1 } }])
+    errorLog.mockRestore()
   })
 })

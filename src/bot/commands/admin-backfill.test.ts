@@ -5,6 +5,7 @@ import { FoodLogsRepository } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
 import type { AIService } from "../../ai/service"
 import { backfillProtein } from "./admin"
+import { FakeAnalytics } from "../../analytics/test-helpers"
 
 const ADMIN = 7
 
@@ -146,5 +147,28 @@ describe("backfillProtein", () => {
 
     expect(replies2[0]).not.toBe("A backfill is already running — wait for its Done message.")
     errorSpy.mockRestore()
+  })
+})
+
+describe("backfillProtein error reporting", () => {
+  test("a failed run is reported as well as told to the admin", async () => {
+    const errorLog = spyOn(console, "error").mockImplementation(() => {})
+    const error = new Error("SQLITE_BUSY")
+    let calls = 0
+    // Plans fine, then fails when the run itself reads the list again.
+    const brokenRepo = {
+      listDescriptionsMissingProtein: () => {
+        if (calls++ > 0) throw error
+        return ["Rice"]
+      },
+      countItemsMissingProtein: () => 1,
+    } as unknown as FoodLogsRepository
+    const analytics = new FakeAnalytics()
+
+    await backfillProtein({ foodLogsRepo: brokenRepo, usersRepo, aiService: fakeAi(() => [4]), analytics }, ADMIN, 1, reply)
+
+    expect(replies.at(-1)).toStartWith("Backfill failed: SQLITE_BUSY")
+    expect(analytics.exceptions).toEqual([{ error, telegramId: ADMIN, properties: { source: "backfill" } }])
+    errorLog.mockRestore()
   })
 })

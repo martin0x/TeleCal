@@ -118,6 +118,17 @@ describe("createAnalytics", () => {
     expect(client.exceptions[0].properties).toEqual({ environment: "production" })
   })
 
+  test("the same error object is reported once, however many catch blocks see it", () => {
+    const analytics = createAnalytics(OPTS, () => client)
+    const error = new Error("boom")
+
+    analytics.captureException(error, 123456789, { source: "ai" })
+    analytics.captureException(error, 123456789, { source: "retry-pending" })
+
+    expect(client.exceptions).toHaveLength(1)
+    expect(client.exceptions[0].properties).toMatchObject({ source: "ai" })
+  })
+
   test("shutdown flushes the client", async () => {
     const analytics = createAnalytics(OPTS, () => client)
 

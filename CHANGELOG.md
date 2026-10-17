@@ -10,6 +10,14 @@ tied to release tags.
 
 ### Added
 
+- **Error tracking in PostHog.** Errors from update handlers, AI provider
+  calls, `ai_usage` writes, the reminder, retry and backfill jobs, and
+  unhandled rejections or exceptions are reported to PostHog with the
+  hashed user ID and where they came from. Routine Telegram failures (a user
+  blocked the bot, an edit to identical text) stay as log lines only. An
+  uncaught exception is now reported, flushed, and exits the process for
+  Railway to restart.
+- **`scripts/smoke-posthog.ts`** — sends one test exception to PostHog.
 - **Public landing page at `/`**, with a Request access button.
 - **In-bot access requests.** Strangers get a Request access button; admins
   get Approve/Decline in one tap.

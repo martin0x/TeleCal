@@ -14,6 +14,7 @@ import { sendPendingRequests } from "../access"
 import { hashTelegramId } from "../../analytics"
 import { AnnouncementsRepository } from "../../db/repositories/announcements"
 import { sendAnnouncement, type AnnounceDeps } from "../../jobs/announce"
+import type { Analytics } from "../../analytics"
 
 const MAX_USER_ROWS = 10
 
@@ -78,6 +79,7 @@ export interface AdminDeps {
   usersRepo: UsersRepository
   aiService: AIService
   announcementsRepo: AnnouncementsRepository
+  analytics?: Analytics
 }
 
 // grammY's polling handles updates sequentially, so an admin command that
@@ -92,7 +94,7 @@ let backfillRunning = false
  * Usage rows are attributed to the admin who ran it.
  */
 export async function backfillProtein(
-  deps: Pick<AdminDeps, "foodLogsRepo" | "usersRepo" | "aiService">,
+  deps: Pick<AdminDeps, "foodLogsRepo" | "usersRepo" | "aiService" | "analytics">,
   adminId: number,
   chatId: number | null,
   reply: (text: string) => Promise<void>
@@ -121,7 +123,7 @@ export async function backfillProtein(
     const providerName = deps.usersRepo.findById(adminId)?.ai_provider ?? "gemini"
     try {
       const report = await runProteinBackfill(
-        { foodLogsRepo: deps.foodLogsRepo, aiService: deps.aiService },
+        { foodLogsRepo: deps.foodLogsRepo, aiService: deps.aiService, analytics: deps.analytics },
         { providerName, telegramId: adminId, chatId }
       )
 
@@ -132,6 +134,7 @@ export async function backfillProtein(
       await reply(done)
     } catch (error) {
       console.error("[backfill] failed:", error)
+      deps.analytics?.captureException(error, adminId, { source: "backfill" })
       await reply(
         `Backfill failed: ${error instanceof Error ? error.message : String(error)}. Nothing was lost — run /admin backfill-protein again to retry.`
       )
@@ -301,9 +304,10 @@ export function createAdminCommand(
       case "backfill-protein": {
         // Runs in the background: grammY handles updates sequentially, and a full
         // backfill can take a minute. ctx.reply still works after the handler returns.
-        void backfillProtein(deps, userId, ctx.chat?.id ?? null, (text) => smartReply(ctx, text)).catch((error) =>
+        void backfillProtein(deps, userId, ctx.chat?.id ?? null, (text) => smartReply(ctx, text)).catch((error) => {
           console.error("[backfill] unhandled:", error)
-        )
+          deps.analytics?.captureException(error, userId, { source: "backfill" })
+        })
         break
       }
 
@@ -322,9 +326,10 @@ export function createAdminCommand(
           send: (telegramId: number, text: string) => ctx.api.sendMessage(telegramId, text),
         }
         // In the background, like backfill-protein: a rate-limit wait would stall every update.
-        void announcePrivacy(announceDeps, args[1], config.web.baseUrl, (text) => smartReply(ctx, text)).catch((error) =>
+        void announcePrivacy(announceDeps, args[1], config.web.baseUrl, (text) => smartReply(ctx, text)).catch((error) => {
           console.error("[announce] unhandled:", error)
-        )
+          deps.analytics?.captureException(error, userId, { source: "announce" })
+        })
         break
       }
 

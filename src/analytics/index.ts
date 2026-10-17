@@ -34,7 +34,8 @@ export function hashTelegramId(telegramId: number, secret: string): string {
   return createHmac("sha256", secret).update(String(telegramId)).digest("hex")
 }
 
-const noop: Analytics = {
+/** For code paths built without analytics, e.g. tests that don't care about it. */
+export const noopAnalytics: Analytics = {
   capture() {},
   captureException() {},
   async shutdown() {},
@@ -52,12 +53,15 @@ export function createAnalytics(
   opts: AnalyticsOptions,
   makeClient: (opts: AnalyticsOptions) => AnalyticsClient = postHogClient
 ): Analytics {
-  if (!opts.apiKey) return noop
+  if (!opts.apiKey) return noopAnalytics
   if (!opts.idSecret) {
     throw new Error("POSTHOG_API_KEY is set but POSTHOG_ID_SECRET is not: refusing to send unhashed Telegram IDs")
   }
 
   const client = makeClient(opts)
+  // An AI failure is caught in AIService, then again by whichever job or flow
+  // called it. Report it from the first catch only.
+  const reported = new WeakSet<object>()
   const withEnvironment = (properties?: Properties) => ({ ...properties, environment: opts.environment })
 
   return {
@@ -74,6 +78,10 @@ export function createAnalytics(
     },
 
     captureException(error, telegramId, properties) {
+      if (typeof error === "object" && error !== null) {
+        if (reported.has(error)) return
+        reported.add(error)
+      }
       try {
         const distinctId = telegramId === undefined ? undefined : hashTelegramId(telegramId, opts.idSecret)
         client.captureException(error, distinctId, withEnvironment(properties))

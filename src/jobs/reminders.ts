@@ -5,6 +5,9 @@ import { FoodLogsRepository, DayTotals } from "../db/repositories/food-logs"
 import { getTodayInTimezone, getCurrentTimeInTimezone, DEFAULT_TIMEZONE } from "../utils/dates"
 import { redactUserId } from "../utils/logging"
 import { config } from "../config"
+import { noopAnalytics, type Analytics } from "../analytics"
+import { isExpectedTelegramError } from "../bot/utils/telegram-errors"
+import { reportJobFailure } from "./report"
 
 // Track the last date each user was reminded (per-user timezone aware)
 const lastRemindedDate = new Map<number, string>()
@@ -56,7 +59,8 @@ export function formatReminderMessage(
 export function createReminderJob(
   bot: Bot,
   usersRepo: UsersRepository,
-  foodLogsRepo: FoodLogsRepository
+  foodLogsRepo: FoodLogsRepository,
+  analytics: Analytics = noopAnalytics
 ) {
   return async (): Promise<void> => {
     const users = usersRepo.getUsersWithReminders()
@@ -97,6 +101,9 @@ export function createReminderJob(
         console.log(`Sent reminder to user ${redactUserId(user.telegram_id)}`)
       } catch (error) {
         console.error(`Failed to send reminder to user ${redactUserId(user.telegram_id)}:`, error)
+        if (!isExpectedTelegramError(error)) {
+          analytics.captureException(error, user.telegram_id, { source: "reminders" })
+        }
       }
     }
   }
@@ -105,16 +112,18 @@ export function createReminderJob(
 export function startReminderJob(
   bot: Bot,
   usersRepo: UsersRepository,
-  foodLogsRepo: FoodLogsRepository
+  foodLogsRepo: FoodLogsRepository,
+  analytics: Analytics = noopAnalytics
 ): NodeJS.Timeout {
-  const job = createReminderJob(bot, usersRepo, foodLogsRepo)
+  const job = createReminderJob(bot, usersRepo, foodLogsRepo, analytics)
+  const onFailure = reportJobFailure(analytics, "reminders")
 
   // Run immediately on start
-  job().catch(console.error)
+  job().catch(onFailure)
 
   // Then run every minute
   const interval = setInterval(() => {
-    job().catch(console.error)
+    job().catch(onFailure)
   }, config.timing.reminderCheckInterval)
 
   console.log("Reminder job started")

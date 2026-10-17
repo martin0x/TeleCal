@@ -25,17 +25,16 @@ import { createPendingCommand, createPendingCallbackHandler } from "./commands/p
 import { createUsageCommand } from "./commands/usage"
 import { LogFlow } from "./conversations/log-flow"
 import { AIService } from "../ai/service"
+import { noopAnalytics, type Analytics } from "../analytics"
+import { createBotErrorHandler } from "./errors"
 import { smartReply } from "./utils/smart-reply"
 
 export interface BotContext extends Context {}
 
-export function createBot() {
+export function createBot(analytics: Analytics = noopAnalytics) {
   const bot = new Bot<BotContext>(config.telegram.botToken)
 
-  // Without this, grammY's default handler stops polling on the first uncaught error.
-  bot.catch((err) => {
-    console.error(`Error while handling update ${err.ctx.update.update_id}:`, err.error)
-  })
+  bot.catch(createBotErrorHandler(analytics))
 
   const allowedUsersRepo = new AllowedUsersRepository(db)
   const usersRepo = new UsersRepository(db)
@@ -43,7 +42,7 @@ export function createBot() {
   const conversationsRepo = new ConversationsRepository(db)
   const pendingRepo = new PendingRepository(db)
   const usageRepo = new UsageRepository(db)
-  const aiService = new AIService(new CacheRepository(db), usageRepo)
+  const aiService = new AIService(new CacheRepository(db), usageRepo, analytics)
   const logFlow = new LogFlow(conversationsRepo, foodLogsRepo, pendingRepo, aiService)
 
   const accessRequestsRepo = new AccessRequestsRepository(db)
@@ -68,7 +67,7 @@ export function createBot() {
     await smartReply(ctx, HELP_TEXT)
   })
 
-  bot.command("admin", createAdminCommand(allowedUsersRepo, usageRepo, { foodLogsRepo, usersRepo, aiService, announcementsRepo }, accessRequestsRepo))
+  bot.command("admin", createAdminCommand(allowedUsersRepo, usageRepo, { foodLogsRepo, usersRepo, aiService, announcementsRepo, analytics }, accessRequestsRepo))
   bot.command("usage", createUsageCommand(usageRepo))
   bot.command("today", createTodayCommand(foodLogsRepo, usersRepo))
   bot.command("week", createWeekCommand(foodLogsRepo, usersRepo))

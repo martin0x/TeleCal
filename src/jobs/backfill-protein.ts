@@ -5,6 +5,7 @@
 // amount at the price of async job tracking (see the spec's Decisions table).
 import type { FoodLogsRepository } from "../db/repositories/food-logs"
 import type { AIService } from "../ai/service"
+import type { Analytics } from "../analytics"
 
 export interface BackfillReport {
   /** Distinct descriptions that were missing protein when the run started. */
@@ -29,6 +30,7 @@ export interface BackfillOptions {
 export interface BackfillDeps {
   foodLogsRepo: Pick<FoodLogsRepository, "listDescriptionsMissingProtein" | "setProteinForDescription">
   aiService: Pick<AIService, "estimateProtein">
+  analytics?: Analytics
 }
 
 export const DEFAULT_CHUNK_SIZE = 25
@@ -68,6 +70,7 @@ export async function runProteinBackfill(deps: BackfillDeps, opts: BackfillOptio
       })
     } catch (error) {
       console.error(`[backfill] chunk ${i + 1}/${chunks.length} failed:`, error)
+      deps.analytics?.captureException(error, opts.telegramId, { source: "backfill", chunk: i + 1, chunks: chunks.length })
       report.unresolved += batch.length
       continue
     }

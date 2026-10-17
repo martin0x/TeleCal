@@ -8,6 +8,7 @@ import { UsageRepository } from "../db/repositories/usage"
 import { calculateCost } from "./pricing"
 import type { CallType, UsageStatus, TokenUsage } from "./types"
 import { config } from "../config"
+import { noopAnalytics, type Analytics } from "../analytics"
 
 export interface EstimateOptions {
   telegramId: number
@@ -35,7 +36,8 @@ export class AIService {
 
   constructor(
     private cache: CacheRepository,
-    private usage: UsageRepository
+    private usage: UsageRepository,
+    private analytics: Analytics = noopAnalytics
   ) {
     if (config.ai.openaiApiKey) {
       this.providers.set("openai", new OpenAIProvider())
@@ -84,6 +86,7 @@ export class AIService {
       if (error instanceof SyntaxError) {
         this.recordSafely(provider.name, { model: "unknown", inputTokens: 0, outputTokens: 0 }, recordOpts, "parse_error")
       }
+      this.reportFailure(error, provider.name, recordOpts)
       throw error
     }
 
@@ -124,6 +127,7 @@ export class AIService {
           "parse_error"
         )
       }
+      this.reportFailure(error, provider.name, opts)
       throw error
     }
 
@@ -137,6 +141,16 @@ export class AIService {
     }
 
     return estimate
+  }
+
+  /** Every provider failure, whether or not the call was billed. */
+  private reportFailure(error: unknown, providerName: string, opts: EstimateOptions): void {
+    this.analytics.captureException(error, opts.telegramId, {
+      source: "ai",
+      provider: providerName,
+      call_type: opts.callType,
+      status: error instanceof SyntaxError ? "parse_error" : "request_failed",
+    })
   }
 
   /** Accounting must never break calorie logging. */
@@ -163,6 +177,7 @@ export class AIService {
       })
     } catch (error) {
       console.error("[usage] Failed to record AI usage:", error)
+      this.analytics.captureException(error, opts.telegramId, { source: "usage", call_type: opts.callType })
     }
   }
 

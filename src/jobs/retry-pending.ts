@@ -8,6 +8,9 @@ import { config } from "../config"
 import { formatDateForDisplay } from "../utils/dates"
 import { formatItemsSummary } from "../utils/format"
 import { redactUserId } from "../utils/logging"
+import { noopAnalytics, type Analytics } from "../analytics"
+import { isExpectedTelegramError } from "../bot/utils/telegram-errors"
+import { reportJobFailure } from "./report"
 
 const MAX_RETRIES = 10
 const BATCH_SIZE = 5
@@ -17,7 +20,8 @@ export function createRetryPendingJob(
   pendingRepo: PendingRepository,
   foodLogsRepo: FoodLogsRepository,
   usersRepo: UsersRepository,
-  aiService: AIService
+  aiService: AIService,
+  analytics: Analytics = noopAnalytics
 ) {
   return async (): Promise<void> => {
     const entries = pendingRepo.getForRetry(BATCH_SIZE)
@@ -81,6 +85,9 @@ export function createRetryPendingJob(
         // AI still unavailable - increment retry
         pendingRepo.incrementRetry(entry.id)
         console.error(`Failed to process entry ${entry.id}:`, error)
+        if (!isExpectedTelegramError(error)) {
+          analytics.captureException(error, entry.telegram_id, { source: "retry-pending" })
+        }
       }
     }
   }
@@ -91,13 +98,14 @@ export function startRetryPendingJob(
   pendingRepo: PendingRepository,
   foodLogsRepo: FoodLogsRepository,
   usersRepo: UsersRepository,
-  aiService: AIService
+  aiService: AIService,
+  analytics: Analytics = noopAnalytics
 ): NodeJS.Timeout {
-  const job = createRetryPendingJob(bot, pendingRepo, foodLogsRepo, usersRepo, aiService)
+  const job = createRetryPendingJob(bot, pendingRepo, foodLogsRepo, usersRepo, aiService, analytics)
 
   // Run every 5 minutes (configurable)
   const interval = setInterval(() => {
-    job().catch(console.error)
+    job().catch(reportJobFailure(analytics, "retry-pending"))
   }, config.timing.pendingRetryInterval)
 
   console.log("Pending retry job started")

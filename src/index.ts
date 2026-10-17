@@ -7,16 +7,20 @@ import { startRetryPendingJob } from "./jobs/retry-pending"
 import { startWebServer } from "./web/server"
 import { createAnalytics } from "./analytics"
 import { createShutdown } from "./shutdown"
+import { createProcessErrorHandlers } from "./process-errors"
 
 console.log("TeleCal starting...")
 
 // Throws on a key without POSTHOG_ID_SECRET, before anything could be sent.
 const analytics = createAnalytics(config.posthog)
+const processErrors = createProcessErrorHandlers({ analytics, exit: (code) => process.exit(code) })
+process.on("unhandledRejection", processErrors.onUnhandledRejection)
+process.on("uncaughtException", (error) => void processErrors.onUncaughtException(error))
 
 initializeDatabase()
 console.log("Database initialized")
 
-const { bot, usersRepo, foodLogsRepo, pendingRepo, aiService } = createBot()
+const { bot, usersRepo, foodLogsRepo, pendingRepo, aiService } = createBot(analytics)
 
 // Fetches the bot's own username (getMe) for the landing page's t.me links.
 // bot.start() below reuses it instead of calling getMe again.
@@ -40,8 +44,8 @@ bot.start({
     console.log(`Bot @${botInfo.username} started`)
 
     // Start background jobs after bot is running
-    reminderInterval = startReminderJob(bot, usersRepo, foodLogsRepo)
-    retryInterval = startRetryPendingJob(bot, pendingRepo, foodLogsRepo, usersRepo, aiService)
+    reminderInterval = startReminderJob(bot, usersRepo, foodLogsRepo, analytics)
+    retryInterval = startRetryPendingJob(bot, pendingRepo, foodLogsRepo, usersRepo, aiService, analytics)
   },
 })
 
