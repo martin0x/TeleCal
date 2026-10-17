@@ -11,6 +11,7 @@ import { AIService } from "../../ai/service"
 import { runProteinBackfill, DEFAULT_CHUNK_SIZE } from "../../jobs/backfill-protein"
 import { AccessRequestsRepository } from "../../db/repositories/access-requests"
 import { sendPendingRequests } from "../access"
+import { hashTelegramId } from "../../analytics"
 
 const MAX_USER_ROWS = 10
 
@@ -137,6 +138,14 @@ export async function backfillProtein(
   }
 }
 
+/** Maps a Telegram ID to its PostHog distinct ID, e.g. to delete a user's data on request. */
+export function posthogIdReply(arg: string | undefined, idSecret: string): string {
+  const targetId = Number(arg)
+  if (!arg || !Number.isInteger(targetId)) return "Usage: /admin posthog-id <telegram_user_id>"
+  if (!idSecret) return "PostHog isn't configured: POSTHOG_ID_SECRET is unset."
+  return `PostHog distinct ID for ${targetId}:\n${hashTelegramId(targetId, idSecret)}`
+}
+
 export function createAdminCommand(
   repo: AllowedUsersRepository,
   usageRepo: UsageRepository,
@@ -162,7 +171,8 @@ export function createAdminCommand(
           "/admin list\n" +
           "/admin requests\n" +
           "/admin usage [7d|30d|all]\n" +
-          "/admin backfill-protein"
+          "/admin backfill-protein\n" +
+          "/admin posthog-id <user_id>"
       )
       return
     }
@@ -224,6 +234,11 @@ export function createAdminCommand(
         await sendPendingRequests(accessRequestsRepo, (text, keyboard) =>
           smartReply(ctx, text, keyboard ? { reply_markup: keyboard } : undefined)
         )
+        break
+      }
+
+      case "posthog-id": {
+        await smartReply(ctx, posthogIdReply(args[1], config.posthog.idSecret))
         break
       }
 

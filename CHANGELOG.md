@@ -21,6 +21,10 @@ tied to release tags.
 
 ### Changed
 
+- **Graceful shutdown on Railway redeploys.** SIGTERM is now handled like
+  SIGINT, and `railway.json` sets `drainingSeconds: 10` (Railway's default is
+  0, i.e. an immediate SIGKILL) so queued analytics events are flushed before
+  exit. Groundwork for PostHog (#7); no events are sent yet.
 - **The Mini App moved to `/app`.** Old View Charts buttons redirect
   automatically.
 - **Non-allowlisted users now get an invite prompt** instead of

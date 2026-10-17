@@ -48,6 +48,14 @@ export const config = {
     miniAppUrl: `${baseUrlFrom(appUrl)}/app`,
     port: getEnvNumber("PORT", 3000),
   },
+  posthog: {
+    // Empty key = analytics off (tests, local dev).
+    apiKey: getEnv("POSTHOG_API_KEY", ""),
+    host: getEnv("POSTHOG_HOST", "https://us.i.posthog.com"),
+    idSecret: getEnv("POSTHOG_ID_SECRET", ""),
+    // One PostHog project serves prod and testing; this tag tells them apart.
+    environment: getEnv("POSTHOG_ENVIRONMENT", "development"),
+  },
   features: {
     caching: getEnvBoolean("FEATURE_CACHING", true),
     localFoodDb: getEnvBoolean("FEATURE_LOCAL_FOOD_DB", false),

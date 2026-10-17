@@ -5,8 +5,13 @@ import { createBot } from "./bot"
 import { startReminderJob } from "./jobs/reminders"
 import { startRetryPendingJob } from "./jobs/retry-pending"
 import { startWebServer } from "./web/server"
+import { createAnalytics } from "./analytics"
+import { createShutdown } from "./shutdown"
 
 console.log("TeleCal starting...")
+
+// Throws on a key without POSTHOG_ID_SECRET, before anything could be sent.
+const analytics = createAnalytics(config.posthog)
 
 initializeDatabase()
 console.log("Database initialized")
@@ -40,11 +45,16 @@ bot.start({
   },
 })
 
-process.on("SIGINT", () => {
-  console.log("Shutting down...")
-  clearInterval(reminderInterval)
-  clearInterval(retryInterval)
-  webServer.stop()
-  bot.stop()
-  process.exit(0)
+// Railway sends SIGTERM on every redeploy; SIGINT is Ctrl-C locally.
+const shutdown = createShutdown({
+  stop: () => {
+    clearInterval(reminderInterval)
+    clearInterval(retryInterval)
+    webServer.stop()
+    bot.stop()
+  },
+  analytics,
+  exit: (code) => process.exit(code),
 })
+process.on("SIGINT", () => void shutdown("SIGINT"))
+process.on("SIGTERM", () => void shutdown("SIGTERM"))

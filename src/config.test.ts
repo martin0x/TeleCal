@@ -22,6 +22,12 @@ describe("config", () => {
     const { config } = await import("./config")
     expect(config.features.caching).toBe(true)
   })
+
+  test("PostHog defaults to the US host and the development environment", async () => {
+    const { config } = await import("./config")
+    expect(config.posthog.host).toBe("https://us.i.posthog.com")
+    expect(config.posthog.environment).toBe("development")
+  })
 })
 
 describe("baseUrlFrom", () => {

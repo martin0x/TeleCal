@@ -52,6 +52,13 @@ bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--protein]   # one
 - `auth.ts` - Telegram initData validation for secure auth
 - Single-page app at `views/app.html`
 
+**Analytics** (`src/analytics/`):
+- PostHog wrapper (`createAnalytics`); does nothing unless `POSTHOG_API_KEY` is set. Callers pass raw Telegram IDs; only `hashTelegramId` (HMAC with `POSTHOG_ID_SECRET`) leaves the process
+- Every event carries `environment` (`POSTHOG_ENVIRONMENT`) because one PostHog project serves prod and testing
+- Capturing never throws into the caller; `FakeAnalytics` in `test-helpers.ts` for tests
+- `src/shutdown.ts` handles SIGINT and SIGTERM and awaits the analytics flush before exit
+- Decisions and the privacy line: `docs/adr/0001-posthog-integration.md`
+
 **Background Jobs** (`src/jobs/`):
 - `reminders.ts` - Daily reminder notifications
 - `retry-pending.ts` - Retries failed AI estimations from `pending_entries` table
@@ -71,6 +78,7 @@ All config via environment variables (see `.env.example`):
 - `ADMIN_USERS` - Comma-separated Telegram IDs for admin access
 - AI provider keys (at least one required): `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`
 - Feature flags: `FEATURE_CACHING`, `FEATURE_LOCAL_FOOD_DB`
+- PostHog (optional): `POSTHOG_API_KEY`, `POSTHOG_HOST`, `POSTHOG_ID_SECRET` (required with a key), `POSTHOG_ENVIRONMENT`
 
 ### Database Tables
 
