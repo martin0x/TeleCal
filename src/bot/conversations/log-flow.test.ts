@@ -235,7 +235,7 @@ describe("LogFlow", () => {
 
     expect(result.parseMode).toBe("HTML")
     expect(result.message).toBe(
-      "Here's what I'll log:\n<blockquote>🍗 Chicken — 200 cal · 25 g</blockquote>\n<b>Total: 200 cal · 25 g protein</b>"
+      "Here's what I'll log:\n\n<blockquote>🍗 Chicken — 200 cal · 25 g</blockquote>\n\n<b>Total: 200 cal · 25 g protein</b>"
     )
     const state = conversationsRepo.get(123)!
     expect(result.confirm).toEqual({
@@ -264,7 +264,7 @@ describe("LogFlow", () => {
 
     expect(outcome).toEqual({
       stale: false,
-      edit: "✅ Logged to Sat, Jan 31:\n<blockquote>🍗 Chicken — 200 cal · 25 g</blockquote>\n<b>Total: 200 cal · 25 g protein</b>",
+      edit: "✅ Logged to Sat, Jan 31:\n\n<blockquote>🍗 Chicken — 200 cal · 25 g</blockquote>\n\n<b>Total: 200 cal · 25 g protein</b>",
       toast: "Logged ✅",
     })
     expect(conversationsRepo.get(123)).toBeNull()
@@ -291,7 +291,7 @@ describe("LogFlow", () => {
     expect(outcome).toEqual({
       stale: false,
       edit:
-        "✏️ Not logged — changing:\n<blockquote><s>🍗 Chicken — 200 cal · 25 g</s></blockquote>\n" +
+        "✏️ Not logged — changing:\n\n<blockquote><s>🍗 Chicken — 200 cal · 25 g</s></blockquote>\n\n" +
         "<b><s>Total: 200 cal · 25 g protein</s></b>",
       followUp: "Okay, let's try again. What did you eat?",
     })
@@ -306,7 +306,7 @@ describe("LogFlow", () => {
     expect(outcome).toEqual({
       stale: false,
       edit:
-        "✖️ Cancelled — not logged:\n<blockquote><s>🍗 Chicken — 200 cal · 25 g</s></blockquote>\n" +
+        "✖️ Cancelled — not logged:\n\n<blockquote><s>🍗 Chicken — 200 cal · 25 g</s></blockquote>\n\n" +
         "<b><s>Total: 200 cal · 25 g protein</s></b>",
       toast: "Cancelled",
     })
@@ -348,7 +348,7 @@ describe("LogFlow", () => {
 
     expect(result.parseMode).toBe("HTML")
     expect(result.confirm?.token).toBe(token)
-    expect(result.message).toStartWith("Continuing session for 2026-01-31.\n<blockquote>")
+    expect(result.message).toStartWith("Continuing session for 2026-01-31.\n\n<blockquote>")
   })
 
   test("unrecognized text while confirming points to the buttons", async () => {

@@ -30,7 +30,7 @@ export function createRetryPendingJob(
         try {
           await bot.api.sendMessage(
             entry.telegram_id,
-            `❌ Couldn't process your entry "${entry.food_text}" after multiple attempts.\n` +
+            `❌ Couldn't process your entry "${entry.food_text}" after multiple attempts.\n\n` +
               `Your AI provider may be unavailable — try switching it with /settings, ` +
               `then log the entry again with /log.`
           )
@@ -71,7 +71,7 @@ export function createRetryPendingJob(
         // Notify the user
         await bot.api.sendMessage(
           entry.telegram_id,
-          `✅ Processed your saved entry — logged to ${formatDateForDisplay(entry.target_date)}:\n` +
+          `✅ Processed your saved entry — logged to ${formatDateForDisplay(entry.target_date)}:\n\n` +
             formatItemsSummary(result.items),
           { parse_mode: "HTML" }
         )

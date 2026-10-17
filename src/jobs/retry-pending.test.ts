@@ -76,8 +76,31 @@ test("announces a processed entry as an HTML summary", async () => {
 
   expect(bot.api.sendMessage).toHaveBeenCalledWith(
     42,
-    "✅ Processed your saved entry — logged to Mon, Sep 21:\n" +
-      "<blockquote>🍗 Chicken adobo — 420 cal · 38 g</blockquote>\n<b>Total: 420 cal · 38 g protein</b>",
+    "✅ Processed your saved entry — logged to Mon, Sep 21:\n\n" +
+      "<blockquote>🍗 Chicken adobo — 420 cal · 38 g</blockquote>\n\n<b>Total: 420 cal · 38 g protein</b>",
     { parse_mode: "HTML" }
+  )
+})
+
+test("tells the user when an entry is given up on", async () => {
+  // getForRetry never returns an entry at the limit, so feed one in directly.
+  const entry = { id: 7, telegram_id: 42, chat_id: -100, food_text: "mystery stew", target_date: "2026-09-21", retry_count: 10 }
+  const pendingRepo = { getForRetry: () => [entry], delete: mock(() => {}) }
+  const bot = { api: { sendMessage: mock(() => Promise.resolve()) } }
+
+  const job = createRetryPendingJob(
+    bot as any,
+    pendingRepo as unknown as PendingRepository,
+    new FoodLogsRepository(db),
+    new UsersRepository(db),
+    {} as AIService
+  )
+  await job()
+
+  expect(pendingRepo.delete).toHaveBeenCalledWith(7)
+  expect(bot.api.sendMessage).toHaveBeenCalledWith(
+    42,
+    '❌ Couldn\'t process your entry "mystery stew" after multiple attempts.\n\n' +
+      "Your AI provider may be unavailable — try switching it with /settings, then log the entry again with /log."
   )
 })

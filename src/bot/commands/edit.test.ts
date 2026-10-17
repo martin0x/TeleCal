@@ -122,4 +122,17 @@ describe("edit flow", () => {
     expect(foodLogsRepo.getItemForUser(item.id!, USER)).toMatchObject({ description: "Tonkotsu ramen", calories: 650, protein_g: 30 })
     expect(ctx.reply).toHaveBeenCalledWith("Updated: 🍜 Tonkotsu ramen — 650 cal · 30 g", undefined)
   })
+
+  test("a description the AI can't estimate keeps the edit open and suggests a number", async () => {
+    const item = logToday()
+    const estimate = mock(() => Promise.resolve({ items: [], needsClarification: true, confidence: "low" as const }))
+    const ctx = await editWith("something", { estimate } as unknown as AIService)
+
+    expect(ctx.reply).toHaveBeenCalledWith(
+      'Couldn\'t estimate "something".\n\n' +
+        'Try a number (calories) or a number with g (protein) instead, or "cancel" to abort.',
+      undefined
+    )
+    expect(foodLogsRepo.getItemForUser(item.id!, USER)).toMatchObject({ calories: 520, protein_g: 22 })
+  })
 })

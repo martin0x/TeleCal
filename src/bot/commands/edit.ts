@@ -185,7 +185,7 @@ export function createEditMessageHandler(
 
           if (result.needsClarification || result.items.length === 0) {
             await smartReply(ctx,
-              `Couldn't estimate "${input.text}".\n` +
+              `Couldn't estimate "${input.text}".\n\n` +
                 `Try a number (calories) or a number with g (protein) instead, or "cancel" to abort.`
             )
             return

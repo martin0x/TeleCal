@@ -16,6 +16,15 @@ describe("formatUserUsage", () => {
     expect(message).not.toContain("$")
   })
 
+  test("puts a blank line between the title and the numbers", () => {
+    const message = formatUserUsage(
+      { calls: 47, inputTokens: 21300, outputTokens: 4800, costUsd: 0.12 },
+      30
+    )
+
+    expect(message).toBe("📊 Your AI usage — last 30 days\n\n47 calls · 21,300 in / 4,800 out tokens")
+  })
+
   test("shows an empty state rather than a row of zeroes", () => {
     const message = formatUserUsage(
       { calls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 },

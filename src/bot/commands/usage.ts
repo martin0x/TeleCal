@@ -16,7 +16,7 @@ export function formatUserUsage(totals: UsageTotals, days: number): string {
   }
 
   return (
-    `📊 Your AI usage — last ${days} days\n` +
+    `📊 Your AI usage — last ${days} days\n\n` +
     `${totals.calls} calls · ${formatTokens(totals.inputTokens)} in / ` +
     `${formatTokens(totals.outputTokens)} out tokens`
   )

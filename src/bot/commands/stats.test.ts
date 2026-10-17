@@ -21,8 +21,7 @@ describe("buildStatsMessage (week)", () => {
     expect(out).toContain("Wed: ░░░░░ —\n")
     expect(out).toContain("\n📈 Total: 5,350 cal · 312 g protein\n")
     expect(out).toContain("📊 Daily avg: 1,783 cal · 104 g protein\n")
-    expect(out).toContain("📅 Days tracked: 3/7")
-    expect(out).toContain("\n🎯 Under calorie goal: 2/3 days (67%)")
+    expect(out).toContain("📅 Days tracked: 3/7\n\n🎯 Under calorie goal: 2/3 days (67%)")
     expect(out).toContain("\n💪 Protein goal met: 1/3 days (33%)")
   })
 
@@ -36,6 +35,7 @@ describe("buildStatsMessage (week)", () => {
       proteinGoal: 120,
     })
     expect(out).toContain("💪 Protein goal met: 1/1 days (100%)")
+    expect(out).toContain("📅 Days tracked: 1/7\n\n💪 Protein goal met")
     expect(out).not.toContain("Under calorie goal")
   })
 

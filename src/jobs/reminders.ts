@@ -39,15 +39,15 @@ export function formatReminderMessage(
     const closing = remaining > 0 ? `${n(remaining)} cal remaining — keep it up!` : `You've reached your goal for today!`
 
     return (
-      `${namePrefix}Daily check-in 🍽️\n` +
+      `${namePrefix}Daily check-in 🍽️\n\n` +
       `Current: ${n(totals.calories)} / ${n(dailyGoal)} cal (${percent}%)\n` +
-      `${proteinLine}\n` +
+      `${proteinLine}\n\n` +
       closing
     )
   }
 
   return (
-    `${namePrefix}Daily check-in 🍽️\n` +
+    `${namePrefix}Daily check-in 🍽️\n\n` +
     `Today's total: ${n(totals.calories)} cal\n` +
     proteinLine
   )

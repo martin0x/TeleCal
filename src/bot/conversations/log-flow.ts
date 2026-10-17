@@ -283,21 +283,21 @@ export class LogFlow {
         this.commitPending(telegramId, chatId, state.target_date, items)
         return {
           stale: false,
-          edit: `✅ Logged to ${formatDateForDisplay(state.target_date)}:\n${formatItemsSummary(items)}`,
+          edit: `✅ Logged to ${formatDateForDisplay(state.target_date)}:\n\n${formatItemsSummary(items)}`,
           toast: "Logged ✅",
         }
       case "change":
         this.backToInput(telegramId, state)
         return {
           stale: false,
-          edit: `✏️ Not logged — changing:\n${formatItemsSummary(items, { struck: true })}`,
+          edit: `✏️ Not logged — changing:\n\n${formatItemsSummary(items, { struck: true })}`,
           followUp: "Okay, let's try again. What did you eat?",
         }
       case "cancel":
         this.conversations.delete(telegramId)
         return {
           stale: false,
-          edit: `✖️ Cancelled — not logged:\n${formatItemsSummary(items, { struck: true })}`,
+          edit: `✖️ Cancelled — not logged:\n\n${formatItemsSummary(items, { struck: true })}`,
           toast: "Cancelled",
         }
     }
@@ -331,7 +331,7 @@ export class LogFlow {
     action: "prompt" | "continue"
   ): LogFlowResult {
     return {
-      message: `${header}\n${formatItemsSummary(items)}`,
+      message: `${header}\n\n${formatItemsSummary(items)}`,
       action,
       parseMode: "HTML",
       confirm: {

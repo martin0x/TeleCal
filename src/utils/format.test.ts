@@ -58,9 +58,9 @@ describe("formatItemsSummary", () => {
     { description: "Black coffee", calories: 5, protein_g: 0, emoji: "☕" },
   ]
 
-  test("puts items in a blockquote with a bold total beneath", () => {
+  test("puts items in a blockquote with a bold total a blank line beneath", () => {
     expect(formatItemsSummary(items)).toBe(
-      "<blockquote>🍳 2 scrambled eggs — 180 cal · 14 g\n☕ Black coffee — 5 cal · 0 g</blockquote>\n" +
+      "<blockquote>🍳 2 scrambled eggs — 180 cal · 14 g\n☕ Black coffee — 5 cal · 0 g</blockquote>\n\n" +
         "<b>Total: 185 cal · 14 g protein</b>"
     )
   })
@@ -79,13 +79,13 @@ describe("formatItemsSummary", () => {
 
   test("renders unknown protein as ? g and leaves it out of the total", () => {
     expect(formatItemsSummary([{ description: "Rice", calories: 200 }, { description: "Egg", calories: 70, protein_g: 6 }])).toBe(
-      "<blockquote>🍽️ Rice — 200 cal · ? g\n🍽️ Egg — 70 cal · 6 g</blockquote>\n<b>Total: 270 cal · 6 g protein</b>"
+      "<blockquote>🍽️ Rice — 200 cal · ? g\n🍽️ Egg — 70 cal · 6 g</blockquote>\n\n<b>Total: 270 cal · 6 g protein</b>"
     )
   })
 
   test("strikes through items and total when struck", () => {
     expect(formatItemsSummary(items, { struck: true })).toBe(
-      "<blockquote><s>🍳 2 scrambled eggs — 180 cal · 14 g\n☕ Black coffee — 5 cal · 0 g</s></blockquote>\n" +
+      "<blockquote><s>🍳 2 scrambled eggs — 180 cal · 14 g\n☕ Black coffee — 5 cal · 0 g</s></blockquote>\n\n" +
         "<b><s>Total: 185 cal · 14 g protein</s></b>"
     )
   })

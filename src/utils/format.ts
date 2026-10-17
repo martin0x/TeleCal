@@ -64,15 +64,17 @@ export function formatTotals(totals: { calories: number; protein: number }): str
 }
 
 /**
- * Items in a quote box with a bold total beneath, for messages sent with
- * parse_mode "HTML". This replaces a row of ─ characters, which wrapped onto a
- * second line on narrow screens: no character count fits every client, and a
- * blockquote does not depend on width at all.
+ * Items in a quote box with a bold total a blank line beneath, for messages
+ * sent with parse_mode "HTML". Callers leave a blank line above it too, since
+ * Telegram draws the quote flush against the lines around it. The quote box
+ * replaces a row of ─ characters, which wrapped onto a second line on narrow
+ * screens: no character count fits every client, and a blockquote does not
+ * depend on width at all.
  */
 export function formatItemsSummary(items: SummaryItem[], opts: { struck?: boolean } = {}): string {
   const strike = (text: string) => (opts.struck ? `<s>${text}</s>` : text)
   const lines = items.map((item) => escapeHtml(formatItemLine(item))).join("\n")
-  return `<blockquote>${strike(lines)}</blockquote>\n<b>${strike(`Total: ${formatTotals(sumTotals(items))}`)}</b>`
+  return `<blockquote>${strike(lines)}</blockquote>\n\n<b>${strike(`Total: ${formatTotals(sumTotals(items))}`)}</b>`
 }
 
 export function createProgressBar(percentage: number): string {

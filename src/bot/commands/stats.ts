@@ -93,6 +93,7 @@ export function buildStatsMessage(opts: {
   message += `📈 Total: ${formatTotals(total)}\n`
   message += `📊 Daily avg: ${formatTotals(avg)}\n`
   message += `📅 Days tracked: ${daysWithData}/${days}`
+  if (dailyGoal || proteinGoal) message += "\n"
 
   if (dailyGoal) {
     const under = loggedDays.filter((d) => d.calories <= dailyGoal).length

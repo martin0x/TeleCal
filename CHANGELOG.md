@@ -41,6 +41,10 @@ tied to release tags.
   carrying one are sent with Telegram's HTML formatting. `/today`, `/week` and
   `/month` likewise separate the total from the list with a blank line instead
   of a `━` rule, for the same reason.
+- **Replies breathe a little more** (#19). A blank line now separates a
+  message's sections: the header, the quote box of items and the total in
+  `/log` and retried-entry messages, and the title, numbers and goal lines in
+  reminders, `/usage`, `/week` and `/month`.
 - Confirmation buttons only act for the user they were sent to, and only on the
   estimate or items their message shows: an old Log button cannot confirm a
   newer estimate.
