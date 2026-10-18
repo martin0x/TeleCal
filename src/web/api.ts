@@ -5,10 +5,13 @@ import { UsersRepository } from "../db/repositories/users"
 import { FoodLogsRepository, FoodLog } from "../db/repositories/food-logs"
 import { getTodayInTimezone, getDateRangeInTimezone, DEFAULT_TIMEZONE } from "../utils/dates"
 import { sumTotals } from "../utils/format"
+import { hashTelegramId } from "../analytics"
 
 export interface ApiDeps {
   usersRepo: UsersRepository
   foodLogsRepo: FoodLogsRepository
+  /** POSTHOG_ID_SECRET, only when analytics is on. Server-side only: the browser gets the hash. */
+  analyticsIdSecret?: string
 }
 
 function dayPayload(date: string, entries: FoodLog[]) {
@@ -26,7 +29,7 @@ function dayPayload(date: string, entries: FoodLog[]) {
 }
 
 export function createApiHandlers(deps: ApiDeps) {
-  const { usersRepo, foodLogsRepo } = deps
+  const { usersRepo, foodLogsRepo, analyticsIdSecret } = deps
 
   return {
     getUser(telegramId: number) {
@@ -35,6 +38,8 @@ export function createApiHandlers(deps: ApiDeps) {
         daily_goal: user?.daily_goal ?? null,
         daily_protein_goal: user?.daily_protein_goal ?? null,
         username: user?.username ?? null,
+        // The same distinct ID as this user's server-side events; null means no analytics.
+        analytics_id: analyticsIdSecret ? hashTelegramId(telegramId, analyticsIdSecret) : null,
       }
     },
 

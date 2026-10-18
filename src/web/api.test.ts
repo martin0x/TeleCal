@@ -4,6 +4,7 @@ import { createTestDb } from "../db/test-helpers"
 import { FoodLogsRepository } from "../db/repositories/food-logs"
 import { UsersRepository } from "../db/repositories/users"
 import { getTodayInTimezone, DEFAULT_TIMEZONE } from "../utils/dates"
+import { hashTelegramId } from "../analytics"
 import { createApiHandlers } from "./api"
 
 const USER = 42
@@ -24,7 +25,16 @@ beforeEach(() => {
 describe("getUser", () => {
   test("adds daily_protein_goal beside daily_goal", () => {
     usersRepo.updateSettings(USER, { daily_goal: 2000, daily_protein_goal: 120 })
-    expect(api.getUser(USER)).toEqual({ daily_goal: 2000, daily_protein_goal: 120, username: "maria" })
+    expect(api.getUser(USER)).toEqual({ daily_goal: 2000, daily_protein_goal: 120, username: "maria", analytics_id: null })
+  })
+
+  test("analytics_id is the hashed Telegram ID when analytics is on", () => {
+    const withAnalytics = createApiHandlers({ usersRepo, foodLogsRepo, analyticsIdSecret: "s3cret" })
+    expect(withAnalytics.getUser(USER).analytics_id).toBe(hashTelegramId(USER, "s3cret"))
+  })
+
+  test("analytics_id is null when analytics is off", () => {
+    expect(api.getUser(USER).analytics_id).toBeNull()
   })
 })
 

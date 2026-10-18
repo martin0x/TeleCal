@@ -3,7 +3,10 @@ import { describe, test, expect, beforeEach } from "bun:test"
 import { createTestDb } from "../db/test-helpers"
 import { FoodLogsRepository } from "../db/repositories/food-logs"
 import { UsersRepository } from "../db/repositories/users"
+import { config } from "../config"
+import { hashTelegramId } from "../analytics"
 import { createFetchHandler, renderLanding } from "./server"
+import { createValidInitData } from "./test-helpers"
 
 let handle: (request: Request) => Promise<Response>
 
@@ -74,6 +77,50 @@ describe("landing analytics", () => {
     const body = await (await withAnalytics()(new Request("http://localhost/"))).text()
     const placements = [...body.matchAll(/href="https:\/\/t\.me\/TeleCalTestBot\?start=access" data-cta="([a-z]+)"/g)].map((m) => m[1])
     expect(placements).toEqual(["nav", "hero", "pricing", "footer"])
+  })
+})
+
+describe("mini app analytics", () => {
+  const ANALYTICS = { apiKey: "phc_test", host: "https://us.i.posthog.com", environment: "production" }
+  const handler = (deps: { analytics?: typeof ANALYTICS; analyticsIdSecret?: string }) =>
+    createFetchHandler({
+      usersRepo: new UsersRepository(createTestDb()),
+      foodLogsRepo: new FoodLogsRepository(createTestDb()),
+      botUsername: "TeleCalTestBot",
+      baseUrl: "https://telecal.example",
+      ...deps,
+    })
+  const getUser = (h: ReturnType<typeof createFetchHandler>) =>
+    h(new Request("http://localhost/api/user", {
+      headers: { Authorization: `tg-init-data ${createValidInitData({ id: 42, first_name: "Maria" }, config.telegram.botToken)}` },
+    })).then((res) => res.json())
+
+  test("/api/user carries the hashed ID when analytics is on", async () => {
+    const user = await getUser(handler({ analytics: ANALYTICS, analyticsIdSecret: "s3cret" }))
+    expect(user.analytics_id).toBe(hashTelegramId(42, "s3cret"))
+  })
+
+  test("/api/user has a null analytics_id when analytics is off", async () => {
+    const user = await getUser(handler({}))
+    expect(user.analytics_id).toBeNull()
+  })
+
+  test("/app has no PostHog script at all without a key", async () => {
+    const body = await (await handler({})(new Request("http://localhost/app"))).text()
+    expect(body).not.toContain("posthog")
+    expect(body).not.toContain("{{")
+  })
+
+  test("/app with a key defines a cookieless PostHog that waits for analytics_id", async () => {
+    const body = await (await handler({ analytics: ANALYTICS })(new Request("http://localhost/app"))).text()
+    expect(body).toContain("window.telecalAnalytics")
+    expect(body).toContain('posthog.init("phc_test"')
+    expect(body).toContain('"persistence":"memory"')
+    expect(body).toContain('"autocapture":false')
+    expect(body).toContain('"disable_session_recording":true')
+    expect(body).toContain('posthog.register({"environment":"production"})')
+    expect(body).toContain("posthog.identify(analyticsId)")
+    expect(body).not.toContain("{{")
   })
 })
 

@@ -6,6 +6,7 @@
   <title>TeleCal</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  {{ANALYTICS}}
   <style>
     :root {
       --bg-color: var(--tg-theme-bg-color, #ffffff);
@@ -394,6 +395,24 @@
       return grams === null || grams === undefined ? '? g' : `${grams} g`;
     }
 
+    // PostHog, when the server injected it (window.telecalAnalytics) and
+    // /api/user returned an analytics_id. Either can be missing: a server
+    // without a key, or an older server without the field.
+    function startAnalytics(user) {
+      if (window.telecalAnalytics && user.analytics_id) window.telecalAnalytics.start(user.analytics_id);
+    }
+
+    // Names and views only, never food text.
+    function track(event, properties) {
+      if (window.telecalAnalytics) window.telecalAnalytics.track(event, properties);
+    }
+
+    async function getUser() {
+      const user = await api('/api/user');
+      startAnalytics(user);
+      return user;
+    }
+
     // API helpers
     async function api(endpoint) {
       const res = await fetch(endpoint, {
@@ -696,6 +715,7 @@
     async function loadDayLog(date, target) {
       const container = document.getElementById(`${target}-log`);
       container.innerHTML = '<div class="loading">Loading...</div>';
+      track('miniapp_day_opened', { view: target });
 
       try {
         const data = await api(`/api/day/${date}`);
@@ -717,6 +737,7 @@
         document.getElementById(`${target}-view`).classList.add('active');
 
         loadTabData(target);
+        track('miniapp_tab_changed', { tab: target });
       });
     });
 
@@ -724,6 +745,7 @@
     // switches Month, so the two views never disagree.
     document.querySelectorAll('.segmented button').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (btn.dataset.metric !== metric) track('miniapp_metric_changed', { metric: btn.dataset.metric });
         metric = btn.dataset.metric;
         document.querySelectorAll('.segmented button').forEach(b => {
           b.classList.toggle('active', b.dataset.metric === metric);
@@ -740,7 +762,7 @@
       try {
         if (tab === 'today') {
           const [user, today] = await Promise.all([
-            userData ? Promise.resolve(userData) : api('/api/user'),
+            userData ? Promise.resolve(userData) : getUser(),
             api('/api/today')
           ]);
           userData = user;
@@ -752,7 +774,7 @@
 
         if (tab === 'week') {
           if (!weekData) weekData = await api('/api/stats?period=week');
-          if (!userData) userData = await api('/api/user');
+          if (!userData) userData = await getUser();
 
           createWeekChart(weekData, userData, metric);
           document.getElementById('week-log').innerHTML = `

@@ -36,6 +36,7 @@ const webServer = startWebServer({
   analytics: config.posthog.apiKey
     ? { apiKey: config.posthog.apiKey, host: config.posthog.host, environment: config.posthog.environment }
     : undefined,
+  analyticsIdSecret: config.posthog.apiKey ? config.posthog.idSecret : undefined,
 })
 console.log(`Web server running on port ${config.web.port}`)
 

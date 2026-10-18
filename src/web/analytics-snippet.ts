@@ -18,6 +18,34 @@ function js(value: unknown): string {
 }
 
 /**
+ * PostHog's before_send hook, keeping two things out of every event:
+ * - the URL fragment the page loaded with. Telegram opens the Mini App with
+ *   the user's initData (name, username, signature) there, and PostHog copies
+ *   the URL into every event.
+ * - person properties. PostHog attaches $set/$set_once (initial URL, referrer)
+ *   on identify; the ADR says none are sent.
+ * Inlined into the page with toString(): keep it self-contained.
+ */
+export function scrubEvent(hash: string) {
+  function scrub(value: any): any {
+    if (typeof value === "string") return hash.length > 1 ? value.split(hash).join("") : value
+    if (value && typeof value === "object") {
+      for (const key in value) value[key] = scrub(value[key])
+    }
+    return value
+  }
+  return function (event: any) {
+    delete event.$set
+    delete event.$set_once
+    if (event.properties) {
+      delete event.properties.$set
+      delete event.properties.$set_once
+    }
+    return scrub(event)
+  }
+}
+
+/**
  * Cookieless (in-memory) PostHog with every automatic capture off. Callers
  * add their own events after it. Anonymous visitors get no person profile.
  */
@@ -39,7 +67,9 @@ export function postHogInit(config: WebAnalyticsConfig): string {
   }
   return (
     `${LOADER}\n` +
-    `posthog.init(${js(config.apiKey)}, ${js(options)})\n` +
+    `posthog.init(${js(config.apiKey)}, Object.assign(${js(options)}, {\n` +
+    `  before_send: (${scrubEvent.toString()})(location.hash)\n` +
+    `}))\n` +
     `posthog.register(${js({ environment: config.environment })})\n`
   )
 }
@@ -57,6 +87,35 @@ export function landingAnalyticsScript(config: WebAnalyticsConfig | undefined): 
     '    posthog.capture("landing_cta_clicked", { placement: link.getAttribute("data-cta") }, { transport: "sendBeacon" })\n' +
     "  })\n" +
     "})\n" +
+    "</script>"
+  )
+}
+
+/**
+ * The Mini App. Defines window.telecalAnalytics and loads nothing until the
+ * page calls start() with the analytics_id from /api/user, so a user is only
+ * ever seen identified, under the same ID as their server-side events.
+ * track() before start() drops the event.
+ */
+export function miniAppAnalyticsScript(config: WebAnalyticsConfig | undefined): string {
+  if (!config?.apiKey) return ""
+  return (
+    "<script>\n" +
+    "window.telecalAnalytics = (function () {\n" +
+    "  var started = false\n" +
+    "  return {\n" +
+    "    start: function (analyticsId) {\n" +
+    "      if (started) return\n" +
+    "      started = true\n" +
+    postHogInit(config) +
+    "      posthog.identify(analyticsId)\n" +
+    '      posthog.capture("$pageview")\n' +
+    "    },\n" +
+    "    track: function (event, properties) {\n" +
+    "      if (started) posthog.capture(event, properties)\n" +
+    "    },\n" +
+    "  }\n" +
+    "})()\n" +
     "</script>"
   )
 }

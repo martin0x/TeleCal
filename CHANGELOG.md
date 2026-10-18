@@ -10,6 +10,16 @@ tied to release tags.
 
 ### Added
 
+- **Mini App analytics.** With a PostHog key set, `/app` records page views
+  and which views are used: `miniapp_tab_changed` (`today`, `week`,
+  `month`), `miniapp_metric_changed` (`calories`, `protein`) and
+  `miniapp_day_opened` (`week`, `month`). `/api/user` gains `analytics_id`,
+  the same hashed ID as the user's server events (`null` without a key), and
+  PostHog loads only once the page has it, so Mini App events land on the
+  same person. Cookieless, no autocapture or replay, no food text. Telegram's
+  initData in the URL fragment and PostHog's automatic person properties are
+  stripped from every event, on the landing page too.
+
 - **Landing page analytics and the access-request funnel.** With a PostHog
   key set, the landing page loads PostHog cookieless (in-memory, no cookies or
   storage) with autocapture and replay off, and records page views and which

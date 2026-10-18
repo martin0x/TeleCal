@@ -6,7 +6,7 @@ import { UsersRepository } from "../db/repositories/users"
 import { FoodLogsRepository } from "../db/repositories/food-logs"
 import { validateInitData, extractAuthHeader, TelegramUser } from "./auth"
 import { createApiHandlers } from "./api"
-import { landingAnalyticsScript, type WebAnalyticsConfig } from "./analytics-snippet"
+import { landingAnalyticsScript, miniAppAnalyticsScript, type WebAnalyticsConfig } from "./analytics-snippet"
 
 export interface WebServerDeps {
   usersRepo: UsersRepository
@@ -17,6 +17,8 @@ export interface WebServerDeps {
   baseUrl: string
   /** PostHog for the web pages; omitted (no key) means no analytics script at all. */
   analytics?: WebAnalyticsConfig
+  /** POSTHOG_ID_SECRET, for analytics_id in /api/user. Server-side only: never put it in a page. */
+  analyticsIdSecret?: string
 }
 
 const VIEWS_DIR = join(import.meta.dir, "views")
@@ -52,6 +54,16 @@ export function renderLanding(template: string, values: LandingValues): string {
     .replace("{{ANALYTICS}}", () => values.analyticsScript ?? "")
 }
 
+/** app.html with its {{ANALYTICS}} slot filled; null if the file can't be read. */
+function loadMiniApp(analyticsScript: string): string | null {
+  try {
+    return readFileSync(join(VIEWS_DIR, "app.html"), "utf-8").replace("{{ANALYTICS}}", () => analyticsScript)
+  } catch (error) {
+    console.error("[web] Mini App unavailable:", error)
+    return null
+  }
+}
+
 function loadLanding(values: LandingValues): string | null {
   try {
     return renderLanding(readFileSync(join(VIEWS_DIR, "landing.html"), "utf-8"), values)
@@ -62,14 +74,15 @@ function loadLanding(values: LandingValues): string | null {
 }
 
 export function createFetchHandler(deps: WebServerDeps) {
-  const { usersRepo, foodLogsRepo } = deps
-  const api = createApiHandlers({ usersRepo, foodLogsRepo })
+  const { usersRepo, foodLogsRepo, analyticsIdSecret } = deps
+  const api = createApiHandlers({ usersRepo, foodLogsRepo, analyticsIdSecret })
   // Rendered once: the template and both values are fixed for the process lifetime.
   const landing = loadLanding({
     botUsername: deps.botUsername,
     baseUrl: deps.baseUrl,
     analyticsScript: landingAnalyticsScript(deps.analytics),
   })
+  const miniApp = loadMiniApp(miniAppAnalyticsScript(deps.analytics))
 
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url)
@@ -85,7 +98,12 @@ export function createFetchHandler(deps: WebServerDeps) {
     }
 
     if (path === "/app" || path === "/app/") {
-      return serveMiniApp()
+      if (miniApp === null) {
+        return new Response("Mini App not found", { status: 404 })
+      }
+      return new Response(miniApp, {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      })
     }
 
     const asset = path.match(ASSET_PATH)
@@ -115,18 +133,6 @@ export function startWebServer(deps: WebServerDeps) {
   return Bun.serve({
     port: config.web.port,
     fetch: createFetchHandler(deps),
-  })
-}
-
-async function serveMiniApp(): Promise<Response> {
-  const file = Bun.file(join(VIEWS_DIR, "app.html"))
-
-  if (!(await file.exists())) {
-    return new Response("Mini App not found", { status: 404 })
-  }
-
-  return new Response(file, {
-    headers: { "Content-Type": "text/html; charset=utf-8" },
   })
 }
 
