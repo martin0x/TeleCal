@@ -13,7 +13,7 @@ bun run dev      # Start with hot reload
 bun run start    # Production start
 bun test         # Run all tests
 bun test src/ai  # Run tests in specific directory
-bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--protein]   # one live API call to verify a provider; --protein exercises the batch call
+bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--protein]   # one live API call to verify a provider; --protein exercises the batch call; with POSTHOG_* set, also sends the $ai_generation
 bun run scripts/smoke-posthog.ts   # sends one test exception to PostHog; needs POSTHOG_API_KEY and POSTHOG_ID_SECRET
 ```
 
@@ -58,6 +58,7 @@ bun run scripts/smoke-posthog.ts   # sends one test exception to PostHog; needs 
 - Every event carries `environment` (`POSTHOG_ENVIRONMENT`) because one PostHog project serves prod and testing
 - Capturing never throws into the caller; `FakeAnalytics` in `test-helpers.ts` for tests
 - Error tracking: `bot.catch` (`src/bot/errors.ts`), process handlers (`src/process-errors.ts`), AI failures in `AIService`, and the jobs. Each error object is reported once, from the first catch that sees it; expected Telegram errors (blocked bot, "message is not modified") are skipped via `isExpectedTelegramError`
+- LLM analytics: providers return a `trace` (system + user message, raw reply) and throw `ProviderParseError` (still a `SyntaxError`, with usage and trace) on bad JSON; `AIService.recordSafely()` writes `ai_usage` then sends `$ai_generation` with TeleCal's own cost
 - `src/shutdown.ts` handles SIGINT and SIGTERM and awaits the analytics flush before exit
 - Decisions and the privacy line: `docs/adr/0001-posthog-integration.md`
 

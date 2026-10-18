@@ -2,6 +2,8 @@
 import { describe, test, expect } from "bun:test"
 import OpenAI from "openai"
 import { OpenAIProvider } from "./openai"
+import { ProviderParseError } from "../types"
+import { PROTEIN_BATCH_PROMPT } from "../prompt"
 
 /** Captures the arguments a Responses call was made with, and returns a canned reply. */
 function fakeClient(outputText: string) {
@@ -148,5 +150,37 @@ describe("OpenAIProvider usage reporting", () => {
       reasoningTokens: 0,
     })
     expect(result.estimate.items).toHaveLength(1)
+  })
+})
+
+describe("OpenAIProvider trace", () => {
+  test("returns the prompt it sent and the raw reply", async () => {
+    const result = await new OpenAIProvider(fakeClient(VALID_REPLY).client).estimate("two eggs", "earlier: breakfast")
+
+    expect(result.trace?.input[0].role).toBe("system")
+    expect(result.trace?.input[0].content).toContain("nutrition expert")
+    expect(result.trace?.input[1].role).toBe("user")
+    expect(result.trace?.input[1].content).toContain("two eggs")
+    expect(result.trace?.input[1].content).toContain("earlier: breakfast")
+    expect(result.trace?.output).toBe(VALID_REPLY)
+  })
+
+  test("an unparseable reply throws a ProviderParseError carrying usage and the raw text", async () => {
+    const error = await new OpenAIProvider(fakeClient("not json at all").client).estimate("two eggs").catch((e) => e)
+
+    expect(error).toBeInstanceOf(ProviderParseError)
+    expect(error).toBeInstanceOf(SyntaxError)
+    expect(error.usage.inputTokens).toBe(120)
+    expect(error.trace.output).toBe("not json at all")
+    expect(error.trace.input[1].content).toContain("two eggs")
+  })
+
+  test("the protein batch returns its prompt and raw reply too", async () => {
+    const reply = JSON.stringify({ items: [{ index: 1, protein_g: 4 }] })
+    const result = await new OpenAIProvider(fakeClient(reply).client).estimateProtein(["Rice"])
+
+    expect(result.trace?.input[0]).toEqual({ role: "system", content: PROTEIN_BATCH_PROMPT })
+    expect(result.trace?.input[1].content).toContain("Rice")
+    expect(result.trace?.output).toBe(reply)
   })
 })

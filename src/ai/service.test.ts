@@ -1,7 +1,8 @@
 // src/ai/service.test.ts
 import { describe, test, expect, beforeEach, spyOn } from "bun:test"
 import { AIService } from "./service"
-import type { AIProvider, ProviderResult, EstimationResult } from "./types"
+import { ProviderParseError, type AIProvider, type ProviderResult, type EstimationResult } from "./types"
+import { calculateCost } from "./pricing"
 import type { CacheRepository } from "../db/repositories/cache"
 import type { UsageRepository, UsageEntry } from "../db/repositories/usage"
 import { FakeAnalytics } from "../analytics/test-helpers"
@@ -312,5 +313,99 @@ describe("error reporting", () => {
     await service.estimate("chicken adobo", "openai", OPTS)
 
     expect(analytics.exceptions).toEqual([])
+  })
+})
+
+describe("$ai_generation", () => {
+  const TRACE = {
+    input: [
+      { role: "system" as const, content: "You are a nutrition expert" },
+      { role: "user" as const, content: "chicken adobo" },
+    ],
+    output: '{"items":[]}',
+  }
+  const TRACED: ProviderResult = { ...OK_RESULT, trace: TRACE }
+  const generations = () => analytics.events.filter((e) => e.event === "$ai_generation")
+
+  test("one event per billed call, with the prompt, reply, tokens, latency and our own cost", async () => {
+    service = build(fakeProvider(TRACED))
+
+    await service.estimate("chicken adobo", "openai", OPTS)
+
+    expect(generations()).toHaveLength(1)
+    const { telegramId, properties } = generations()[0]
+    expect(telegramId).toBe(42)
+    expect(properties).toMatchObject({
+      $ai_provider: "openai",
+      $ai_model: "gpt-5.6-luna",
+      $ai_input_tokens: 1000,
+      $ai_output_tokens: 100,
+      $ai_input: TRACE.input,
+      $ai_output_choices: [{ role: "assistant", content: TRACE.output }],
+      $ai_total_cost_usd: calculateCost(OK_RESULT.usage),
+      $ai_is_error: false,
+      $ai_span_name: "estimate",
+      call_type: "estimate",
+      status: "ok",
+    })
+    expect(typeof properties?.$ai_trace_id).toBe("string")
+    expect(properties?.$ai_latency).toBeGreaterThanOrEqual(0)
+  })
+
+  test("the event's cost matches the ai_usage row", async () => {
+    service = build(fakeProvider(TRACED))
+
+    await service.estimate("chicken adobo", "openai", OPTS)
+
+    expect(generations()[0].properties?.$ai_total_cost_usd).toBe(usage.rows[0].costUsd)
+  })
+
+  test("an unparseable reply is an error event that still carries the reply and the billed tokens", async () => {
+    const parseError = new ProviderParseError(new SyntaxError("Unexpected token n"), OK_RESULT.usage, { ...TRACE, output: "not json" })
+    service = build(fakeProvider(parseError))
+
+    await expect(service.estimate("chicken adobo", "openai", OPTS)).rejects.toThrow()
+
+    expect(generations()[0].properties).toMatchObject({
+      $ai_is_error: true,
+      $ai_error: "Unexpected token n",
+      $ai_output_choices: [{ role: "assistant", content: "not json" }],
+      $ai_input_tokens: 1000,
+      status: "parse_error",
+    })
+    // ai_usage now records the tokens that were billed, not zeros.
+    expect(usage.rows[0]).toMatchObject({ status: "parse_error", inputTokens: 1000, model: "gpt-5.6-luna" })
+  })
+
+  test("a call that never got a reply sends no generation", async () => {
+    service = build(fakeProvider(new Error("503 Service Unavailable")))
+
+    await expect(service.estimate("chicken adobo", "openai", OPTS)).rejects.toThrow()
+
+    expect(generations()).toEqual([])
+  })
+
+  test("a cache hit sends no generation", async () => {
+    cache.set("chicken adobo", ESTIMATE)
+    service = build(fakeProvider(TRACED))
+
+    await service.estimate("chicken adobo", "openai", OPTS)
+
+    expect(generations()).toEqual([])
+  })
+
+  test("a protein batch sends one generation with call type backfill", async () => {
+    service = build({
+      name: "openai",
+      estimate: async () => {
+        throw new Error("not used")
+      },
+      estimateProtein: async () => ({ protein: [4], usage: OK_RESULT.usage, trace: TRACE }),
+    })
+
+    await service.estimateProtein(["Rice"], "openai", { telegramId: 7, chatId: null })
+
+    expect(generations()).toHaveLength(1)
+    expect(generations()[0].properties).toMatchObject({ call_type: "backfill", $ai_input: TRACE.input })
   })
 })

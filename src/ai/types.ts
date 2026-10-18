@@ -41,15 +41,40 @@ export interface TokenUsage {
   reasoningTokens?: number
 }
 
+/** What one call sent and got back, for LLM analytics. */
+export interface AITrace {
+  /** The system prompt, then the user message. */
+  input: { role: "system" | "user"; content: string }[]
+  /** The model's raw reply text, before parsing. */
+  output: string
+}
+
 export interface ProviderResult {
   estimate: EstimationResult
   usage: TokenUsage
+  trace?: AITrace
 }
 
 export interface ProteinBatchResult {
   /** Aligned with the input array. null where the model gave nothing usable. */
   protein: (number | null)[]
   usage: TokenUsage
+  trace?: AITrace
+}
+
+/**
+ * The model replied, and was billed, but the reply wasn't valid JSON. Still a
+ * SyntaxError, so existing checks hold; carries what the call cost and said.
+ */
+export class ProviderParseError extends SyntaxError {
+  constructor(
+    cause: SyntaxError,
+    readonly usage: TokenUsage,
+    readonly trace: AITrace
+  ) {
+    super(cause.message, { cause })
+    this.name = "ProviderParseError"
+  }
 }
 
 export type CallType = "estimate" | "clarify" | "edit" | "retry" | "backfill"

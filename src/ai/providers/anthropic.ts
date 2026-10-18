@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import { AIProvider, ProviderResult, ProteinBatchResult, TokenUsage } from "../types"
 import { config } from "../../config"
 import { ESTIMATE_JSON_PROMPT, PROTEIN_BATCH_PROMPT, formatProteinBatchInput } from "../prompt"
-import { normalizeItems, stripFences, alignProteinBatch } from "../parse"
+import { normalizeItems, stripFences, alignProteinBatch, parseReply, traceOf } from "../parse"
 
 const MODEL = "claude-haiku-4-5-20251001"
 
@@ -56,7 +56,10 @@ export class AnthropicProvider implements AIProvider {
       messages: [{ role: "user", content: userMessage }],
     })
 
-    const result = JSON.parse(stripFences(firstText(response))) as {
+    const text = firstText(response)
+    const usage = usageFrom(response)
+    const trace = traceOf(ESTIMATE_JSON_PROMPT, userMessage, text)
+    const result = parseReply(stripFences(text), usage, trace) as {
       items: unknown
       needsClarification: boolean
       clarificationQuestion?: string
@@ -70,21 +73,27 @@ export class AnthropicProvider implements AIProvider {
         clarificationQuestion: result.clarificationQuestion,
         confidence: result.confidence || "medium",
       },
-      usage: usageFrom(response),
+      usage,
+      trace,
     }
   }
 
   async estimateProtein(descriptions: string[]): Promise<ProteinBatchResult> {
+    const userMessage = formatProteinBatchInput(descriptions)
     const response = await this.client.messages.create({
       model: MODEL,
       max_tokens: 2048,
       system: PROTEIN_BATCH_PROMPT,
-      messages: [{ role: "user", content: formatProteinBatchInput(descriptions) }],
+      messages: [{ role: "user", content: userMessage }],
     })
 
+    const text = firstText(response)
+    const usage = usageFrom(response)
+    const trace = traceOf(PROTEIN_BATCH_PROMPT, userMessage, text)
     return {
-      protein: alignProteinBatch(JSON.parse(stripFences(firstText(response))), descriptions.length),
-      usage: usageFrom(response),
+      protein: alignProteinBatch(parseReply(stripFences(text), usage, trace), descriptions.length),
+      usage,
+      trace,
     }
   }
 }

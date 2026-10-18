@@ -1,7 +1,22 @@
 // src/ai/parse.ts
 // Model output is untrusted: a field can be missing, a string, or NaN. These
 // helpers turn whatever came back into the shapes the rest of the app trusts.
-import type { FoodEstimate } from "./types"
+import { ProviderParseError, type AITrace, type FoodEstimate, type TokenUsage } from "./types"
+
+/** JSON.parse that turns a SyntaxError into a ProviderParseError carrying the call's usage and trace. */
+export function parseReply(text: string, usage: TokenUsage, trace: AITrace): unknown {
+  try {
+    return JSON.parse(text)
+  } catch (error) {
+    if (error instanceof SyntaxError) throw new ProviderParseError(error, usage, trace)
+    throw error
+  }
+}
+
+/** The trace for one system-prompt + user-message call. */
+export function traceOf(system: string, user: string, output: string): AITrace {
+  return { input: [{ role: "system", content: system }, { role: "user", content: user }], output }
+}
 
 /** Whole grams, or null when the value is not a finite number (or numeric string). */
 export function coerceProtein(value: unknown): number | null {

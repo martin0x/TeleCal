@@ -2,6 +2,8 @@
 import { describe, test, expect } from "bun:test"
 import Anthropic from "@anthropic-ai/sdk"
 import { AnthropicProvider } from "./anthropic"
+import { ProviderParseError } from "../types"
+import { ESTIMATE_JSON_PROMPT, PROTEIN_BATCH_PROMPT } from "../prompt"
 
 const VALID_REPLY = JSON.stringify({
   items: [{ description: "Scrambled eggs", calories: 180, emoji: "🍳" }],
@@ -100,5 +102,36 @@ describe("AnthropicProvider.estimateProtein", () => {
     expect(calls[0].messages[0].content).toBe("1. Chicken adobo\n2. Rice")
     expect(result.protein).toEqual([38, null])
     expect(result.usage).toMatchObject({ inputTokens: 90, outputTokens: 12 })
+  })
+})
+
+describe("AnthropicProvider trace", () => {
+  test("returns the prompt it sent and the raw reply", async () => {
+    const result = await new AnthropicProvider(fakeClient(VALID_REPLY)).estimate("two eggs", "earlier: breakfast")
+
+    expect(result.trace?.input[0]).toEqual({ role: "system", content: ESTIMATE_JSON_PROMPT })
+    expect(result.trace?.input[1].role).toBe("user")
+    expect(result.trace?.input[1].content).toContain("two eggs")
+    expect(result.trace?.input[1].content).toContain("earlier: breakfast")
+    expect(result.trace?.output).toBe(VALID_REPLY)
+  })
+
+  test("an unparseable reply throws a ProviderParseError carrying usage and the raw text", async () => {
+    const error = await new AnthropicProvider(fakeClient("not json at all")).estimate("two eggs").catch((e) => e)
+
+    expect(error).toBeInstanceOf(ProviderParseError)
+    expect(error).toBeInstanceOf(SyntaxError)
+    expect(error.usage.inputTokens).toBe(200)
+    expect(error.trace.output).toBe("not json at all")
+    expect(error.trace.input[1].content).toContain("two eggs")
+  })
+
+  test("the protein batch returns its prompt and raw reply too", async () => {
+    const reply = JSON.stringify({ items: [{ index: 1, protein_g: 4 }] })
+    const result = await new AnthropicProvider(fakeClient(reply)).estimateProtein(["Rice"])
+
+    expect(result.trace?.input[0]).toEqual({ role: "system", content: PROTEIN_BATCH_PROMPT })
+    expect(result.trace?.input[1].content).toContain("Rice")
+    expect(result.trace?.output).toBe(reply)
   })
 })

@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { AIProvider, ProviderResult, ProteinBatchResult, TokenUsage } from "../types"
 import { config } from "../../config"
 import { ESTIMATE_JSON_PROMPT, PROTEIN_BATCH_PROMPT, formatProteinBatchInput } from "../prompt"
-import { normalizeItems, stripFences, alignProteinBatch } from "../parse"
+import { normalizeItems, stripFences, alignProteinBatch, parseReply, traceOf } from "../parse"
 
 const MODEL = "gemini-3.1-flash-lite"
 
@@ -52,7 +52,8 @@ export class GeminiProvider implements AIProvider {
       : foodDescription
 
     const { text, usage } = await this.generate(ESTIMATE_JSON_PROMPT, userMessage)
-    const parsed = JSON.parse(stripFences(text)) as {
+    const trace = traceOf(ESTIMATE_JSON_PROMPT, userMessage, text)
+    const parsed = parseReply(stripFences(text), usage, trace) as {
       items: unknown
       needsClarification: boolean
       clarificationQuestion?: string
@@ -67,14 +68,18 @@ export class GeminiProvider implements AIProvider {
         confidence: parsed.confidence || "medium",
       },
       usage,
+      trace,
     }
   }
 
   async estimateProtein(descriptions: string[]): Promise<ProteinBatchResult> {
-    const { text, usage } = await this.generate(PROTEIN_BATCH_PROMPT, formatProteinBatchInput(descriptions))
+    const userMessage = formatProteinBatchInput(descriptions)
+    const { text, usage } = await this.generate(PROTEIN_BATCH_PROMPT, userMessage)
+    const trace = traceOf(PROTEIN_BATCH_PROMPT, userMessage, text)
     return {
-      protein: alignProteinBatch(JSON.parse(stripFences(text)), descriptions.length),
+      protein: alignProteinBatch(parseReply(stripFences(text), usage, trace), descriptions.length),
       usage,
+      trace,
     }
   }
 }

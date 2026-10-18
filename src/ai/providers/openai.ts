@@ -3,7 +3,7 @@ import OpenAI from "openai"
 import { AIProvider, ProviderResult, ProteinBatchResult, TokenUsage } from "../types"
 import { config } from "../../config"
 import { PROTEIN_RULE, PROTEIN_BATCH_PROMPT, formatProteinBatchInput } from "../prompt"
-import { normalizeItems, alignProteinBatch } from "../parse"
+import { normalizeItems, alignProteinBatch, parseReply, traceOf } from "../parse"
 
 const INSTRUCTIONS = `You are a nutrition expert that estimates calories and protein in food.
 
@@ -131,7 +131,9 @@ export class OpenAIProvider implements AIProvider {
 
     // No markdown-fence stripping: strict Structured Outputs cannot return
     // fenced or malformed JSON.
-    const result = JSON.parse(content) as {
+    const usage = usageFrom(response)
+    const trace = traceOf(INSTRUCTIONS, userMessage, content)
+    const result = parseReply(content, usage, trace) as {
       items: unknown
       needsClarification: boolean
       clarificationQuestion?: string
@@ -145,15 +147,17 @@ export class OpenAIProvider implements AIProvider {
         clarificationQuestion: result.clarificationQuestion || undefined,
         confidence: result.confidence || "medium",
       },
-      usage: usageFrom(response),
+      usage,
+      trace,
     }
   }
 
   async estimateProtein(descriptions: string[]): Promise<ProteinBatchResult> {
+    const userMessage = formatProteinBatchInput(descriptions)
     const response = await this.client.responses.create({
       model: MODEL,
       instructions: PROTEIN_BATCH_PROMPT,
-      input: formatProteinBatchInput(descriptions),
+      input: userMessage,
       reasoning: { effort: "none" },
       store: false,
       text: {
@@ -171,9 +175,12 @@ export class OpenAIProvider implements AIProvider {
       throw new Error("No response from OpenAI")
     }
 
+    const usage = usageFrom(response)
+    const trace = traceOf(PROTEIN_BATCH_PROMPT, userMessage, content)
     return {
-      protein: alignProteinBatch(JSON.parse(content), descriptions.length),
-      usage: usageFrom(response),
+      protein: alignProteinBatch(parseReply(content, usage, trace), descriptions.length),
+      usage,
+      trace,
     }
   }
 }

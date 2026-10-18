@@ -10,6 +10,12 @@ tied to release tags.
 
 ### Added
 
+- **LLM analytics in PostHog.** Every billed AI call (estimate, clarify,
+  edit, retry, backfill) is sent as a `$ai_generation` event with the full
+  prompt and raw reply, provider, model, token counts, latency, and TeleCal's
+  own cost, so PostHog's numbers match `/admin usage`. Unparseable replies are
+  error events that still carry the reply. Cache hits and calls that never got
+  a reply send nothing. `ai_usage` stays the source of truth for cost.
 - **Error tracking in PostHog.** Errors from update handlers, AI provider
   calls, `ai_usage` writes, the reminder, retry and backfill jobs, and
   unhandled rejections or exceptions are reported to PostHog with the
@@ -32,6 +38,9 @@ tied to release tags.
 
 ### Changed
 
+- **`parse_error` rows in `ai_usage` now record the tokens that were billed**
+  instead of zeros and model `unknown`: providers attach their usage to the
+  parse error.
 - **Privacy: PostHog analytics (US) is now a data processor.** It will
   receive error reports, each AI call's full prompt and output (so food
   descriptions), and page views (cookieless on the landing page), under a hashed Telegram ID. The

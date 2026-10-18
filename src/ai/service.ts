@@ -1,5 +1,6 @@
 // src/ai/service.ts
-import { AIProvider, EstimationResult, ProteinBatchResult } from "./types"
+import { randomUUID } from "node:crypto"
+import { AIProvider, EstimationResult, ProteinBatchResult, ProviderParseError, type AITrace } from "./types"
 import { OpenAIProvider } from "./providers/openai"
 import { AnthropicProvider } from "./providers/anthropic"
 import { GeminiProvider } from "./providers/gemini"
@@ -80,17 +81,18 @@ export class AIService {
     const recordOpts: EstimateOptions = { ...opts, callType: "backfill" }
 
     let result: ProteinBatchResult
+    const started = performance.now()
     try {
       result = await provider.estimateProtein(descriptions)
     } catch (error) {
-      if (error instanceof SyntaxError) {
-        this.recordSafely(provider.name, { model: "unknown", inputTokens: 0, outputTokens: 0 }, recordOpts, "parse_error")
-      }
-      this.reportFailure(error, provider.name, recordOpts)
+      this.recordFailure(error, provider.name, recordOpts, performance.now() - started)
       throw error
     }
 
-    this.recordSafely(provider.name, result.usage, recordOpts, this.statusFor(result.usage))
+    this.recordSafely(provider.name, result.usage, recordOpts, this.statusFor(result.usage), {
+      trace: result.trace,
+      latencyMs: performance.now() - started,
+    })
     return result.protein
   }
 
@@ -113,25 +115,18 @@ export class AIService {
     opts: EstimateOptions
   ): Promise<EstimationResult> {
     let result
+    const started = performance.now()
     try {
       result = await provider.estimate(foodDescription, opts.context)
     } catch (error) {
-      // A JSON parse failure means the API replied and billed us, but the body
-      // was unusable. Any other error means no usable response at all, so there
-      // is nothing to attribute.
-      if (error instanceof SyntaxError) {
-        this.recordSafely(
-          provider.name,
-          { model: "unknown", inputTokens: 0, outputTokens: 0 },
-          opts,
-          "parse_error"
-        )
-      }
-      this.reportFailure(error, provider.name, opts)
+      this.recordFailure(error, provider.name, opts, performance.now() - started)
       throw error
     }
 
-    this.recordSafely(provider.name, result.usage, opts, this.statusFor(result.usage))
+    this.recordSafely(provider.name, result.usage, opts, this.statusFor(result.usage), {
+      trace: result.trace,
+      latencyMs: performance.now() - started,
+    })
 
     const estimate = result.estimate
     // A result with unknown protein is not worth keeping: the next ask should
@@ -153,13 +148,37 @@ export class AIService {
     })
   }
 
-  /** Accounting must never break calorie logging. */
+  /**
+   * A JSON parse failure means the API replied and billed us, but the body was
+   * unusable: record it with whatever usage the provider attached. Any other
+   * error means no usable response at all, so there is nothing to attribute.
+   * Either way the failure goes to error tracking.
+   */
+  private recordFailure(error: unknown, providerName: string, opts: EstimateOptions, latencyMs: number): void {
+    if (error instanceof ProviderParseError) {
+      this.recordSafely(providerName, error.usage, opts, "parse_error", { trace: error.trace, latencyMs, error })
+    } else if (error instanceof SyntaxError) {
+      this.recordSafely(providerName, { model: "unknown", inputTokens: 0, outputTokens: 0 }, opts, "parse_error", {
+        latencyMs,
+        error,
+      })
+    }
+    this.reportFailure(error, providerName, opts)
+  }
+
+  /**
+   * Writes the ai_usage row (the source of truth for cost), then sends the
+   * same call to PostHog as $ai_generation. Accounting must never break
+   * calorie logging; analytics.capture swallows its own errors.
+   */
   private recordSafely(
     providerName: string,
     usage: TokenUsage,
     opts: EstimateOptions,
-    status: UsageStatus
+    status: UsageStatus,
+    generation?: { trace?: AITrace; latencyMs: number; error?: unknown }
   ): void {
+    const costUsd = calculateCost(usage)
     try {
       this.usage.record({
         telegramId: opts.telegramId,
@@ -171,7 +190,7 @@ export class AIService {
         cacheWriteTokens: usage.cacheWriteTokens ?? null,
         outputTokens: usage.outputTokens,
         reasoningTokens: usage.reasoningTokens ?? null,
-        costUsd: calculateCost(usage),
+        costUsd,
         callType: opts.callType,
         status,
       })
@@ -179,6 +198,32 @@ export class AIService {
       console.error("[usage] Failed to record AI usage:", error)
       this.analytics.captureException(error, opts.telegramId, { source: "usage", call_type: opts.callType })
     }
+
+    if (!generation) return
+    const { trace, latencyMs, error } = generation
+    this.analytics.capture(opts.telegramId, "$ai_generation", {
+      // Each call is its own trace: threading one ID through a /log
+      // conversation would need it stored in conversation_state.
+      $ai_trace_id: randomUUID(),
+      $ai_span_name: opts.callType,
+      $ai_provider: providerName,
+      $ai_model: usage.model,
+      $ai_input_tokens: usage.inputTokens,
+      $ai_output_tokens: usage.outputTokens,
+      $ai_cache_read_input_tokens: usage.cachedInputTokens ?? 0,
+      $ai_cache_creation_input_tokens: usage.cacheWriteTokens ?? 0,
+      // TokenUsage counts cached tokens inside inputTokens.
+      $ai_cache_reporting_exclusive: false,
+      reasoning_tokens: usage.reasoningTokens ?? 0,
+      $ai_latency: latencyMs / 1000,
+      $ai_input: trace?.input,
+      $ai_output_choices: trace ? [{ role: "assistant", content: trace.output }] : undefined,
+      $ai_total_cost_usd: costUsd,
+      $ai_is_error: status === "parse_error",
+      $ai_error: error instanceof Error ? error.message : undefined,
+      call_type: opts.callType,
+      status,
+    })
   }
 
   private normalizeFood(food: string): string {
