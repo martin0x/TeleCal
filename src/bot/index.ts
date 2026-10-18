@@ -26,18 +26,23 @@ import { createUsageCommand } from "./commands/usage"
 import { LogFlow } from "./conversations/log-flow"
 import { AIService } from "../ai/service"
 import { noopAnalytics, type Analytics } from "../analytics"
+import { withContentPreference } from "../analytics/content-preference"
 import { createBotErrorHandler } from "./errors"
 import { smartReply } from "./utils/smart-reply"
 
 export interface BotContext extends Context {}
 
-export function createBot(analytics: Analytics = noopAnalytics) {
+export function createBot(baseAnalytics: Analytics = noopAnalytics) {
   const bot = new Bot<BotContext>(config.telegram.botToken)
+
+  const usersRepo = new UsersRepository(db)
+  // Everything below reports through this, so the /settings meal text option
+  // applies everywhere. A user with no row yet gets the default: on.
+  const analytics = withContentPreference(baseAnalytics, (id) => usersRepo.findById(id)?.analytics_content ?? true)
 
   bot.catch(createBotErrorHandler(analytics))
 
   const allowedUsersRepo = new AllowedUsersRepository(db)
-  const usersRepo = new UsersRepository(db)
   const foodLogsRepo = new FoodLogsRepository(db)
   const conversationsRepo = new ConversationsRepository(db)
   const pendingRepo = new PendingRepository(db)
@@ -125,5 +130,5 @@ export function createBot(analytics: Analytics = noopAnalytics) {
     return logMessageHandler(ctx)
   })
 
-  return { bot, allowedUsersRepo, usersRepo, foodLogsRepo, conversationsRepo, pendingRepo, aiService, logFlow }
+  return { bot, allowedUsersRepo, usersRepo, foodLogsRepo, conversationsRepo, pendingRepo, aiService, logFlow, analytics }
 }

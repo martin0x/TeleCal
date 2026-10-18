@@ -20,7 +20,9 @@ process.on("uncaughtException", (error) => void processErrors.onUncaughtExceptio
 initializeDatabase()
 console.log("Database initialized")
 
-const { bot, usersRepo, foodLogsRepo, pendingRepo, aiService } = createBot(analytics)
+// userAnalytics applies each user's /settings meal text choice; anything that
+// reports for a user goes through it.
+const { bot, usersRepo, foodLogsRepo, pendingRepo, aiService, analytics: userAnalytics } = createBot(analytics)
 
 // Fetches the bot's own username (getMe) for the landing page's t.me links.
 // bot.start() below reuses it instead of calling getMe again.
@@ -49,8 +51,8 @@ bot.start({
     console.log(`Bot @${botInfo.username} started`)
 
     // Start background jobs after bot is running
-    reminderInterval = startReminderJob(bot, usersRepo, foodLogsRepo, analytics)
-    retryInterval = startRetryPendingJob(bot, pendingRepo, foodLogsRepo, usersRepo, aiService, analytics)
+    reminderInterval = startReminderJob(bot, usersRepo, foodLogsRepo, userAnalytics)
+    retryInterval = startRetryPendingJob(bot, pendingRepo, foodLogsRepo, usersRepo, aiService, userAnalytics)
   },
 })
 

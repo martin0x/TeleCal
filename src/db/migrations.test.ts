@@ -67,6 +67,13 @@ describe("runMigrations", () => {
     })
   })
 
+  test("adds users.analytics_content, on for existing users", () => {
+    const db = preProteinDb()
+    runMigrations(db, undefined, () => {})
+
+    expect(db.prepare("SELECT analytics_content FROM users").get()).toEqual({ analytics_content: 1 })
+  })
+
   test("is a no-op the second time", () => {
     const db = preProteinDb()
     runMigrations(db, undefined, () => {})

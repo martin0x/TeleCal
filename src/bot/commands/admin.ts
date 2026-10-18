@@ -167,7 +167,7 @@ export function privacyNoticeText(baseUrl: string): string {
     "• for each meal estimate, what you described and the AI's reply, plus the model, cost and response time\n" +
     "• page views from the website and the charts page\n\n" +
     "You're identified by a one-way code made from your Telegram ID, never your name or username.\n\n" +
-    "Nothing changes in how you use TeleCal. To have your PostHog data deleted, ask the admin who gave you access.\n\n" +
+    "Nothing changes in how you use TeleCal. To keep your meal descriptions and the AI's replies out of PostHog, turn off /settings → Meal Text Sharing. To have your PostHog data deleted, ask the admin who gave you access.\n\n" +
     `Details: ${baseUrl}/#privacy`
   )
 }

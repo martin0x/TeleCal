@@ -2,6 +2,7 @@
 import { describe, test, expect, beforeEach, afterAll } from "bun:test"
 import { Database } from "bun:sqlite"
 import { UsersRepository, User } from "./users"
+import { createTestDb } from "../test-helpers"
 
 describe("UsersRepository", () => {
   let db: Database
@@ -84,5 +85,18 @@ describe("UsersRepository", () => {
 
     repo.updateSettings(123, { daily_protein_goal: null })
     expect(repo.findById(123)!.daily_protein_goal).toBeNull()
+  })
+})
+
+describe("UsersRepository analytics_content", () => {
+  test("is on for a new user and round-trips", () => {
+    const repo = new UsersRepository(createTestDb())
+    expect(repo.upsert(123, "john").analytics_content).toBe(true)
+
+    repo.updateSettings(123, { analytics_content: false })
+    expect(repo.findById(123)!.analytics_content).toBe(false)
+
+    repo.updateSettings(123, { analytics_content: true })
+    expect(repo.findById(123)!.analytics_content).toBe(true)
   })
 })

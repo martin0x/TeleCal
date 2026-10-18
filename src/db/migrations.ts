@@ -15,6 +15,7 @@ export interface ColumnMigration {
 export const COLUMN_MIGRATIONS: ColumnMigration[] = [
   { table: "food_items", column: "protein_g", ddl: "INTEGER" },
   { table: "users", column: "daily_protein_goal", ddl: "INTEGER" },
+  { table: "users", column: "analytics_content", ddl: "INTEGER DEFAULT 1" },
 ]
 
 export function hasColumn(db: Database, table: string, column: string): boolean {

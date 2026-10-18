@@ -120,6 +120,13 @@ server-side secret (`POSTHOG_ID_SECRET`). Raw Telegram IDs, usernames and names
 are never sent, and no person properties are set. Every event carries an
 `environment` tag (`production` or `development`).
 
+**Meal text opt-out.** `/settings` → **Meal Text Sharing** (on by default,
+`users.analytics_content`) keeps a user's text out of PostHog: their
+`$ai_generation` events drop `$ai_input`, `$ai_output_choices` and
+`$ai_error`, and their error reports keep the error type and stack frames but
+not the message. Token counts, cost and latency are still sent. Errors not
+tied to a user (process-level crashes) are sent as they are.
+
 Existing users were told with a one-time message (`/admin announce-privacy`);
 `/start` and the landing page FAQ link to the same summary.
 

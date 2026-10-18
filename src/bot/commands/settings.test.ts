@@ -56,7 +56,8 @@ describe("createMainKeyboard", () => {
     expect(rows).toEqual([
       ["Change Provider", "Set Calorie Goal"],
       ["Set Protein Goal", "Set Reminder"],
-      ["Set Timezone", "Close"],
+      ["Set Timezone", "Meal Text Sharing"],
+      ["Close"],
     ])
   })
 })
@@ -69,6 +70,33 @@ describe("formatSettings", () => {
 
   test("shows Not set for missing goals", () => {
     expect(formatSettings(usersRepo.findById(USER)!)).toContain("Calorie Goal: Not set\nProtein Goal: Not set\n")
+  })
+})
+
+describe("meal text sharing", () => {
+  test("settings show it as On by default", () => {
+    expect(formatSettings(usersRepo.findById(USER)!)).toEndWith("\nMeal text in analytics: On")
+  })
+
+  test("the button turns it off, then on again, without a typed step", async () => {
+    const off = callbackCtx("settings:analytics")
+    await createSettingsCallbackHandler(usersRepo, aiService)(off as unknown as Context)
+
+    expect(usersRepo.findById(USER)!.analytics_content).toBe(false)
+    expect(off.editMessageText).toHaveBeenCalledWith(formatSettings(usersRepo.findById(USER)!), {
+      reply_markup: createMainKeyboard(),
+    })
+    expect(formatSettings(usersRepo.findById(USER)!)).toEndWith("\nMeal text in analytics: Off")
+    expect(off.answerCallbackQuery).toHaveBeenCalledWith(
+      "Your meals and the AI's replies are no longer sent to analytics."
+    )
+    expect(hasPendingSettings(USER)).toBe(false)
+
+    const on = callbackCtx("settings:analytics")
+    await createSettingsCallbackHandler(usersRepo, aiService)(on as unknown as Context)
+
+    expect(usersRepo.findById(USER)!.analytics_content).toBe(true)
+    expect(on.answerCallbackQuery).toHaveBeenCalledWith("Your meals and the AI's replies are sent to analytics again.")
   })
 })
 

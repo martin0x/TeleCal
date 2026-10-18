@@ -17,6 +17,8 @@ export function createMainKeyboard(): InlineKeyboard {
     .text("Set Reminder", "settings:reminder")
     .row()
     .text("Set Timezone", "settings:timezone")
+    .text("Meal Text Sharing", "settings:analytics")
+    .row()
     .text("Close", "settings:close")
 }
 
@@ -39,6 +41,7 @@ export function formatSettings(user: {
   reminder_time: string | null
   reminder_mention: boolean
   timezone: string
+  analytics_content: boolean
 }): string {
   const provider = user.ai_provider.charAt(0).toUpperCase() + user.ai_provider.slice(1)
   const goal = user.daily_goal ? `${user.daily_goal.toLocaleString("en-US")} cal` : "Not set"
@@ -54,7 +57,8 @@ export function formatSettings(user: {
     `Calorie Goal: ${goal}\n` +
     `Protein Goal: ${proteinGoal}\n` +
     `Reminder: ${reminder}\n` +
-    `Timezone: ${timezone}`
+    `Timezone: ${timezone}\n` +
+    `Meal text in analytics: ${user.analytics_content ? "On" : "Off"}`
   )
 }
 
@@ -146,6 +150,21 @@ export function createSettingsCallbackHandler(usersRepo: UsersRepository, aiServ
             "Find your timezone at: timeanddate.com/time/zones"
         )
         await ctx.answerCallbackQuery()
+        break
+      }
+
+      // One tap toggles: off keeps meal text out of PostHog (see withContentPreference).
+      case "analytics": {
+        const sharing = !user.analytics_content
+        usersRepo.updateSettings(userId, { analytics_content: sharing })
+        await ctx.editMessageText(formatSettings(usersRepo.findById(userId)!), {
+          reply_markup: createMainKeyboard(),
+        })
+        await ctx.answerCallbackQuery(
+          sharing
+            ? "Your meals and the AI's replies are sent to analytics again."
+            : "Your meals and the AI's replies are no longer sent to analytics."
+        )
         break
       }
 

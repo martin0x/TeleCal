@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS users (
   reminder_time TEXT,
   reminder_mention INTEGER DEFAULT 1,
   timezone TEXT DEFAULT 'Asia/Manila',
+  -- 0 = keep meal text (prompts, AI replies, error messages) out of PostHog (/settings)
+  analytics_content INTEGER DEFAULT 1,
   created_at TEXT DEFAULT (datetime('now'))
 );
 

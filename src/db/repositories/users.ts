@@ -10,6 +10,8 @@ export interface User {
   reminder_time: string | null
   reminder_mention: boolean
   timezone: string
+  /** Meal text (prompts, AI replies, error messages) may go to PostHog. On by default. */
+  analytics_content: boolean
   created_at: string
 }
 
@@ -22,6 +24,7 @@ interface UserRow {
   reminder_time: string | null
   reminder_mention: number
   timezone: string
+  analytics_content: number
   created_at: string
 }
 
@@ -55,6 +58,7 @@ export class UsersRepository {
       reminder_time: string | null
       reminder_mention: boolean
       timezone: string
+      analytics_content: boolean
     }>
   ): void {
     // Explicit allowlist - TypeScript enforces only these columns can be used
@@ -65,6 +69,7 @@ export class UsersRepository {
       "reminder_time",
       "reminder_mention",
       "timezone",
+      "analytics_content",
     ] as const
     type AllowedColumn = (typeof allowedColumns)[number]
 
@@ -97,6 +102,9 @@ export class UsersRepository {
     if (settings.timezone !== undefined) {
       columnUpdates.push({ column: "timezone", value: settings.timezone })
     }
+    if (settings.analytics_content !== undefined) {
+      columnUpdates.push({ column: "analytics_content", value: settings.analytics_content ? 1 : 0 })
+    }
 
     if (columnUpdates.length === 0) return
 
@@ -122,6 +130,8 @@ export class UsersRepository {
     return {
       ...row,
       reminder_mention: row.reminder_mention === 1,
+      // Only an explicit 0 opts out, so a row from an older fixture without the column stays on.
+      analytics_content: row.analytics_content !== 0,
     }
   }
 }

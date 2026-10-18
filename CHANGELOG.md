@@ -10,6 +10,13 @@ tied to release tags.
 
 ### Added
 
+- **`/settings` → Meal Text Sharing.** On by default. Turned off, PostHog
+  gets none of that user's text: AI-call events leave out the prompt, the
+  reply and the error message, and error reports keep the error type and
+  stack frames but replace the message with `[redacted]`. Token counts, cost
+  and latency are still sent, and `ai_usage` is unaffected. The landing page
+  FAQ, the README and the privacy notice text mention it.
+
 - **Mini App analytics.** With a PostHog key set, `/app` records page views
   and which views are used: `miniapp_tab_changed` (`today`, `week`,
   `month`), `miniapp_metric_changed` (`calories`, `protein`) and

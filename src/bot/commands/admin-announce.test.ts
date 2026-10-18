@@ -46,6 +46,10 @@ describe("privacyNoticeText", () => {
     expect(text).toContain("never your name or username")
     expect(text).toContain("https://telecal.example/#privacy")
   })
+
+  test("tells users they can keep their meal text out in /settings", () => {
+    expect(privacyNoticeText("https://telecal.example")).toContain("/settings → Meal Text Sharing")
+  })
 })
 
 describe("announcePrivacy", () => {

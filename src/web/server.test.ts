@@ -140,6 +140,7 @@ describe("routes", () => {
     const entry = body.match(/<details id="privacy"[\s\S]*?<\/details>/)?.[0] ?? ""
 
     expect(entry).toContain("PostHog")
+    expect(entry).toContain("/settings")
     expect(entry).not.toContain("Nothing else about you is shared")
   })
 

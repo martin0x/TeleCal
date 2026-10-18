@@ -59,6 +59,7 @@ bun run scripts/smoke-posthog.ts   # sends one test exception to PostHog; needs 
 - PostHog wrapper (`createAnalytics`); does nothing unless `POSTHOG_API_KEY` is set. Callers pass raw Telegram IDs; only `hashTelegramId` (HMAC with `POSTHOG_ID_SECRET`) leaves the process
 - Every event carries `environment` (`POSTHOG_ENVIRONMENT`) because one PostHog project serves prod and testing
 - Capturing never throws into the caller; `FakeAnalytics` in `test-helpers.ts` for tests
+- Meal text opt-out (`users.analytics_content`, `/settings` → Meal Text Sharing): `withContentPreference` (`content-preference.ts`) wraps the Analytics in `createBot`, dropping prompt/reply/error text from events and the message from exceptions. Report through the Analytics `createBot` returns, not the raw one from `createAnalytics`
 - The browser never gets `POSTHOG_ID_SECRET`: `WebServerDeps.analytics` is the browser-safe part, and the secret reaches `/api/user` separately as `analyticsIdSecret`
 - Error tracking: `bot.catch` (`src/bot/errors.ts`), process handlers (`src/process-errors.ts`), AI failures in `AIService`, and the jobs. Each error object is reported once, from the first catch that sees it; expected Telegram errors (blocked bot, "message is not modified") are skipped via `isExpectedTelegramError`
 - LLM analytics: providers return a `trace` (system + user message, raw reply) and throw `ProviderParseError` (still a `SyntaxError`, with usage and trace) on bad JSON; `AIService.recordSafely()` writes `ai_usage` then sends `$ai_generation` with TeleCal's own cost
@@ -90,7 +91,7 @@ All config via environment variables (see `.env.example`):
 
 - `allowed_users` - Access control allowlist
 - `access_requests` - Requests from non-allowlisted users (pending → approved | declined)
-- `users` - User preferences (ai_provider, daily_goal, daily_protein_goal, reminder_time)
+- `users` - User preferences (ai_provider, daily_goal, daily_protein_goal, reminder_time, analytics_content)
 - `food_logs` / `food_items` - Log sessions and individual items (`calories`, nullable `protein_g`)
 - `conversation_state` - Active `/log` conversations
 - `pending_entries` - Failed AI calls awaiting retry

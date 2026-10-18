@@ -26,7 +26,7 @@ Out: product analytics for the `/log` funnel, feature flags, session replay, exp
 - **Identity is pseudonymous.** `distinct_id` is an HMAC-SHA256 of the Telegram ID keyed with `POSTHOG_ID_SECRET`. No usernames, names or other person properties are sent. The Mini App gets its hashed ID from the server after `initData` validation, because the browser never sees the secret.
 - **Users are told first.** The README Privacy section, the landing page FAQ and `/start` are updated, and existing users get a one-time Telegram message, all before any user data is sent.
 - **Deletion is manual.** On request, the admin deletes the person in PostHog, which deletes their events. The README documents the steps.
-- **No opt-out yet.** A `/settings` option to stop sending content is tracked as a parked follow-up.
+- **Opt-out for content.** Originally parked until a user asked; built in #18 (2026-10-19) at the owner's request. `/settings` → Meal Text Sharing turns off a user's prompts, AI replies and error messages; the numbers still go. It wraps the `Analytics` the bot uses (`src/analytics/content-preference.ts`), so no capture site checks it.
 
 ### Source of truth for AI cost
 
