@@ -10,6 +10,14 @@ tied to release tags.
 
 ### Added
 
+- **Landing page analytics and the access-request funnel.** With a PostHog
+  key set, the landing page loads PostHog cookieless (in-memory, no cookies or
+  storage) with autocapture and replay off, and records page views and which
+  Request access button was tapped (`nav`, `hero`, `pricing`, `footer`). The
+  bot records `access_requested` (with `source`: `landing`, `group` or `bot`),
+  `access_approved` (via the Approve button or `/admin add`) and
+  `access_declined`. No visitor is linked from the page into Telegram; the
+  funnel is counted in totals.
 - **LLM analytics in PostHog.** Every billed AI call (estimate, clarify,
   edit, retry, backfill) is sent as a `$ai_generation` event with the full
   prompt and raw reply, provider, model, token counts, latency, and TeleCal's
@@ -38,6 +46,9 @@ tied to release tags.
 
 ### Changed
 
+- **The group "Request access" link now opens `/start group`** instead of
+  `/start access`, so group-chat requests aren't counted as landing page
+  ones.
 - **`parse_error` rows in `ai_usage` now record the tokens that were billed**
   instead of zeros and model `unknown`: providers attach their usage to the
   parse error.

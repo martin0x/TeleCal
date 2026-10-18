@@ -49,7 +49,8 @@ bun run scripts/smoke-posthog.ts   # sends one test exception to PostHog; needs 
 - `src/db/migrations.ts` adds columns that `IF NOT EXISTS` cannot; runs on every boot after the schema
 
 **Web Server** (`src/web/`):
-- Landing page at `/` (`views/landing.html`, `{{BOT_USERNAME}}`/`{{BASE_URL}}` filled at startup); images in `public/` served at `/assets/*`
+- Landing page at `/` (`views/landing.html`, `{{BOT_USERNAME}}`/`{{BASE_URL}}`/`{{ANALYTICS}}` filled at startup); images in `public/` served at `/assets/*`
+- `analytics-snippet.ts` - PostHog for the web pages (cookieless, automatic capture off); `{{ANALYTICS}}` is empty without a key. Request access links carry `data-cta` for click tracking
 - Mini App at `/app` (`views/app.html`); `config.web.miniAppUrl` points the View Charts buttons there
 - `auth.ts` - Telegram initData validation for secure auth
 

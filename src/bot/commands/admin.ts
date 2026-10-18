@@ -144,6 +144,18 @@ export async function backfillProtein(
   }
 }
 
+/** /admin add. Closes any open request (pending or declined) so the two paths can't disagree. */
+export function addToAllowlist(
+  deps: { allowedUsersRepo: AllowedUsersRepository; accessRequestsRepo: AccessRequestsRepository; analytics?: Analytics },
+  targetId: number,
+  adminId: number
+): void {
+  deps.allowedUsersRepo.add(targetId, adminId)
+  if (deps.accessRequestsRepo.markApproved(targetId, adminId)) {
+    deps.analytics?.capture(targetId, "access_approved", { via: "admin_add" })
+  }
+}
+
 /** Receipts key: changing it would send the notice to everyone again. */
 export const PRIVACY_ANNOUNCEMENT = "posthog-privacy-2026-10"
 
@@ -264,9 +276,7 @@ export function createAdminCommand(
           await smartReply(ctx, "Usage: /admin add <telegram_user_id>")
           return
         }
-        repo.add(targetId, userId)
-        // Close any open request (pending or declined) so the two paths can't disagree.
-        accessRequestsRepo.markApproved(targetId, userId)
+        addToAllowlist({ allowedUsersRepo: repo, accessRequestsRepo, analytics: deps.analytics }, targetId, userId)
         await smartReply(ctx, `✓ Added user ${targetId} to allowlist`)
         break
       }

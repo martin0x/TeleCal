@@ -66,13 +66,14 @@ export class AccessRequestsRepository {
    * included), so the two paths can't disagree. A no-op if there's no row,
    * and leaves decided_by/decided_at untouched if already approved.
    */
-  markApproved(telegramId: number, adminId: number): void {
+  /** True when it closed an open (pending or declined) request. */
+  markApproved(telegramId: number, adminId: number): boolean {
     const stmt = this.db.prepare(`
       UPDATE access_requests
       SET status = 'approved', decided_at = datetime('now'), decided_by = ?
       WHERE telegram_id = ? AND status != 'approved'
     `)
-    stmt.run(adminId, telegramId)
+    return stmt.run(adminId, telegramId).changes > 0
   }
 
   listPending(limit: number): AccessRequest[] {

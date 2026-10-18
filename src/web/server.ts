@@ -6,6 +6,7 @@ import { UsersRepository } from "../db/repositories/users"
 import { FoodLogsRepository } from "../db/repositories/food-logs"
 import { validateInitData, extractAuthHeader, TelegramUser } from "./auth"
 import { createApiHandlers } from "./api"
+import { landingAnalyticsScript, type WebAnalyticsConfig } from "./analytics-snippet"
 
 export interface WebServerDeps {
   usersRepo: UsersRepository
@@ -14,6 +15,8 @@ export interface WebServerDeps {
   botUsername: string
   /** APP_URL without a trailing slash. Fills {{BASE_URL}}. */
   baseUrl: string
+  /** PostHog for the web pages; omitted (no key) means no analytics script at all. */
+  analytics?: WebAnalyticsConfig
 }
 
 const VIEWS_DIR = join(import.meta.dir, "views")
@@ -35,13 +38,21 @@ function escapeAttribute(value: string): string {
     .replace(/"/g, "&quot;")
 }
 
-export function renderLanding(template: string, values: { botUsername: string; baseUrl: string }): string {
+interface LandingValues {
+  botUsername: string
+  baseUrl: string
+  /** A complete <script> block, built by landingAnalyticsScript; not escaped. */
+  analyticsScript?: string
+}
+
+export function renderLanding(template: string, values: LandingValues): string {
   return template
     .replaceAll("{{BOT_USERNAME}}", escapeAttribute(values.botUsername))
     .replaceAll("{{BASE_URL}}", escapeAttribute(values.baseUrl))
+    .replace("{{ANALYTICS}}", () => values.analyticsScript ?? "")
 }
 
-function loadLanding(values: { botUsername: string; baseUrl: string }): string | null {
+function loadLanding(values: LandingValues): string | null {
   try {
     return renderLanding(readFileSync(join(VIEWS_DIR, "landing.html"), "utf-8"), values)
   } catch (error) {
@@ -54,7 +65,11 @@ export function createFetchHandler(deps: WebServerDeps) {
   const { usersRepo, foodLogsRepo } = deps
   const api = createApiHandlers({ usersRepo, foodLogsRepo })
   // Rendered once: the template and both values are fixed for the process lifetime.
-  const landing = loadLanding({ botUsername: deps.botUsername, baseUrl: deps.baseUrl })
+  const landing = loadLanding({
+    botUsername: deps.botUsername,
+    baseUrl: deps.baseUrl,
+    analyticsScript: landingAnalyticsScript(deps.analytics),
+  })
 
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url)

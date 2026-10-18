@@ -106,3 +106,12 @@ describe("find", () => {
     expect(repo.find(999)).toBeNull()
   })
 })
+
+describe("markApproved result", () => {
+  test("is true when it closed an open request, false otherwise", () => {
+    expect(repo.markApproved(USER, ADMIN)).toBe(false) // no request at all
+    repo.request(USER, "maria", "Maria")
+    expect(repo.markApproved(USER, ADMIN)).toBe(true)
+    expect(repo.markApproved(USER, ADMIN)).toBe(false) // already approved
+  })
+})

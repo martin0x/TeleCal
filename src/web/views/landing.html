@@ -163,7 +163,7 @@
 <nav aria-label="Main"><div class="wrap">
   <a class="brand" href="#top"><svg width="28" height="28" aria-hidden="true"><use href="#mark"/></svg>TeleCal</a>
   <div class="links"><a href="#how">How it works</a><a href="#progress">Progress</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a></div>
-  <a class="btn sm" href="https://t.me/{{BOT_USERNAME}}?start=access">Request access</a>
+  <a class="btn sm" href="https://t.me/{{BOT_USERNAME}}?start=access" data-cta="nav">Request access</a>
 </div></nav>
 
 <main id="top">
@@ -171,7 +171,7 @@
   <span class="eyebrow">Free during beta · Invite-only</span>
   <h1>Track calories by just texting.</h1>
   <p class="lede">Tell TeleCal what you ate, in your own words. It estimates calories and protein, asks when it's unsure, and keeps your log. All inside Telegram.</p>
-  <div class="ctas"><a class="btn" href="https://t.me/{{BOT_USERNAME}}?start=access">Request access</a><a class="btn ghost" href="#how">See how it works</a></div>
+  <div class="ctas"><a class="btn" href="https://t.me/{{BOT_USERNAME}}?start=access" data-cta="hero">Request access</a><a class="btn ghost" href="#how">See how it works</a></div>
 
   <div class="device hero-device">
     <div class="screen" data-label="/log conversation">
@@ -230,7 +230,7 @@
       <li><svg width="16" height="16" aria-hidden="true"><use href="#check"/></svg>Calories and protein</li>
       <li><svg width="16" height="16" aria-hidden="true"><use href="#check"/></svg>Goals, reminders and charts</li>
     </ul>
-    <a class="btn" href="https://t.me/{{BOT_USERNAME}}?start=access">Request access</a>
+    <a class="btn" href="https://t.me/{{BOT_USERNAME}}?start=access" data-cta="pricing">Request access</a>
     <small>Paid plans may come later. Beta users will hear about them first.</small>
   </div>
 </div></section>
@@ -250,7 +250,7 @@
 <div class="band">
   <h2>Your next meal is a text away.</h2>
   <p>Request access and start logging in Telegram today.</p>
-  <a class="btn" href="https://t.me/{{BOT_USERNAME}}?start=access">Request access</a>
+  <a class="btn" href="https://t.me/{{BOT_USERNAME}}?start=access" data-cta="footer">Request access</a>
 </div>
 </main>
 
@@ -271,5 +271,6 @@
   openFromHash()
   window.addEventListener("hashchange", openFromHash)
 </script>
+{{ANALYTICS}}
 </body>
 </html>

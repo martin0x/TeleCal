@@ -7,6 +7,7 @@ import type { AccessRequest, AccessRequestsRepository } from "../db/repositories
 import type { AllowedUsersRepository } from "../db/repositories/allowed-users"
 import { HELP_TEXT } from "./help"
 import { smartEdit } from "./utils/smart-reply"
+import { noopAnalytics, type Analytics } from "../analytics"
 
 export const ACCESS_REQUEST_DATA = "access:req"
 
@@ -23,13 +24,37 @@ export const DECLINED_MESSAGE = "Thanks for your interest. TeleCal can't take yo
 
 const MAX_PENDING_SHOWN = 10
 
-export function requestAccessKeyboard(): InlineKeyboard {
-  return new InlineKeyboard().text("Request access", ACCESS_REQUEST_DATA)
+/**
+ * Where a stranger's request came from, for the landing page funnel: the
+ * landing page links to /start access, the group DM link to /start group,
+ * and anything else is someone who found the bot directly.
+ */
+export type AccessSource = "landing" | "group" | "bot"
+
+export function sourceFromStart(text: string | undefined): AccessSource {
+  const payload = text?.match(/^\/start(?:@\w+)?\s+(\S+)/)?.[1]
+  if (payload === "access") return "landing"
+  if (payload === "group") return "group"
+  return "bot"
+}
+
+/** The source rides in the button's callback data, since the request is filed on the tap, not on /start. */
+export function requestAccessKeyboard(source: AccessSource = "bot"): InlineKeyboard {
+  const data = source === "bot" ? ACCESS_REQUEST_DATA : `${ACCESS_REQUEST_DATA}:${source}`
+  return new InlineKeyboard().text("Request access", data)
+}
+
+/** Reads a Request access tap. Buttons sent before sources existed are plain "access:req". */
+export function parseAccessRequest(data: string | undefined): { source: AccessSource } | null {
+  if (data === ACCESS_REQUEST_DATA) return { source: "bot" }
+  if (!data?.startsWith(`${ACCESS_REQUEST_DATA}:`)) return null
+  const source = data.slice(ACCESS_REQUEST_DATA.length + 1)
+  return { source: source === "landing" || source === "group" ? source : "bot" }
 }
 
 /** For groups: a stranger must DM the bot to request access (see GROUP_INVITE_PROMPT). */
 export function privateRequestKeyboard(botUsername: string): InlineKeyboard {
-  return new InlineKeyboard().url("Request access", `https://t.me/${botUsername}?start=access`)
+  return new InlineKeyboard().url("Request access", `https://t.me/${botUsername}?start=group`)
 }
 
 export function decisionKeyboard(telegramId: number): InlineKeyboard {
@@ -93,15 +118,17 @@ export interface AccessDecisionDeps {
   accessRequestsRepo: AccessRequestsRepository
   allowedUsersRepo: AllowedUsersRepository
   adminIds: number[]
+  analytics?: Analytics
 }
 
 /** Handles access: callbacks that get past the allowlist (admins and allowlisted users). */
 export function createAccessDecisionHandler(deps: AccessDecisionDeps) {
   const { accessRequestsRepo, allowedUsersRepo, adminIds } = deps
+  const analytics = deps.analytics ?? noopAnalytics
 
   return async (ctx: Context): Promise<void> => {
     const data = ctx.callbackQuery?.data
-    if (data === ACCESS_REQUEST_DATA) {
+    if (parseAccessRequest(data)) {
       await ctx.answerCallbackQuery({ text: "You already have access." })
       return
     }
@@ -128,6 +155,9 @@ export function createAccessDecisionHandler(deps: AccessDecisionDeps) {
     if (decided.status === "approved") {
       allowedUsersRepo.add(decided.telegram_id, adminId)
     }
+    analytics.capture(decided.telegram_id, decided.status === "approved" ? "access_approved" : "access_declined", {
+      via: "button",
+    })
 
     try {
       await ctx.answerCallbackQuery()

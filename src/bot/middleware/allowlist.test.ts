@@ -17,6 +17,7 @@ import {
 } from "../access"
 import { personalizeMessage } from "../utils/smart-reply"
 import { createAllowlistMiddleware } from "./allowlist"
+import { FakeAnalytics } from "../../analytics/test-helpers"
 
 const ADMIN = 1
 const MEMBER = 2
@@ -25,6 +26,7 @@ let accessRequestsRepo: AccessRequestsRepository
 let allowedUsersRepo: AllowedUsersRepository
 let notifyAdmins: ReturnType<typeof mock>
 let gate: ReturnType<typeof createAllowlistMiddleware>
+let analytics: FakeAnalytics
 
 beforeEach(() => {
   const db = createTestDb()
@@ -32,7 +34,8 @@ beforeEach(() => {
   allowedUsersRepo = new AllowedUsersRepository(db)
   allowedUsersRepo.add(MEMBER, ADMIN)
   notifyAdmins = mock(() => Promise.resolve())
-  gate = createAllowlistMiddleware({ allowedUsersRepo, accessRequestsRepo, adminIds: [ADMIN], notifyAdmins })
+  analytics = new FakeAnalytics()
+  gate = createAllowlistMiddleware({ allowedUsersRepo, accessRequestsRepo, adminIds: [ADMIN], notifyAdmins, analytics })
 })
 
 function messageCtx(userId: number, text = "/start") {
@@ -186,5 +189,32 @@ describe("strangers", () => {
     } finally {
       errorSpy.mockRestore()
     }
+  })
+})
+
+describe("access request events", () => {
+  test("/start access (the landing page link) gets a button that files a landing request", async () => {
+    const ctx = messageCtx(STRANGER, "/start access")
+    await run(ctx)
+    expect(ctx.reply).toHaveBeenCalledWith(INVITE_PROMPT, { reply_markup: requestAccessKeyboard("landing") })
+  })
+
+  test("a new request sends access_requested with its source", async () => {
+    await run(callbackCtx(STRANGER, "access:req:landing"))
+
+    expect(analytics.events).toEqual([{ telegramId: STRANGER, event: "access_requested", properties: { source: "landing" } }])
+  })
+
+  test("the old bare button counts as a bot request", async () => {
+    await run(callbackCtx(STRANGER, "access:req"))
+
+    expect(analytics.events[0].properties).toEqual({ source: "bot" })
+  })
+
+  test("a repeat tap sends nothing more", async () => {
+    await run(callbackCtx(STRANGER, "access:req:landing"))
+    await run(callbackCtx(STRANGER, "access:req:landing"))
+
+    expect(analytics.events).toHaveLength(1)
   })
 })

@@ -32,6 +32,10 @@ const webServer = startWebServer({
   foodLogsRepo,
   botUsername: bot.botInfo.username,
   baseUrl: config.web.baseUrl,
+  // Only what the browser may see: never pass config.posthog whole, it holds the ID secret.
+  analytics: config.posthog.apiKey
+    ? { apiKey: config.posthog.apiKey, host: config.posthog.host, environment: config.posthog.environment }
+    : undefined,
 })
 console.log(`Web server running on port ${config.web.port}`)
 

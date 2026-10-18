@@ -20,8 +20,8 @@ beforeEach(() => {
 const get = (path: string) => handle(new Request(`http://localhost${path}`))
 
 describe("renderLanding", () => {
-  test("fills both placeholders everywhere", () => {
-    const out = renderLanding("{{BOT_USERNAME}} {{BASE_URL}} {{BOT_USERNAME}}", {
+  test("fills both placeholders everywhere, and an empty analytics slot", () => {
+    const out = renderLanding("{{BOT_USERNAME}} {{BASE_URL}} {{BOT_USERNAME}}{{ANALYTICS}}", {
       botUsername: "Bot",
       baseUrl: "https://x.example",
     })
@@ -32,6 +32,48 @@ describe("renderLanding", () => {
     const out = renderLanding('<a href="{{BASE_URL}}">', { botUsername: "Bot", baseUrl: 'https://x.example/"><script>' })
     expect(out).not.toContain("<script>")
     expect(out).toContain("&quot;&gt;&lt;script&gt;")
+  })
+})
+
+describe("landing analytics", () => {
+  const withAnalytics = (analytics?: { apiKey: string; host: string; environment: string }) =>
+    createFetchHandler({
+      usersRepo: new UsersRepository(createTestDb()),
+      foodLogsRepo: new FoodLogsRepository(createTestDb()),
+      botUsername: "TeleCalTestBot",
+      baseUrl: "https://telecal.example",
+      analytics,
+    })
+
+  test("no PostHog script at all without a key", async () => {
+    const body = await (await withAnalytics()(new Request("http://localhost/"))).text()
+    expect(body).not.toContain("posthog")
+  })
+
+  test("with a key, PostHog runs cookieless with autocapture and replay off", async () => {
+    const handler = withAnalytics({ apiKey: "phc_test", host: "https://us.i.posthog.com", environment: "production" })
+    const body = await (await handler(new Request("http://localhost/"))).text()
+
+    expect(body).toContain('posthog.init("phc_test"')
+    expect(body).toContain('"api_host":"https://us.i.posthog.com"')
+    expect(body).toContain('"persistence":"memory"')
+    expect(body).toContain('"autocapture":false')
+    expect(body).toContain('"disable_session_recording":true')
+    expect(body).toContain('posthog.register({"environment":"production"})')
+    expect(body).toContain('posthog.capture("$pageview")')
+    expect(body).toContain("landing_cta_clicked")
+  })
+
+  test("config values can't break out of the script", async () => {
+    const handler = withAnalytics({ apiKey: "</script><script>alert(1)", host: "https://us.i.posthog.com", environment: "production" })
+    const body = await (await handler(new Request("http://localhost/"))).text()
+    expect(body).not.toContain("</script><script>alert(1)")
+  })
+
+  test("every Request access link is tagged with where it sits on the page", async () => {
+    const body = await (await withAnalytics()(new Request("http://localhost/"))).text()
+    const placements = [...body.matchAll(/href="https:\/\/t\.me\/TeleCalTestBot\?start=access" data-cta="([a-z]+)"/g)].map((m) => m[1])
+    expect(placements).toEqual(["nav", "hero", "pricing", "footer"])
   })
 })
 

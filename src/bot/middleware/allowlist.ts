@@ -3,7 +3,6 @@ import { Context, NextFunction } from "grammy"
 import { AllowedUsersRepository } from "../../db/repositories/allowed-users"
 import { AccessRequestsRepository } from "../../db/repositories/access-requests"
 import {
-  ACCESS_REQUEST_DATA,
   ALREADY_PENDING,
   GROUP_INVITE_PROMPT,
   INVITE_ONLY,
@@ -11,10 +10,14 @@ import {
   NOT_APPROVED,
   REQUEST_PENDING,
   REQUEST_SENT,
+  parseAccessRequest,
   privateRequestKeyboard,
   requestAccessKeyboard,
+  sourceFromStart,
+  type AccessSource,
   type NotifyAdmins,
 } from "../access"
+import { noopAnalytics, type Analytics } from "../../analytics"
 import { smartEdit, smartReply } from "../utils/smart-reply"
 
 export interface AllowlistDeps {
@@ -22,6 +25,7 @@ export interface AllowlistDeps {
   accessRequestsRepo: AccessRequestsRepository
   adminIds: number[]
   notifyAdmins: NotifyAdmins
+  analytics?: Analytics
 }
 
 /**
@@ -32,8 +36,9 @@ export interface AllowlistDeps {
  */
 export function createAllowlistMiddleware(deps: AllowlistDeps) {
   const { allowedUsersRepo, accessRequestsRepo, adminIds, notifyAdmins } = deps
+  const analytics = deps.analytics ?? noopAnalytics
 
-  async function handleRequest(ctx: Context, userId: number): Promise<void> {
+  async function handleRequest(ctx: Context, userId: number, source: AccessSource): Promise<void> {
     const result = accessRequestsRepo.request(userId, ctx.from?.username, ctx.from?.first_name)
     if (result === "already_pending") {
       await ctx.answerCallbackQuery({ text: ALREADY_PENDING })
@@ -43,6 +48,7 @@ export function createAllowlistMiddleware(deps: AllowlistDeps) {
       await ctx.answerCallbackQuery({ text: NOT_APPROVED })
       return
     }
+    analytics.capture(userId, "access_requested", { source })
     try {
       await ctx.answerCallbackQuery()
       await smartEdit(ctx, REQUEST_SENT)
@@ -63,8 +69,9 @@ export function createAllowlistMiddleware(deps: AllowlistDeps) {
     }
 
     if (ctx.callbackQuery) {
-      if (ctx.callbackQuery.data === ACCESS_REQUEST_DATA) {
-        return handleRequest(ctx, userId)
+      const request = parseAccessRequest(ctx.callbackQuery.data)
+      if (request) {
+        return handleRequest(ctx, userId, request.source)
       }
       await ctx.answerCallbackQuery({ text: INVITE_ONLY })
       return
@@ -95,6 +102,6 @@ export function createAllowlistMiddleware(deps: AllowlistDeps) {
       await smartReply(ctx, NOT_APPROVED)
       return
     }
-    await smartReply(ctx, INVITE_PROMPT, { reply_markup: requestAccessKeyboard() })
+    await smartReply(ctx, INVITE_PROMPT, { reply_markup: requestAccessKeyboard(sourceFromStart(ctx.message.text)) })
   }
 }

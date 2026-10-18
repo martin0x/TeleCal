@@ -11,10 +11,14 @@ import {
   createAdminNotifier,
   decisionKeyboard,
   formatAccessRequest,
+  parseAccessRequest,
   parseDecision,
+  privateRequestKeyboard,
   requestAccessKeyboard,
   sendPendingRequests,
+  sourceFromStart,
 } from "./access"
+import { FakeAnalytics } from "../analytics/test-helpers"
 
 const USER = 42
 const ADMIN = 1
@@ -25,6 +29,7 @@ beforeEach(() => {
   const db = createTestDb()
   accessRequestsRepo = new AccessRequestsRepository(db)
   allowedUsersRepo = new AllowedUsersRepository(db)
+  analytics = new FakeAnalytics()
 })
 
 function decisionCtx(data: string, from: { id: number; username?: string; first_name: string }) {
@@ -38,7 +43,8 @@ function decisionCtx(data: string, from: { id: number; username?: string; first_
   }
 }
 
-const handler = () => createAccessDecisionHandler({ accessRequestsRepo, allowedUsersRepo, adminIds: [ADMIN] })
+let analytics: FakeAnalytics
+const handler = () => createAccessDecisionHandler({ accessRequestsRepo, allowedUsersRepo, adminIds: [ADMIN], analytics })
 const admin = { id: ADMIN, username: "boss", first_name: "Ray" }
 
 describe("keyboards and parsing", () => {
@@ -198,5 +204,61 @@ describe("createAccessDecisionHandler", () => {
     expect(allowedUsersRepo.isAllowed(USER)).toBe(true)
     expect(ctx.api.sendMessage).toHaveBeenCalledWith(USER, APPROVED_MESSAGE)
     errorSpy.mockRestore()
+  })
+})
+
+describe("access request sources", () => {
+  test("the request button carries where the stranger came from", () => {
+    expect(requestAccessKeyboard("landing").inline_keyboard).toEqual([[{ text: "Request access", callback_data: "access:req:landing" }]])
+    expect(requestAccessKeyboard("group").inline_keyboard).toEqual([[{ text: "Request access", callback_data: "access:req:group" }]])
+  })
+
+  test("parseAccessRequest reads the source, treating the old bare button as bot", () => {
+    expect(parseAccessRequest("access:req")).toEqual({ source: "bot" })
+    expect(parseAccessRequest("access:req:landing")).toEqual({ source: "landing" })
+    expect(parseAccessRequest("access:req:group")).toEqual({ source: "group" })
+    expect(parseAccessRequest("access:req:elsewhere")).toEqual({ source: "bot" })
+    expect(parseAccessRequest("access:ok:42")).toBeNull()
+    expect(parseAccessRequest(undefined)).toBeNull()
+  })
+
+  test("sourceFromStart maps the /start payload", () => {
+    expect(sourceFromStart("/start access")).toBe("landing")
+    expect(sourceFromStart("/start@TeleCalBot access")).toBe("landing")
+    expect(sourceFromStart("/start group")).toBe("group")
+    expect(sourceFromStart("/start")).toBe("bot")
+    expect(sourceFromStart("hello")).toBe("bot")
+    expect(sourceFromStart(undefined)).toBe("bot")
+  })
+
+  test("the group DM link says it came from a group", () => {
+    expect(privateRequestKeyboard("TeleCalBot").inline_keyboard[0][0]).toMatchObject({ url: "https://t.me/TeleCalBot?start=group" })
+  })
+})
+
+describe("decision events", () => {
+  test("approving sends access_approved for the approved user", async () => {
+    accessRequestsRepo.request(USER, "maria", "Maria")
+
+    await handler()(decisionCtx(`access:ok:${USER}`, admin) as unknown as Context)
+
+    expect(analytics.events).toEqual([{ telegramId: USER, event: "access_approved", properties: { via: "button" } }])
+  })
+
+  test("declining sends access_declined", async () => {
+    accessRequestsRepo.request(USER, "maria", "Maria")
+
+    await handler()(decisionCtx(`access:no:${USER}`, admin) as unknown as Context)
+
+    expect(analytics.events).toEqual([{ telegramId: USER, event: "access_declined", properties: { via: "button" } }])
+  })
+
+  test("a request that was already decided sends nothing", async () => {
+    accessRequestsRepo.request(USER, "maria", "Maria")
+    accessRequestsRepo.decide(USER, "approved", ADMIN)
+
+    await handler()(decisionCtx(`access:ok:${USER}`, admin) as unknown as Context)
+
+    expect(analytics.events).toEqual([])
   })
 })

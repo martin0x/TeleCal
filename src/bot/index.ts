@@ -53,6 +53,7 @@ export function createBot(analytics: Analytics = noopAnalytics) {
       accessRequestsRepo,
       adminIds: config.adminUsers,
       notifyAdmins: createAdminNotifier(bot.api, config.adminUsers),
+      analytics,
     })
   )
 
@@ -94,7 +95,7 @@ export function createBot(analytics: Analytics = noopAnalytics) {
       return createDeleteCallbackHandler(foodLogsRepo)(ctx)
     }
     if (data?.startsWith("access:")) {
-      return createAccessDecisionHandler({ accessRequestsRepo, allowedUsersRepo, adminIds: config.adminUsers })(ctx)
+      return createAccessDecisionHandler({ accessRequestsRepo, allowedUsersRepo, adminIds: config.adminUsers, analytics })(ctx)
     }
     return next()
   })
