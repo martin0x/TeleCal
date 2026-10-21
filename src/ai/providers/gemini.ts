@@ -5,7 +5,7 @@ import { config } from "../../config"
 import { ESTIMATE_JSON_PROMPT, PROTEIN_BATCH_PROMPT, formatProteinBatchInput } from "../prompt"
 import { normalizeItems, stripFences, alignProteinBatch, parseReply, traceOf } from "../parse"
 
-const MODEL = "gemini-3.1-flash-lite"
+const MODEL = "gemini-3.5-flash-lite"
 
 export class GeminiProvider implements AIProvider {
   name = "gemini"
@@ -34,14 +34,18 @@ export class GeminiProvider implements AIProvider {
       throw new Error("No response from Gemini")
     }
     // usageMetadata is nested under result.response, not on the result itself.
-    const meta = response.usageMetadata
+    // thoughtsTokenCount is missing from the SDK's types; thinking tokens are
+    // billed as output and are not part of candidatesTokenCount.
+    const meta = response.usageMetadata as
+      | (NonNullable<typeof response.usageMetadata> & { thoughtsTokenCount?: number })
+      | undefined
     return {
       text,
       usage: {
         model: MODEL,
         inputTokens: meta?.promptTokenCount ?? 0,
         cachedInputTokens: meta?.cachedContentTokenCount ?? 0,
-        outputTokens: meta?.candidatesTokenCount ?? 0,
+        outputTokens: (meta?.candidatesTokenCount ?? 0) + (meta?.thoughtsTokenCount ?? 0),
       },
     }
   }

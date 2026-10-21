@@ -31,10 +31,22 @@ describe("GeminiProvider", () => {
   test("reports tokens from usageMetadata, nested under response", async () => {
     const result = await new GeminiProvider(fakeClient(VALID_REPLY)).estimate("two eggs")
 
-    expect(result.usage.model).toBe("gemini-3.1-flash-lite")
+    expect(result.usage.model).toBe("gemini-3.5-flash-lite")
     expect(result.usage.inputTokens).toBe(310)
     expect(result.usage.outputTokens).toBe(70)
     expect(result.estimate.items).toHaveLength(1)
+  })
+
+  test("counts thinking tokens as output", async () => {
+    const client = fakeClient(VALID_REPLY, {
+      promptTokenCount: 310,
+      candidatesTokenCount: 70,
+      thoughtsTokenCount: 25,
+      totalTokenCount: 405,
+    })
+    const result = await new GeminiProvider(client).estimate("two eggs")
+
+    expect(result.usage.outputTokens).toBe(95)
   })
 
   test("reports zero tokens when usageMetadata is absent", async () => {

@@ -11,7 +11,7 @@ describe("MODEL_PRICING", () => {
   test("covers every model the providers request", () => {
     expect(MODEL_PRICING["gpt-5.6-luna"]).toBeDefined()
     expect(MODEL_PRICING["claude-haiku-4-5-20251001"]).toBeDefined()
-    expect(MODEL_PRICING["gemini-3.1-flash-lite"]).toBeDefined()
+    expect(MODEL_PRICING["gemini-3.5-flash-lite"]).toBeDefined()
   })
 })
 
@@ -69,10 +69,10 @@ describe("calculateCost", () => {
     expect(haiku).toBeCloseTo(1.0, 10)
 
     const gemini = calculateCost({
-      model: "gemini-3.1-flash-lite",
+      model: "gemini-3.5-flash-lite",
       inputTokens: 0,
       outputTokens: 1_000_000,
     })
-    expect(gemini).toBeCloseTo(1.5, 10)
+    expect(gemini).toBeCloseTo(2.5, 10)
   })
 })
