@@ -32,7 +32,8 @@ export interface ModelPrice {
 export const MODEL_PRICING: Record<string, ModelPrice> = {
   "gpt-5.6-luna": { input: 0.2, cachedInput: 0.02, output: 1.2 },
   "claude-haiku-4-5-20251001": { input: 1.0, cachedInput: 0.1, output: 5.0 },
-  "gemini-3.1-flash-lite": { input: 0.25, cachedInput: 0.25, output: 1.5 },
+  // Re-verified 2026-10-21 when the pin moved from gemini-3.1-flash-lite.
+  "gemini-3.5-flash-lite": { input: 0.3, cachedInput: 0.3, output: 2.5 },
 }
 
 const warnedModels = new Set<string>()

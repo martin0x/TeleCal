@@ -63,6 +63,12 @@ tied to release tags.
 
 ### Changed
 
+- **Gemini model pin: `gemini-3.1-flash-lite` → `gemini-3.5-flash-lite`**,
+  the current stable Flash-Lite (released 2026-07-21). It costs more: $0.30
+  input and $2.50 output per 1M tokens, up from $0.25 and $1.50.
+  `ai_usage` rows written before the change keep the old model and cost.
+  Gemini thinking tokens (`thoughtsTokenCount`) now count as output tokens,
+  since 3.5 Flash-Lite thinks by default and they are billed as output.
 - **The group "Request access" link now opens `/start group`** instead of
   `/start access`, so group-chat requests aren't counted as landing page
   ones.
