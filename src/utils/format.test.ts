@@ -12,7 +12,17 @@ import {
   formatTotals,
   formatGoalProgress,
   createProgressBar,
+  formatDuration,
 } from "./format"
+
+describe("formatDuration", () => {
+  test("rounds to minutes, with hours past the hour", () => {
+    expect(formatDuration(20_000)).toBe("under a minute")
+    expect(formatDuration(5 * 60_000)).toBe("5 min")
+    expect(formatDuration(60 * 60_000)).toBe("1 h")
+    expect(formatDuration(125 * 60_000)).toBe("2 h 5 min")
+  })
+})
 
 describe("formatUsd", () => {
   test("uses two decimals at or above one cent", () => {

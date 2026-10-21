@@ -358,4 +358,96 @@ describe("LogFlow", () => {
     expect(result.message).toBe('Tap a button above, or reply "yes" / "no".')
     expect(conversationsRepo.get(123)?.state).toBe("confirming")
   })
+
+  const FALLBACK = { from: "anthropic", to: "gemini", reason: "busy" as const }
+
+  test("an estimate from a fallback provider says who answered, above the summary", async () => {
+    mockAIService.estimate = mock(() =>
+      Promise.resolve({
+        items: [{ description: "Chicken", calories: 200, protein_g: 25, emoji: "🍗" }],
+        needsClarification: false,
+        confidence: "high" as const,
+        fallback: FALLBACK,
+      })
+    )
+
+    await logFlow.start(123, 456, "2026-01-31", "anthropic")
+    const result = await logFlow.processInput(123, 456, "grilled chicken", "anthropic")
+
+    expect(result.message).toStartWith(
+      "ℹ️ Anthropic is busy right now, so Gemini answered instead.\n\nHere's what I'll log:"
+    )
+    expect(result.confirm).toBeDefined()
+  })
+
+  test("a clarifying question from a fallback provider says who asked", async () => {
+    mockAIService.estimate = mock(() =>
+      Promise.resolve({
+        items: [],
+        needsClarification: true,
+        clarificationQuestion: "How much chicken?",
+        confidence: "low" as const,
+        fallback: { ...FALLBACK, reason: "down" as const },
+      })
+    )
+
+    await logFlow.start(123, 456, "2026-01-31", "anthropic")
+    const result = await logFlow.processInput(123, 456, "chicken", "anthropic")
+
+    expect(result.message).toBe(
+      "ℹ️ Anthropic isn't responding right now, so Gemini answered instead.\n\nHow much chicken?"
+    )
+  })
+
+  test("stores each clarifying question with the input it followed", async () => {
+    const questions = ["How much chicken?", "Fried or grilled?"]
+    mockAIService.estimate = mock(() =>
+      Promise.resolve({
+        items: [],
+        needsClarification: true,
+        clarificationQuestion: questions.shift(),
+        confidence: "low" as const,
+      })
+    )
+
+    await logFlow.start(123, 456, "2026-01-31", "openai")
+    await logFlow.processInput(123, 456, "chicken", "openai")
+    await logFlow.processInput(123, 456, "200g", "openai")
+
+    expect(JSON.parse(conversationsRepo.get(123)!.context!)).toEqual({
+      originalInput: "chicken",
+      clarificationHistory: ["chicken", "200g"],
+      clarificationQuestions: ["How much chicken?", "Fried or grilled?"],
+    })
+  })
+
+  test("the context sent on the next turn includes the questions asked, so any provider can answer", async () => {
+    conversationsRepo.upsert(123, 456, "clarifying", "2026-01-31", {
+      pending_food: "200g",
+      context: JSON.stringify({
+        originalInput: "chicken",
+        clarificationHistory: ["chicken", "200g"],
+        clarificationQuestions: ["How much chicken?", "Fried or grilled?"],
+      }),
+    })
+
+    await logFlow.processInput(123, 456, "grilled", "openai")
+
+    const context = mockAIService.estimate.mock.calls[0][2].context as string
+    expect(context).toContain('"How much chicken?", "Fried or grilled?"')
+    expect(context).toContain("answers the last one")
+  })
+
+  test("a clarifying session saved before questions were stored still continues", async () => {
+    conversationsRepo.upsert(123, 456, "clarifying", "2026-01-31", {
+      pending_food: "chicken",
+      context: JSON.stringify({ originalInput: "chicken", clarificationHistory: ["chicken"] }),
+    })
+
+    const result = await logFlow.processInput(123, 456, "200g grilled", "openai")
+
+    const context = mockAIService.estimate.mock.calls[0][2].context as string
+    expect(context).not.toContain("Questions")
+    expect(result.confirm).toBeDefined()
+  })
 })

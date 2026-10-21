@@ -2,6 +2,7 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { AIProvider, ProviderResult, ProteinBatchResult, TokenUsage } from "../types"
 import { config } from "../../config"
+import { REQUEST_TIMEOUT_MS, MAX_SDK_RETRIES } from "../failures"
 import { ESTIMATE_JSON_PROMPT, PROTEIN_BATCH_PROMPT, formatProteinBatchInput } from "../prompt"
 import { normalizeItems, stripFences, alignProteinBatch, parseReply, traceOf } from "../parse"
 
@@ -41,7 +42,7 @@ export class AnthropicProvider implements AIProvider {
   private client: Anthropic
 
   constructor(client?: Anthropic) {
-    this.client = client ?? new Anthropic({ apiKey: config.ai.anthropicApiKey })
+    this.client = client ?? new Anthropic({ apiKey: config.ai.anthropicApiKey, timeout: REQUEST_TIMEOUT_MS, maxRetries: MAX_SDK_RETRIES })
   }
 
   async estimate(foodDescription: string, context?: string): Promise<ProviderResult> {

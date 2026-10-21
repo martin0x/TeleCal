@@ -3,7 +3,7 @@ import { describe, test, expect } from "bun:test"
 import { Database } from "bun:sqlite"
 import { runMigrations, hasColumn } from "./migrations"
 
-/** users, food_logs and food_items exactly as they were before protein tracking. */
+/** users, food_logs and food_items exactly as they were before protein tracking; ai_usage before provider health. */
 function preProteinDb(): Database {
   const db = new Database(":memory:")
   db.run("PRAGMA foreign_keys = ON")
@@ -32,6 +32,22 @@ function preProteinDb(): Database {
       calories INTEGER NOT NULL,
       emoji TEXT,
       FOREIGN KEY (log_id) REFERENCES food_logs(id) ON DELETE CASCADE
+    );
+    CREATE TABLE ai_usage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      telegram_id INTEGER NOT NULL,
+      chat_id INTEGER,
+      provider TEXT NOT NULL,
+      model TEXT NOT NULL,
+      input_tokens INTEGER NOT NULL,
+      cached_input_tokens INTEGER,
+      cache_write_tokens INTEGER,
+      output_tokens INTEGER NOT NULL,
+      reasoning_tokens INTEGER,
+      cost_usd REAL NOT NULL,
+      call_type TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
     );
   `)
   db.run("INSERT INTO users (telegram_id, username, daily_goal) VALUES (42, 'maria', 2000)")
@@ -72,6 +88,14 @@ describe("runMigrations", () => {
     runMigrations(db, undefined, () => {})
 
     expect(db.prepare("SELECT analytics_content FROM users").get()).toEqual({ analytics_content: 1 })
+  })
+
+  test("adds ai_usage.latency_ms and ai_usage.error", () => {
+    const db = preProteinDb()
+    runMigrations(db, undefined, () => {})
+
+    expect(hasColumn(db, "ai_usage", "latency_ms")).toBe(true)
+    expect(hasColumn(db, "ai_usage", "error")).toBe(true)
   })
 
   test("is a no-op the second time", () => {

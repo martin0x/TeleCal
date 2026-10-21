@@ -2,6 +2,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { AIProvider, ProviderResult, ProteinBatchResult, TokenUsage } from "../types"
 import { config } from "../../config"
+import { REQUEST_TIMEOUT_MS } from "../failures"
 import { ESTIMATE_JSON_PROMPT, PROTEIN_BATCH_PROMPT, formatProteinBatchInput } from "../prompt"
 import { normalizeItems, stripFences, alignProteinBatch, parseReply, traceOf } from "../parse"
 
@@ -23,7 +24,7 @@ export class GeminiProvider implements AIProvider {
         responseMimeType: "application/json",
       },
       systemInstruction,
-    })
+    }, { timeout: REQUEST_TIMEOUT_MS })
   }
 
   private async generate(systemInstruction: string, input: string): Promise<{ text: string; usage: TokenUsage }> {

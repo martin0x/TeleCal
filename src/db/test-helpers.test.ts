@@ -36,6 +36,8 @@ describe("createTestDb", () => {
       "call_type",
       "status",
       "created_at",
+      "latency_ms",
+      "error",
     ])
   })
 

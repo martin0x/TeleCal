@@ -25,6 +25,8 @@ import { createPendingCommand, createPendingCallbackHandler } from "./commands/p
 import { createUsageCommand } from "./commands/usage"
 import { LogFlow } from "./conversations/log-flow"
 import { AIService } from "../ai/service"
+import { CircuitBreaker } from "../ai/circuit-breaker"
+import { createProviderAlerter } from "./provider-health"
 import { noopAnalytics, type Analytics } from "../analytics"
 import { withContentPreference } from "../analytics/content-preference"
 import { createBotErrorHandler } from "./errors"
@@ -47,7 +49,8 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
   const conversationsRepo = new ConversationsRepository(db)
   const pendingRepo = new PendingRepository(db)
   const usageRepo = new UsageRepository(db)
-  const aiService = new AIService(new CacheRepository(db), usageRepo, analytics)
+  const breaker = new CircuitBreaker({ onChange: createProviderAlerter(bot.api, config.adminUsers) })
+  const aiService = new AIService(new CacheRepository(db), usageRepo, analytics, breaker)
   const logFlow = new LogFlow(conversationsRepo, foodLogsRepo, pendingRepo, aiService)
 
   const accessRequestsRepo = new AccessRequestsRepository(db)

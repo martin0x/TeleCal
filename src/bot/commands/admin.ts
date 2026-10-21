@@ -15,6 +15,7 @@ import { hashTelegramId } from "../../analytics"
 import { AnnouncementsRepository } from "../../db/repositories/announcements"
 import { sendAnnouncement, type AnnounceDeps } from "../../jobs/announce"
 import type { Analytics } from "../../analytics"
+import { formatProviderHealth, parseHealthWindow } from "../provider-health"
 
 const MAX_USER_ROWS = 10
 
@@ -262,6 +263,7 @@ export function createAdminCommand(
           "/admin list\n" +
           "/admin requests\n" +
           "/admin usage [7d|30d|all]\n" +
+          "/admin providers [1h|24h|7d]\n" +
           "/admin backfill-protein\n" +
           "/admin posthog-id <user_id>\n" +
           "/admin announce-privacy [confirm]"
@@ -308,6 +310,18 @@ export function createAdminCommand(
         const users = usageRepo.getAllUserTotals(days)
         const models = usageRepo.getModelBreakdown(days)
         await smartReply(ctx, formatAdminUsage(users, models, days))
+        break
+      }
+
+      case "providers": {
+        const hours = parseHealthWindow(args[1])
+        const report = formatProviderHealth(
+          deps.aiService.getAvailableProviders(),
+          usageRepo.getProviderHealth(hours),
+          (provider) => deps.aiService.breaker.status(provider),
+          hours
+        )
+        await smartReply(ctx, report)
         break
       }
 

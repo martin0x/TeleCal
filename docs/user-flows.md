@@ -341,7 +341,7 @@ stateDiagram-v2
 **Retry job** ([`retry-pending.ts:15-87`](../src/jobs/retry-pending.ts#L15-L87)):
 
 - Each run takes the 5 oldest rows with `retry_count < 10` ([`pending.ts:41-49`](../src/db/repositories/pending.ts#L41-L49)).
-- It calls the AI with the user's current provider and `callType: "retry"`, so the cache can answer.
+- It calls the AI with the user's current provider and `callType: "retry"`, so the cache can answer. If that provider is busy or down, the other configured providers are tried in turn, and the DM names the one that answered.
 - On success it writes `food_logs`, deletes the row, and DMs "✅ Processed your saved entry — logged to Sun, Sep 27:" with the summary. The DM goes to the user id, not the chat the entry came from. If the DM fails, the entry is still logged, but the user is never told.
 - A clarification request or empty result counts as a failure.
 - The give-up branch at [`retry-pending.ts:27-41`](../src/jobs/retry-pending.ts#L27-L41) (delete the row, DM "❌ Couldn't process your entry…") can never run ([F6](#f6)).
