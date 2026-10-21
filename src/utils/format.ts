@@ -111,3 +111,13 @@ export function formatGoalProgress(opts: {
 export function shortHash(text: string): string {
   return createHash("sha256").update(text).digest("hex").slice(0, 8)
 }
+
+/** A rough duration for people: "under a minute", "12 min", "2 h 5 min". */
+export function formatDuration(ms: number): string {
+  const minutes = Math.round(ms / 60_000)
+  if (minutes < 1) return "under a minute"
+  if (minutes < 60) return `${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`
+}

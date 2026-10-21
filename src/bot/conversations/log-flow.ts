@@ -5,8 +5,8 @@ import {
 } from "../../db/repositories/conversations"
 import { FoodLogsRepository, FoodItem } from "../../db/repositories/food-logs"
 import { PendingRepository } from "../../db/repositories/pending"
-import { AIService } from "../../ai/service"
-import { EstimationResult } from "../../ai/types"
+import { AIService, ServiceEstimate } from "../../ai/service"
+import { fallbackNotice } from "../../ai/fallback"
 import { formatItemsSummary, formatTotals, sumTotals, shortHash } from "../../utils/format"
 import { formatDateForDisplay } from "../../utils/dates"
 
@@ -36,8 +36,13 @@ export function confirmToken(targetDate: string, pendingItems: string): string {
 
 interface ConversationContext {
   originalInput?: string
+  /** The user's inputs, in order. */
   clarificationHistory?: string[]
+  /** The bot's question after each input. Absent on sessions saved before it was stored. */
+  clarificationQuestions?: string[]
 }
+
+const DEFAULT_CLARIFICATION = "Could you provide more details?"
 
 /**
  * Safely parse JSON with a fallback value.
@@ -345,16 +350,23 @@ export class LogFlow {
     telegramId: number,
     chatId: number,
     input: string,
-    result: EstimationResult,
+    result: ServiceEstimate,
     targetDate: string,
     previousContext?: ConversationContext
   ): LogFlowResult {
+    const notice = result.fallback ? `${fallbackNotice(result.fallback)}\n\n` : ""
+
     if (result.needsClarification) {
+      const question = result.clarificationQuestion ?? DEFAULT_CLARIFICATION
       const context: ConversationContext = {
         originalInput: previousContext?.originalInput ?? input,
         clarificationHistory: [
           ...(previousContext?.clarificationHistory ?? []),
           input,
+        ],
+        clarificationQuestions: [
+          ...(previousContext?.clarificationQuestions ?? []),
+          question,
         ],
       }
 
@@ -364,7 +376,7 @@ export class LogFlow {
       })
 
       return {
-        message: result.clarificationQuestion ?? "Could you provide more details?",
+        message: notice + question,
         action: "prompt",
       }
     }
@@ -377,7 +389,7 @@ export class LogFlow {
     })
 
     return this.confirmationResult(
-      "Here's what I'll log:",
+      `${notice}Here's what I'll log:`,
       result.items,
       targetDate,
       pendingItems,
@@ -420,6 +432,12 @@ export class LogFlow {
 
     if (context.clarificationHistory && context.clarificationHistory.length > 0) {
       parts.push(`Previous clarifications: ${context.clarificationHistory.join(", ")}`)
+    }
+
+    // Lets any provider pick up the conversation, not just the one that asked.
+    if (context.clarificationQuestions && context.clarificationQuestions.length > 0) {
+      const asked = context.clarificationQuestions.map((q) => `"${q}"`).join(", ")
+      parts.push(`Questions already asked, in order (the food to estimate answers the last one): ${asked}`)
     }
 
     return parts.join(". ")

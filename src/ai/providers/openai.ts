@@ -2,6 +2,7 @@
 import OpenAI from "openai"
 import { AIProvider, ProviderResult, ProteinBatchResult, TokenUsage } from "../types"
 import { config } from "../../config"
+import { REQUEST_TIMEOUT_MS, MAX_SDK_RETRIES } from "../failures"
 import { PROTEIN_RULE, PROTEIN_BATCH_PROMPT, formatProteinBatchInput } from "../prompt"
 import { normalizeItems, alignProteinBatch, parseReply, traceOf } from "../parse"
 
@@ -98,7 +99,7 @@ export class OpenAIProvider implements AIProvider {
   private client: OpenAI
 
   constructor(client?: OpenAI) {
-    this.client = client ?? new OpenAI({ apiKey: config.ai.openaiApiKey })
+    this.client = client ?? new OpenAI({ apiKey: config.ai.openaiApiKey, timeout: REQUEST_TIMEOUT_MS, maxRetries: MAX_SDK_RETRIES })
   }
 
   async estimate(foodDescription: string, context?: string): Promise<ProviderResult> {

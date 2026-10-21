@@ -83,6 +83,35 @@ test("announces a processed entry as an HTML summary", async () => {
   )
 })
 
+test("a processed entry answered by a fallback provider says who answered", async () => {
+  const pendingRepo = new PendingRepository(db)
+  const usersRepo = new UsersRepository(db)
+  usersRepo.upsert(42, "ray")
+  pendingRepo.create(42, -100, "chicken adobo", "2026-09-21")
+
+  const estimate = mock(() =>
+    Promise.resolve({
+      items: [{ description: "Chicken adobo", calories: 420, protein_g: 38, emoji: "🍗" }],
+      needsClarification: false,
+      confidence: "high" as const,
+      fallback: { from: "gemini", to: "openai", reason: "down" as const },
+    })
+  )
+  const bot = { api: { sendMessage: mock(() => Promise.resolve()) } }
+
+  const job = createRetryPendingJob(
+    bot as any,
+    pendingRepo,
+    new FoodLogsRepository(db),
+    usersRepo,
+    { estimate } as unknown as AIService
+  )
+  await job()
+
+  const [, text] = bot.api.sendMessage.mock.calls[0] as unknown as [number, string]
+  expect(text).toEndWith("\n\nℹ️ Gemini isn't responding right now, so OpenAI answered instead.")
+})
+
 test("tells the user when an entry is given up on", async () => {
   // getForRetry never returns an entry at the limit, so feed one in directly.
   const entry = { id: 7, telegram_id: 42, chat_id: -100, food_text: "mystery stew", target_date: "2026-09-21", retry_count: 10 }

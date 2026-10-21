@@ -112,8 +112,12 @@ CREATE TABLE IF NOT EXISTS ai_usage (
   reasoning_tokens INTEGER,
   cost_usd REAL NOT NULL,
   call_type TEXT NOT NULL,      -- estimate | clarify | edit | retry | backfill
-  status TEXT NOT NULL,         -- ok | parse_error | no_usage
-  created_at TEXT DEFAULT (datetime('now'))
+  status TEXT NOT NULL,         -- ok | parse_error | no_usage | request_failed
+  created_at TEXT DEFAULT (datetime('now')),
+  -- Wall time of the call. Null on rows written before it was recorded.
+  latency_ms INTEGER,
+  -- Short failure label on request_failed rows, e.g. "HTTP 429" or "timeout".
+  error TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_usage_user_date

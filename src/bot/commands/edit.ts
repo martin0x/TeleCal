@@ -3,6 +3,7 @@ import { Context } from "grammy"
 import { FoodLogsRepository, FoodItem } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
 import { AIService } from "../../ai/service"
+import { fallbackNotice } from "../../ai/fallback"
 import { getTodayInTimezone, formatDateForDisplay, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { smartReply } from "../utils/smart-reply"
 import { formatItemLine } from "../../utils/format"
@@ -199,7 +200,8 @@ export function createEditMessageHandler(
             emoji: newItem.emoji,
           })
           editStates.delete(userId)
-          await smartReply(ctx, `Updated: ${formatItemLine(newItem)}`)
+          const notice = result.fallback ? `\n\n${fallbackNotice(result.fallback)}` : ""
+          await smartReply(ctx, `Updated: ${formatItemLine(newItem)}${notice}`)
         } catch (error) {
           await smartReply(ctx,
             `Couldn't reach AI to estimate. Try a number instead, or "cancel" to abort.`

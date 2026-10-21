@@ -123,6 +123,24 @@ describe("edit flow", () => {
     expect(ctx.reply).toHaveBeenCalledWith("Updated: 🍜 Tonkotsu ramen — 650 cal · 30 g", undefined)
   })
 
+  test("a re-estimate from a fallback provider says who answered", async () => {
+    logToday()
+    const estimate = mock(() =>
+      Promise.resolve({
+        items: [{ description: "Tonkotsu ramen", calories: 650, protein_g: 30, emoji: "🍜" }],
+        needsClarification: false,
+        confidence: "high" as const,
+        fallback: { from: "openai", to: "gemini", reason: "busy" as const },
+      })
+    )
+    const ctx = await editWith("tonkotsu ramen", { estimate } as unknown as AIService)
+
+    expect(ctx.reply).toHaveBeenCalledWith(
+      "Updated: 🍜 Tonkotsu ramen — 650 cal · 30 g\n\nℹ️ OpenAI is busy right now, so Gemini answered instead.",
+      undefined
+    )
+  })
+
   test("a description the AI can't estimate keeps the edit open and suggests a number", async () => {
     const item = logToday()
     const estimate = mock(() => Promise.resolve({ items: [], needsClarification: true, confidence: "low" as const }))

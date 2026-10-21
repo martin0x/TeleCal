@@ -4,6 +4,7 @@ import { PendingRepository, PendingEntry } from "../db/repositories/pending"
 import { FoodLogsRepository } from "../db/repositories/food-logs"
 import { UsersRepository } from "../db/repositories/users"
 import { AIService } from "../ai/service"
+import { fallbackNotice } from "../ai/fallback"
 import { config } from "../config"
 import { formatDateForDisplay } from "../utils/dates"
 import { formatItemsSummary } from "../utils/format"
@@ -76,7 +77,8 @@ export function createRetryPendingJob(
         await bot.api.sendMessage(
           entry.telegram_id,
           `✅ Processed your saved entry — logged to ${formatDateForDisplay(entry.target_date)}:\n\n` +
-            formatItemsSummary(result.items),
+            formatItemsSummary(result.items) +
+            (result.fallback ? `\n\n${fallbackNotice(result.fallback)}` : ""),
           { parse_mode: "HTML" }
         )
 

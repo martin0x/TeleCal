@@ -65,6 +65,20 @@ describe("record", () => {
     expect(row.created_at).toBeTruthy()
   })
 
+  test("stores latency, rounded, and the failure label", () => {
+    repo.record(entry({ status: "request_failed", latencyMs: 1234.6, error: "HTTP 429" }))
+
+    const row = db.prepare("SELECT latency_ms, error FROM ai_usage").get() as any
+    expect(row).toEqual({ latency_ms: 1235, error: "HTTP 429" })
+  })
+
+  test("latency and error default to null", () => {
+    repo.record(entry())
+
+    const row = db.prepare("SELECT latency_ms, error FROM ai_usage").get() as any
+    expect(row).toEqual({ latency_ms: null, error: null })
+  })
+
   test("accepts null chat_id and null optional token counts", () => {
     repo.record(
       entry({ chatId: null, cachedInputTokens: null, cacheWriteTokens: null, reasoningTokens: null })
@@ -159,5 +173,64 @@ describe("getModelBreakdown", () => {
     expect(rows[1].model).toBe("gpt-5.6-luna")
     expect(rows[1].calls).toBe(2)
     expect(rows[1].costUsd).toBeCloseTo(0.03, 10)
+  })
+})
+
+describe("request_failed rows", () => {
+  const failed = (over: Partial<UsageEntry> = {}) =>
+    entry({ inputTokens: 0, outputTokens: 0, costUsd: 0, model: "unknown", status: "request_failed", error: "HTTP 503", ...over })
+
+  test("are left out of call counts in every total", () => {
+    repo.record(entry({ telegramId: 1 }))
+    repo.record(failed({ telegramId: 1 }))
+    repo.record(failed({ telegramId: 2 }))
+
+    expect(repo.getUserTotals(1, 30).calls).toBe(1)
+    expect(repo.getAllUserTotals(30).map((r) => [r.telegramId, r.calls])).toEqual([[1, 1]])
+    expect(repo.getModelBreakdown(30).map((r) => r.model)).toEqual(["gpt-5.6-luna"])
+  })
+})
+
+describe("getProviderHealth", () => {
+  test("counts calls and failures, with the median latency of answered calls", () => {
+    for (const ms of [100, 300, 200, 900]) repo.record(entry({ provider: "openai", latencyMs: ms }))
+    repo.record(entry({ provider: "openai", status: "request_failed", latencyMs: 30_000, error: "timeout" }))
+
+    const [row] = repo.getProviderHealth(24)
+    expect(row).toMatchObject({ provider: "openai", calls: 5, failures: 1, p50LatencyMs: 200, lastError: "timeout" })
+    expect(row.lastSuccessAt).toBeTruthy()
+    expect(row.lastFailureAt).toBeTruthy()
+  })
+
+  test("parse errors count as answered: the provider replied", () => {
+    repo.record(entry({ provider: "gemini", status: "parse_error", latencyMs: 400 }))
+
+    const [row] = repo.getProviderHealth(24)
+    expect(row).toMatchObject({ failures: 0, p50LatencyMs: 400, lastFailureAt: null, lastError: null })
+  })
+
+  test("counts only the window, but last success and failure are all time", () => {
+    repo.record(entry({ provider: "anthropic", status: "request_failed", error: "HTTP 529" }))
+    repo.record(entry({ provider: "anthropic" }))
+    db.run("UPDATE ai_usage SET created_at = datetime('now', '-3 hours')")
+
+    const [row] = repo.getProviderHealth(1)
+    expect(row).toMatchObject({ calls: 0, failures: 0, p50LatencyMs: null, lastError: "HTTP 529" })
+    expect(row.lastSuccessAt).toBeTruthy()
+    expect(row.lastFailureAt).toBeTruthy()
+  })
+
+  test("the last error is the most recent failure's", () => {
+    repo.record(entry({ status: "request_failed", error: "HTTP 503" }))
+    repo.record(entry({ status: "request_failed", error: "timeout" }))
+
+    expect(repo.getProviderHealth(24)[0].lastError).toBe("timeout")
+  })
+
+  test("one row per provider that has ever been called", () => {
+    repo.record(entry({ provider: "openai" }))
+    repo.record(entry({ provider: "gemini" }))
+
+    expect(repo.getProviderHealth(24).map((r) => r.provider)).toEqual(["gemini", "openai"])
   })
 })

@@ -15,6 +15,9 @@ export interface UsageEntry {
   costUsd: number
   callType: CallType
   status: UsageStatus
+  latencyMs?: number | null
+  /** Set on request_failed rows; see describeFailure. */
+  error?: string | null
 }
 
 export interface UsageTotals {
@@ -33,6 +36,22 @@ export interface ModelUsageRow extends UsageTotals {
   model: string
 }
 
+export interface ProviderHealthRow {
+  provider: string
+  /** Calls in the window, failed ones included. */
+  calls: number
+  failures: number
+  /** Median latency of the calls that got a reply, in the window. */
+  p50LatencyMs: number | null
+  /** All time, not just the window. SQLite UTC datetimes. */
+  lastSuccessAt: string | null
+  lastFailureAt: string | null
+  lastError: string | null
+}
+
+/** Rows for calls that got no reply. Kept out of cost and call totals. */
+const FAILED = "'request_failed'"
+
 const TOTALS_COLUMNS = `
   COUNT(*) AS calls,
   COALESCE(SUM(input_tokens), 0) AS inputTokens,
@@ -41,14 +60,15 @@ const TOTALS_COLUMNS = `
 `
 
 /**
- * Builds the time-window predicate. sinceDays of 0 (or less) means all time.
+ * Builds the time-window predicate, to follow an existing WHERE. sinceDays of
+ * 0 (or less) means all time.
  * The value is coerced to a non-negative integer before interpolation, since
  * SQLite cannot parameterise the modifier string of datetime().
  */
-function windowClause(sinceDays: number, prefix: "WHERE" | "AND"): string {
+function windowClause(sinceDays: number): string {
   const days = Math.max(0, Math.floor(sinceDays))
   if (days === 0) return ""
-  return ` ${prefix} created_at >= datetime('now', '-${days} days')`
+  return ` AND created_at >= datetime('now', '-${days} days')`
 }
 
 export class UsageRepository {
@@ -60,8 +80,8 @@ export class UsageRepository {
         telegram_id, chat_id, provider, model,
         input_tokens, cached_input_tokens, cache_write_tokens,
         output_tokens, reasoning_tokens,
-        cost_usd, call_type, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        cost_usd, call_type, status, latency_ms, error
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     stmt.run(
       entry.telegramId,
@@ -75,7 +95,9 @@ export class UsageRepository {
       entry.reasoningTokens,
       entry.costUsd,
       entry.callType,
-      entry.status
+      entry.status,
+      entry.latencyMs == null ? null : Math.round(entry.latencyMs),
+      entry.error ?? null
     )
   }
 
@@ -83,7 +105,7 @@ export class UsageRepository {
     const stmt = this.db.prepare(`
       SELECT ${TOTALS_COLUMNS}
       FROM ai_usage
-      WHERE telegram_id = ?${windowClause(sinceDays, "AND")}
+      WHERE telegram_id = ? AND status != ${FAILED}${windowClause(sinceDays)}
     `)
     return stmt.get(telegramId) as UsageTotals
   }
@@ -91,7 +113,7 @@ export class UsageRepository {
   getAllUserTotals(sinceDays: number): UserUsageRow[] {
     // Both ai_usage and users have telegram_id and created_at columns, so the
     // window predicate must be qualified with the ai_usage alias.
-    const window = windowClause(sinceDays, "WHERE").replace("created_at", "u.created_at")
+    const window = windowClause(sinceDays).replace("created_at", "u.created_at")
     const stmt = this.db.prepare(`
       SELECT
         u.telegram_id AS telegramId,
@@ -99,7 +121,7 @@ export class UsageRepository {
         ${TOTALS_COLUMNS}
       FROM ai_usage u
       LEFT JOIN users ON users.telegram_id = u.telegram_id
-      ${window}
+      WHERE u.status != ${FAILED}${window}
       GROUP BY u.telegram_id, users.username
       ORDER BY costUsd DESC
     `)
@@ -110,10 +132,56 @@ export class UsageRepository {
     const stmt = this.db.prepare(`
       SELECT model, ${TOTALS_COLUMNS}
       FROM ai_usage
-      ${windowClause(sinceDays, "WHERE")}
+      WHERE status != ${FAILED}${windowClause(sinceDays)}
       GROUP BY model
       ORDER BY costUsd DESC
     `)
     return stmt.all() as ModelUsageRow[]
+  }
+
+  /** Per-provider health over the last sinceHours, for /admin providers. */
+  getProviderHealth(sinceHours: number): ProviderHealthRow[] {
+    const hours = Math.max(1, Math.floor(sinceHours))
+    const since = `datetime('now', '-${hours} hours')`
+
+    const lastSeen = this.db
+      .prepare(`
+        SELECT
+          provider,
+          MAX(CASE WHEN status != ${FAILED} THEN created_at END) AS lastSuccessAt,
+          MAX(CASE WHEN status = ${FAILED} THEN created_at END) AS lastFailureAt
+        FROM ai_usage
+        GROUP BY provider
+        ORDER BY provider
+      `)
+      .all() as { provider: string; lastSuccessAt: string | null; lastFailureAt: string | null }[]
+
+    const windowed = this.db.prepare(`
+      SELECT COUNT(*) AS calls, COALESCE(SUM(status = ${FAILED}), 0) AS failures
+      FROM ai_usage
+      WHERE provider = ? AND created_at >= ${since}
+    `)
+    const latencies = this.db.prepare(`
+      SELECT latency_ms AS ms FROM ai_usage
+      WHERE provider = ? AND status != ${FAILED} AND latency_ms IS NOT NULL AND created_at >= ${since}
+      ORDER BY latency_ms
+    `)
+    const lastError = this.db.prepare(`
+      SELECT error FROM ai_usage
+      WHERE provider = ? AND status = ${FAILED}
+      ORDER BY id DESC LIMIT 1
+    `)
+
+    return lastSeen.map((row) => {
+      const counts = windowed.get(row.provider) as { calls: number; failures: number }
+      const ms = (latencies.all(row.provider) as { ms: number }[]).map((r) => r.ms)
+      const error = lastError.get(row.provider) as { error: string | null } | null
+      return {
+        ...row,
+        ...counts,
+        p50LatencyMs: ms.length > 0 ? ms[Math.floor((ms.length - 1) / 2)] : null,
+        lastError: error?.error ?? null,
+      }
+    })
   }
 }

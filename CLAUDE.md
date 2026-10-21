@@ -41,6 +41,9 @@ bun run scripts/smoke-posthog.ts   # sends one test exception to PostHog; needs 
 - `service.ts` - Provider abstraction with caching layer
 - `providers/` - OpenAI, Anthropic, Gemini implementations with shared `AIProvider` interface
 - Caching uses `estimation_cache` table keyed by normalized food description
+- Fallback: `estimate()` tries the user's provider, then the other configured ones in order, but only past failures `classifyFailure` (`failures.ts`) calls busy or down (429/529, 5xx, timeouts, lost connections). Parse and config errors are thrown as is. A fallback answer carries `fallback`, which the reply shows via `fallbackNotice` (`fallback.ts`). `estimateProtein` never falls back
+- `circuit-breaker.ts` skips a provider after 3 such failures in a row, testing it again every 5 min; in memory. Its open/close events message `ADMIN_USERS` (`src/bot/provider-health.ts`)
+- Every call writes an `ai_usage` row with `latency_ms`; a call with no reply writes a `request_failed` row (no tokens, no cost, `error` label), which usage totals leave out and `/admin providers` reads
 
 **Database** (`src/db/`):
 - Uses `bun:sqlite` (built-in SQLite)

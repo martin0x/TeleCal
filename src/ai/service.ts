@@ -10,6 +10,9 @@ import { calculateCost } from "./pricing"
 import type { CallType, UsageStatus, TokenUsage } from "./types"
 import { config } from "../config"
 import { noopAnalytics, type Analytics } from "../analytics"
+import { CircuitBreaker } from "./circuit-breaker"
+import { classifyFailure, describeFailure, type FailureKind } from "./failures"
+import type { ProviderFallback } from "./fallback"
 
 export interface EstimateOptions {
   telegramId: number
@@ -32,13 +35,20 @@ export function isCurrentShape(result: EstimationResult): boolean {
   return result.items.every((item) => typeof item.protein_g === "number" && Number.isFinite(item.protein_g))
 }
 
+/** An estimate, plus who answered when it wasn't the user's provider. */
+export interface ServiceEstimate extends EstimationResult {
+  fallback?: ProviderFallback
+}
+
 export class AIService {
+  // Insertion order is the fallback order.
   private providers: Map<string, AIProvider> = new Map()
 
   constructor(
     private cache: CacheRepository,
     private usage: UsageRepository,
-    private analytics: Analytics = noopAnalytics
+    private analytics: Analytics = noopAnalytics,
+    readonly breaker: CircuitBreaker = new CircuitBreaker()
   ) {
     if (config.ai.openaiApiKey) {
       this.providers.set("openai", new OpenAIProvider())
@@ -51,11 +61,16 @@ export class AIService {
     }
   }
 
+  /**
+   * Tries the user's provider first, then the others in order, moving on only
+   * when a provider is skipped by the circuit breaker or fails in a way
+   * another could fix (see classifyFailure). Any other error is thrown as is.
+   */
   async estimate(
     foodDescription: string,
     providerName: string,
     opts: EstimateOptions
-  ): Promise<EstimationResult> {
+  ): Promise<ServiceEstimate> {
     const normalizedFood = this.normalizeFood(foodDescription)
 
     // Check cache first (only if no context and caching enabled)
@@ -64,8 +79,47 @@ export class AIService {
       if (cached && isCurrentShape(cached)) return cached // nothing billed, nothing recorded
     }
 
-    const provider = this.resolveProvider(providerName)
-    return this.estimateWithProvider(provider, foodDescription, normalizedFood, opts)
+    const chain = this.providerChain(providerName)
+    if (chain.length === 0) {
+      throw new Error("No AI provider configured")
+    }
+
+    let reason: FailureKind | undefined
+    let lastError: unknown
+    for (const provider of chain) {
+      if (!this.breaker.tryAcquire(provider.name)) {
+        reason ??= "down"
+        continue
+      }
+
+      let estimate: EstimationResult
+      try {
+        estimate = await this.estimateWithProvider(provider, foodDescription, normalizedFood, opts)
+      } catch (error) {
+        const kind = classifyFailure(error)
+        if (!kind) {
+          this.breaker.release(provider.name)
+          throw error
+        }
+        this.breaker.recordFailure(provider.name, error)
+        reason ??= kind
+        lastError = error
+        continue
+      }
+
+      this.breaker.recordSuccess(provider.name)
+      if (provider === chain[0]) return estimate
+      return { ...estimate, fallback: { from: chain[0].name, to: provider.name, reason: reason! } }
+    }
+
+    throw lastError ?? new Error("Every AI provider is failing; skipped until they recover")
+  }
+
+  /** The named provider first (when configured), then the rest in order. */
+  private providerChain(providerName: string): AIProvider[] {
+    const first = this.providers.get(providerName)
+    const rest = [...this.providers.values()].filter((p) => p !== first)
+    return first ? [first, ...rest] : rest
   }
 
   /**
@@ -151,8 +205,9 @@ export class AIService {
   /**
    * A JSON parse failure means the API replied and billed us, but the body was
    * unusable: record it with whatever usage the provider attached. Any other
-   * error means no usable response at all, so there is nothing to attribute.
-   * Either way the failure goes to error tracking.
+   * error means no usable response at all: a request_failed row with no
+   * tokens, for provider health, and no $ai_generation since nothing was
+   * billed. Either way the failure goes to error tracking.
    */
   private recordFailure(error: unknown, providerName: string, opts: EstimateOptions, latencyMs: number): void {
     if (error instanceof ProviderParseError) {
@@ -161,6 +216,11 @@ export class AIService {
       this.recordSafely(providerName, { model: "unknown", inputTokens: 0, outputTokens: 0 }, opts, "parse_error", {
         latencyMs,
         error,
+      })
+    } else {
+      this.writeUsage(providerName, { model: "unknown", inputTokens: 0, outputTokens: 0 }, 0, opts, "request_failed", {
+        latencyMs,
+        error: describeFailure(error),
       })
     }
     this.reportFailure(error, providerName, opts)
@@ -179,25 +239,7 @@ export class AIService {
     generation?: { trace?: AITrace; latencyMs: number; error?: unknown }
   ): void {
     const costUsd = calculateCost(usage)
-    try {
-      this.usage.record({
-        telegramId: opts.telegramId,
-        chatId: opts.chatId,
-        provider: providerName,
-        model: usage.model,
-        inputTokens: usage.inputTokens,
-        cachedInputTokens: usage.cachedInputTokens ?? null,
-        cacheWriteTokens: usage.cacheWriteTokens ?? null,
-        outputTokens: usage.outputTokens,
-        reasoningTokens: usage.reasoningTokens ?? null,
-        costUsd,
-        callType: opts.callType,
-        status,
-      })
-    } catch (error) {
-      console.error("[usage] Failed to record AI usage:", error)
-      this.analytics.captureException(error, opts.telegramId, { source: "usage", call_type: opts.callType })
-    }
+    this.writeUsage(providerName, usage, costUsd, opts, status, { latencyMs: generation?.latencyMs })
 
     if (!generation) return
     const { trace, latencyMs, error } = generation
@@ -224,6 +266,38 @@ export class AIService {
       call_type: opts.callType,
       status,
     })
+  }
+
+  /** The ai_usage row. Accounting must never break calorie logging. */
+  private writeUsage(
+    providerName: string,
+    usage: TokenUsage,
+    costUsd: number,
+    opts: EstimateOptions,
+    status: UsageStatus,
+    extra: { latencyMs?: number; error?: string }
+  ): void {
+    try {
+      this.usage.record({
+        telegramId: opts.telegramId,
+        chatId: opts.chatId,
+        provider: providerName,
+        model: usage.model,
+        inputTokens: usage.inputTokens,
+        cachedInputTokens: usage.cachedInputTokens ?? null,
+        cacheWriteTokens: usage.cacheWriteTokens ?? null,
+        outputTokens: usage.outputTokens,
+        reasoningTokens: usage.reasoningTokens ?? null,
+        costUsd,
+        callType: opts.callType,
+        status,
+        latencyMs: extra.latencyMs ?? null,
+        error: extra.error ?? null,
+      })
+    } catch (error) {
+      console.error("[usage] Failed to record AI usage:", error)
+      this.analytics.captureException(error, opts.telegramId, { source: "usage", call_type: opts.callType })
+    }
   }
 
   private normalizeFood(food: string): string {

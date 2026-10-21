@@ -79,4 +79,5 @@ export class ProviderParseError extends SyntaxError {
 
 export type CallType = "estimate" | "clarify" | "edit" | "retry" | "backfill"
 
-export type UsageStatus = "ok" | "parse_error" | "no_usage"
+/** request_failed: no reply at all (timeout, rate limit, server error). Zero tokens, zero cost. */
+export type UsageStatus = "ok" | "parse_error" | "no_usage" | "request_failed"
