@@ -114,3 +114,26 @@ export function getDayOfWeek(dateStr: string): string {
   const date = parseDate(dateStr)
   return date.toLocaleDateString("en-US", { weekday: "long" })
 }
+
+/** A real calendar date in YYYY-MM-DD form (rejects 2026-02-30). */
+export function isValidDateString(dateStr: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false
+  const date = new Date(`${dateStr}T00:00:00Z`)
+  return !isNaN(date.getTime()) && date.toISOString().slice(0, 10) === dateStr
+}
+
+/** The date `days` after dateStr (negative for before). Calendar arithmetic in UTC, so no DST surprises. */
+export function addDays(dateStr: string, days: number): string {
+  const date = new Date(`${dateStr}T00:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+/** Every date from start to end, inclusive; empty when start is after end. */
+export function getDatesBetween(startDate: string, endDate: string): string[] {
+  const dates: string[] = []
+  for (let date = startDate; date <= endDate; date = addDays(date, 1)) {
+    dates.push(date)
+  }
+  return dates
+}

@@ -118,3 +118,12 @@ CREATE TABLE IF NOT EXISTS ai_usage (
 
 CREATE INDEX IF NOT EXISTS idx_ai_usage_user_date
   ON ai_usage(telegram_id, created_at);
+
+-- One Claude connector token per user (/claude). Only the SHA-256 of the
+-- token is stored: the token itself is the credential in the connector URL.
+CREATE TABLE IF NOT EXISTS api_tokens (
+  telegram_id INTEGER PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_at TEXT DEFAULT (datetime('now')),
+  last_used_at TEXT
+);

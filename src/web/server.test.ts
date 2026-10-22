@@ -141,6 +141,7 @@ describe("routes", () => {
 
     expect(entry).toContain("PostHog")
     expect(entry).toContain("/settings")
+    expect(entry).toContain("/claude revoke")
     expect(entry).not.toContain("Nothing else about you is shared")
   })
 

@@ -14,6 +14,7 @@ export const HELP_TEXT =
   "/delete - Delete a food entry\n" +
   "/pending - View pending estimations\n" +
   "/usage - See your AI token usage\n" +
+  "/claude - Let Claude read your log and trends\n" +
   "/settings - Change preferences\n\n" +
   'Tip: Type "cancel" to abort any active conversation.\n\n' +
   `Privacy: what TeleCal stores and shares → ${config.web.baseUrl}/#privacy`

@@ -33,7 +33,7 @@ bun run scripts/smoke-posthog.ts   # sends one test exception to PostHog; needs 
 
 **Bot Layer** (`src/bot/`):
 - `index.ts` - Bot setup, middleware chain, command registration
-- `commands/` - Command handlers (log, today, week, month, edit, delete, settings, pending, admin)
+- `commands/` - Command handlers (log, today, week, month, edit, delete, settings, pending, usage, claude, admin)
 - `conversations/log-flow.ts` - State machine for `/log` flow (awaiting_input → clarifying → confirming)
 - `middleware/allowlist.ts` - Gate: allowlisted users pass; strangers get an invite prompt and can file an access request (`access.ts` handles admin Approve/Decline)
 
@@ -54,6 +54,7 @@ bun run scripts/smoke-posthog.ts   # sends one test exception to PostHog; needs 
 - Mini App at `/app` (`views/app.html`, `{{ANALYTICS}}` filled at startup); `config.web.miniAppUrl` points the View Charts buttons there. PostHog loads only once `/api/user` returns `analytics_id` (the hashed ID, `null` without a key), then identifies and sends `$pageview`, `miniapp_tab_changed`, `miniapp_metric_changed`, `miniapp_day_opened`
 - `api.ts` - JSON for the Mini App; changes must be additive, since Telegram caches `app.html`
 - `auth.ts` - Telegram initData validation for secure auth
+- `mcp.ts` - Claude connector: stateless MCP server (POST only, JSON responses) at `/mcp/<token>`; the token from `/claude` (`commands/claude.ts`) is the credential, so never log that path. Works only while the user is allowlisted or an admin; anything else is 404. Read-only tool data lives in `connector-tools.ts`. Decisions: `docs/adr/0002-claude-connector.md`
 
 **Analytics** (`src/analytics/`):
 - PostHog wrapper (`createAnalytics`); does nothing unless `POSTHOG_API_KEY` is set. Callers pass raw Telegram IDs; only `hashTelegramId` (HMAC with `POSTHOG_ID_SECRET`) leaves the process
@@ -96,6 +97,7 @@ All config via environment variables (see `.env.example`):
 - `conversation_state` - Active `/log` conversations
 - `pending_entries` - Failed AI calls awaiting retry
 - `estimation_cache` - Cached AI responses
+- `api_tokens` - One Claude connector token per user, stored as its SHA-256 only
 
 ## Testing
 

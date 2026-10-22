@@ -134,6 +134,40 @@ export class FoodLogsRepository {
     return Object.fromEntries(rows.map((r) => [r.target_date, { calories: r.calories, protein: r.protein }]))
   }
 
+  /** First and last dates with at least one item; nulls when nothing is logged. */
+  getLoggedDateRange(telegramId: number): { first: string | null; last: string | null } {
+    const stmt = this.db.prepare(`
+      SELECT MIN(fl.target_date) as first, MAX(fl.target_date) as last
+      FROM food_logs fl
+      JOIN food_items fi ON fi.log_id = fl.id
+      WHERE fl.telegram_id = ?
+    `)
+    return stmt.get(telegramId) as { first: string | null; last: string | null }
+  }
+
+  /** Most often logged items in the range, matched case-insensitively on description. */
+  getTopFoods(
+    telegramId: number,
+    startDate: string,
+    endDate: string,
+    limit: number
+  ): { description: string; times: number; calories: number }[] {
+    const stmt = this.db.prepare(`
+      SELECT MIN(fi.description) as description,
+             COUNT(*) as times,
+             SUM(fi.calories) as calories
+      FROM food_logs fl
+      JOIN food_items fi ON fi.log_id = fl.id
+      WHERE fl.telegram_id = ?
+        AND fl.target_date >= ?
+        AND fl.target_date <= ?
+      GROUP BY LOWER(TRIM(fi.description))
+      ORDER BY times DESC, calories DESC
+      LIMIT ?
+    `)
+    return stmt.all(telegramId, startDate, endDate, limit) as { description: string; times: number; calories: number }[]
+  }
+
   deleteItem(itemId: number): void {
     const stmt = this.db.prepare("DELETE FROM food_items WHERE id = ?")
     stmt.run(itemId)

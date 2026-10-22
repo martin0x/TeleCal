@@ -11,6 +11,7 @@ import { CacheRepository } from "../db/repositories/cache"
 import { UsageRepository } from "../db/repositories/usage"
 import { AccessRequestsRepository } from "../db/repositories/access-requests"
 import { AnnouncementsRepository } from "../db/repositories/announcements"
+import { ApiTokensRepository } from "../db/repositories/api-tokens"
 import { createAllowlistMiddleware } from "./middleware/allowlist"
 import { createAccessDecisionHandler, createAdminNotifier } from "./access"
 import { HELP_TEXT } from "./help"
@@ -23,6 +24,7 @@ import { createEditCommand, createEditMessageHandler, hasEditState } from "./com
 import { createSettingsCommand, createSettingsCallbackHandler, createSettingsMessageHandler, hasPendingSettings } from "./commands/settings"
 import { createPendingCommand, createPendingCallbackHandler } from "./commands/pending"
 import { createUsageCommand } from "./commands/usage"
+import { createClaudeCommand } from "./commands/claude"
 import { LogFlow } from "./conversations/log-flow"
 import { AIService } from "../ai/service"
 import { noopAnalytics, type Analytics } from "../analytics"
@@ -52,6 +54,7 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
 
   const accessRequestsRepo = new AccessRequestsRepository(db)
   const announcementsRepo = new AnnouncementsRepository(db)
+  const apiTokensRepo = new ApiTokensRepository(db)
   bot.use(
     createAllowlistMiddleware({
       allowedUsersRepo,
@@ -83,6 +86,7 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
   bot.command("edit", createEditCommand(foodLogsRepo, usersRepo))
   bot.command("settings", createSettingsCommand(usersRepo, aiService))
   bot.command("pending", createPendingCommand(pendingRepo))
+  bot.command("claude", createClaudeCommand({ apiTokensRepo, baseUrl: config.web.baseUrl, analytics }))
 
   // Handle callback queries for inline keyboards
   bot.on("callback_query:data", async (ctx, next) => {
@@ -130,5 +134,5 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
     return logMessageHandler(ctx)
   })
 
-  return { bot, allowedUsersRepo, usersRepo, foodLogsRepo, conversationsRepo, pendingRepo, aiService, logFlow, analytics }
+  return { bot, allowedUsersRepo, apiTokensRepo, usersRepo, foodLogsRepo, conversationsRepo, pendingRepo, aiService, logFlow, analytics }
 }

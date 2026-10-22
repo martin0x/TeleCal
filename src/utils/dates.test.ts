@@ -13,6 +13,9 @@ import {
   isValidTimezone,
   getDateRangeInTimezone,
   DEFAULT_TIMEZONE,
+  isValidDateString,
+  addDays,
+  getDatesBetween,
 } from "./dates"
 
 describe("dates utility", () => {
@@ -121,5 +124,33 @@ describe("timezone-aware date utilities", () => {
 
     // Due to time difference (16 hours apart), they may or may not be different
     // depending on current time - we just verify they're valid dates
+  })
+})
+
+describe("calendar date helpers", () => {
+  test("isValidDateString accepts real dates only", () => {
+    expect(isValidDateString("2026-02-28")).toBe(true)
+    expect(isValidDateString("2028-02-29")).toBe(true)
+    expect(isValidDateString("2026-02-29")).toBe(false)
+    expect(isValidDateString("2026-13-01")).toBe(false)
+    expect(isValidDateString("2026-1-01")).toBe(false)
+    expect(isValidDateString("today")).toBe(false)
+  })
+
+  test("addDays crosses month and year boundaries", () => {
+    expect(addDays("2026-01-31", 1)).toBe("2026-02-01")
+    expect(addDays("2026-01-01", -1)).toBe("2025-12-31")
+    expect(addDays("2026-03-08", 1)).toBe("2026-03-09")
+  })
+
+  test("getDatesBetween is inclusive and empty when reversed", () => {
+    expect(getDatesBetween("2026-02-27", "2026-03-02")).toEqual([
+      "2026-02-27",
+      "2026-02-28",
+      "2026-03-01",
+      "2026-03-02",
+    ])
+    expect(getDatesBetween("2026-03-02", "2026-03-02")).toEqual(["2026-03-02"])
+    expect(getDatesBetween("2026-03-03", "2026-03-02")).toEqual([])
   })
 })

@@ -101,6 +101,37 @@ describe("FoodLogsRepository", () => {
     expect(repo.getItemForUser(99999, 1)).toBeNull()
   })
 
+  describe("connector queries", () => {
+    test("getLoggedDateRange spans the first and last dates with items", () => {
+      expect(repo.getLoggedDateRange(123)).toEqual({ first: null, last: null })
+
+      repo.create(123, 456, "2026-02-10", [{ description: "Eggs", calories: 180 }])
+      repo.create(123, 456, "2026-01-05", [{ description: "Toast", calories: 120 }])
+      repo.create(123, 456, "2026-03-01", [])
+      repo.create(1, 456, "2025-12-01", [{ description: "Rice", calories: 200 }])
+
+      expect(repo.getLoggedDateRange(123)).toEqual({ first: "2026-01-05", last: "2026-02-10" })
+    })
+
+    test("getTopFoods counts case-insensitively within the range, most frequent first", () => {
+      repo.create(123, 456, "2026-01-01", [
+        { description: "Coffee", calories: 50 },
+        { description: "Rice", calories: 200 },
+      ])
+      repo.create(123, 456, "2026-01-02", [{ description: "coffee ", calories: 60 }])
+      repo.create(123, 456, "2026-01-03", [{ description: "Pizza", calories: 800 }])
+      repo.create(123, 456, "2026-02-01", [{ description: "Pizza", calories: 800 }])
+      repo.create(1, 456, "2026-01-02", [{ description: "Pizza", calories: 800 }])
+
+      const top = repo.getTopFoods(123, "2026-01-01", "2026-01-31", 2)
+
+      expect(top).toEqual([
+        { description: "Coffee", times: 2, calories: 110 },
+        { description: "Pizza", times: 1, calories: 800 },
+      ])
+    })
+  })
+
   describe("backfill queries", () => {
     test("lists distinct descriptions missing protein, in order", () => {
       repo.create(1, 100, "2026-09-25", [

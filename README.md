@@ -86,6 +86,7 @@ bun run start
 | `/settings` | Change AI provider, calorie and protein goals, reminders |
 | `/pending` | View entries awaiting AI processing |
 | `/usage` | View your own AI token usage |
+| `/claude` | Get a link that lets Claude on claude.ai read your log (`/claude revoke` turns it off) |
 | `/admin` | Manage allowed users and access requests, view AI usage and cost, backfill protein (admin only) |
 
 ### Privacy
@@ -101,6 +102,19 @@ OpenAI organization's logs. Providers may still retain request content
 separately for abuse monitoring under their own policies.
 
 Calorie data itself is stored in TeleCal's local SQLite database.
+
+#### Claude connector
+
+`/claude` gives a user a private link to add as a custom connector on
+claude.ai (Settings → Connectors → Add custom connector). Claude can then read
+that user's goals, daily totals, each day's items and a summary over a date
+range; it can't change anything. Whatever Claude reads, meal descriptions
+included, goes to Anthropic. Only users who connect are affected.
+
+The link is the credential: TeleCal stores only its SHA-256, never logs it,
+and stops honouring it when the user sends `/claude` again, sends
+`/claude revoke`, or loses access. Decisions are in
+[ADR 0002](docs/adr/0002-claude-connector.md).
 
 #### Analytics (PostHog)
 

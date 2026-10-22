@@ -7,6 +7,7 @@ import { FoodLogsRepository } from "../db/repositories/food-logs"
 import { validateInitData, extractAuthHeader, TelegramUser } from "./auth"
 import { createApiHandlers } from "./api"
 import { landingAnalyticsScript, miniAppAnalyticsScript, type WebAnalyticsConfig } from "./analytics-snippet"
+import { createMcpHandler, MCP_PATH, type McpDeps } from "./mcp"
 
 export interface WebServerDeps {
   usersRepo: UsersRepository
@@ -19,6 +20,8 @@ export interface WebServerDeps {
   analytics?: WebAnalyticsConfig
   /** POSTHOG_ID_SECRET, for analytics_id in /api/user. Server-side only: never put it in a page. */
   analyticsIdSecret?: string
+  /** The Claude connector at /mcp/<token>; omitted, those paths are 404. */
+  mcp?: Omit<McpDeps, "usersRepo" | "foodLogsRepo">
 }
 
 const VIEWS_DIR = join(import.meta.dir, "views")
@@ -83,6 +86,7 @@ export function createFetchHandler(deps: WebServerDeps) {
     analyticsScript: landingAnalyticsScript(deps.analytics),
   })
   const miniApp = loadMiniApp(miniAppAnalyticsScript(deps.analytics))
+  const mcp = deps.mcp ? createMcpHandler({ usersRepo, foodLogsRepo, ...deps.mcp }) : null
 
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url)
@@ -109,6 +113,12 @@ export function createFetchHandler(deps: WebServerDeps) {
     const asset = path.match(ASSET_PATH)
     if (asset) {
       return serveAsset(asset[1], asset[2])
+    }
+
+    // The token in the path is the credential: never log this path.
+    const mcpMatch = mcp && path.match(MCP_PATH)
+    if (mcpMatch) {
+      return mcp(request, mcpMatch[1])
     }
 
     // API routes require authentication
