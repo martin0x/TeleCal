@@ -34,6 +34,7 @@ bun run scripts/smoke-posthog.ts   # sends one test exception to PostHog; needs 
 **Bot Layer** (`src/bot/`):
 - `index.ts` - Bot setup, middleware chain, command registration
 - `commands/` - Command handlers (log, today, week, month, edit, delete, settings, pending, admin)
+- `utils/smart-reply.ts` - Send every reply through `smartReply`/`smartEdit`: in groups they quote the user's message, or name the user when there is nothing to quote
 - `conversations/log-flow.ts` - State machine for `/log` flow (awaiting_input → clarifying → confirming)
 - `middleware/allowlist.ts` - Gate: allowlisted users pass; strangers get an invite prompt and can file an access request (`access.ts` handles admin Approve/Decline)
 

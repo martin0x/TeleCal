@@ -16,10 +16,12 @@ tied to release tags.
   replaced, and the reply says so. In groups this also works with bot privacy
   mode on, since commands always reach the bot. The confirmation now names
   the date: "Here's what I'll log for Sat, Oct 25:".
-- **Group replies say whose they are.** In groups, every bot reply starts with
-  a colour badge picked from the user's ID and their name in bold, and quotes
-  the message it answers. This replaces the name inserted into the first line
-  ("What did you eat, Maria?"). Private chats are unchanged.
+- **Group replies say whose they are.** In groups, every bot reply quotes the
+  user's message it answers; after a button press, the user's message that
+  the button's message answered. Only a reply with nothing of the user's to
+  quote starts with their name in bold instead. This replaces the name
+  inserted into the first line ("What did you eat, Maria?"). Private chats
+  are unchanged.
 
 - **`/settings` → Meal Text Sharing.** On by default. Turned off, PostHog
   gets none of that user's text: AI-call events leave out the prompt, the
