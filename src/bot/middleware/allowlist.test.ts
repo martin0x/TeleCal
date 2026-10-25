@@ -15,8 +15,6 @@ import {
   privateRequestKeyboard,
   requestAccessKeyboard,
 } from "../access"
-import { groupHeader } from "../utils/smart-reply"
-import { escapeHtml } from "../../utils/format"
 import { createAllowlistMiddleware } from "./allowlist"
 import { FakeAnalytics } from "../../analytics/test-helpers"
 
@@ -128,10 +126,9 @@ describe("strangers", () => {
     const ctx = groupMessageCtx(STRANGER, "/log")
     const next = await run(ctx)
     expect(next).not.toHaveBeenCalled()
-    // smartReply labels group messages with the sender and quotes their message.
-    expect(ctx.reply).toHaveBeenCalledWith(`${groupHeader(STRANGER, "Maria")}\n${escapeHtml(GROUP_INVITE_PROMPT)}`, {
+    // smartReply quotes the sender's message in groups.
+    expect(ctx.reply).toHaveBeenCalledWith(GROUP_INVITE_PROMPT, {
       reply_markup: privateRequestKeyboard("TeleCalBot"),
-      parse_mode: "HTML",
       reply_parameters: { message_id: 7, allow_sending_without_reply: true },
     })
   })

@@ -1,99 +1,97 @@
 // src/bot/utils/smart-reply.test.ts
 import { describe, test, expect, mock } from "bun:test"
 import type { Context } from "grammy"
-import { groupHeader, userBadge, smartReply, smartEdit } from "./smart-reply"
+import { smartReply, smartEdit } from "./smart-reply"
 
-describe("userBadge", () => {
-  test("is the same for the same user", () => {
-    expect(userBadge(42)).toBe(userBadge(42))
-  })
+type ChatType = "private" | "group" | "supergroup"
 
-  test("differs between neighbouring user IDs", () => {
-    expect(userBadge(42)).not.toBe(userBadge(43))
-  })
-})
-
-describe("groupHeader", () => {
-  test("is the badge and the bold name", () => {
-    expect(groupHeader(42, "Maria")).toBe(`${userBadge(42)} <b>Maria</b>`)
-  })
-
-  test("escapes the name", () => {
-    expect(groupHeader(42, "Tom & <Jerry>")).toBe(`${userBadge(42)} <b>Tom &amp; &lt;Jerry&gt;</b>`)
-  })
-
-  test("falls back to 'friend' without a name", () => {
-    expect(groupHeader(42, undefined)).toBe(`${userBadge(42)} <b>friend</b>`)
-    expect(groupHeader(42, "  ")).toBe(`${userBadge(42)} <b>friend</b>`)
-  })
-})
-
-function fakeCtx(chatType: "private" | "group" | "supergroup", firstName: string, messageId?: number) {
+/** A text message from user 42. */
+function messageCtx(chatType: ChatType, firstName = "Maria") {
   return {
     chat: { id: 1, type: chatType },
     from: { id: 42, first_name: firstName },
-    message: messageId === undefined ? undefined : { message_id: messageId, text: "hi" },
+    message: { message_id: 7, text: "hi" },
     reply: mock(() => Promise.resolve()),
     editMessageText: mock(() => Promise.resolve(true)),
   }
 }
 
-const QUOTE_7 = { message_id: 7, allow_sending_without_reply: true }
+/**
+ * A button press by user 42 on a bot message that quoted `original`, or
+ * quoted nothing.
+ */
+function pressCtx(chatType: ChatType, original?: { message_id: number; from: { id: number } }, firstName = "Maria") {
+  return {
+    chat: { id: 1, type: chatType },
+    from: { id: 42, first_name: firstName },
+    callbackQuery: { data: "x", message: { message_id: 8, reply_to_message: original } },
+    reply: mock(() => Promise.resolve()),
+    editMessageText: mock(() => Promise.resolve(true)),
+  }
+}
+
+const QUOTE = (id: number) => ({ message_id: id, allow_sending_without_reply: true })
 
 describe("smartReply", () => {
-  test("in a group, heads an HTML message with the user and quotes their message", async () => {
-    const ctx = fakeCtx("group", "Tom & Jerry", 7)
+  test("in a group, quotes the user's message and leaves the text alone", async () => {
+    const ctx = messageCtx("group")
     await smartReply(ctx as unknown as Context, "Here's what I'll log:", { parse_mode: "HTML" })
-    expect(ctx.reply).toHaveBeenCalledWith(`${userBadge(42)} <b>Tom &amp; Jerry</b>\nHere's what I'll log:`, {
-      parse_mode: "HTML",
-      reply_parameters: QUOTE_7,
-    })
-  })
-
-  test("in a group, escapes a plain-text message and sends it as HTML", async () => {
-    const ctx = fakeCtx("supergroup", "Maria", 7)
-    await smartReply(ctx as unknown as Context, "Fish & chips <3")
-    expect(ctx.reply).toHaveBeenCalledWith(`${userBadge(42)} <b>Maria</b>\nFish &amp; chips &lt;3`, {
-      parse_mode: "HTML",
-      reply_parameters: QUOTE_7,
-    })
+    expect(ctx.reply).toHaveBeenCalledWith("Here's what I'll log:", { parse_mode: "HTML", reply_parameters: QUOTE(7) })
   })
 
   test("keeps the caller's other options", async () => {
-    const ctx = fakeCtx("group", "Maria", 7)
+    const ctx = messageCtx("supergroup")
     const reply_markup = { inline_keyboard: [] }
     await smartReply(ctx as unknown as Context, "Pick one:", { reply_markup })
-    expect(ctx.reply).toHaveBeenCalledWith(`${userBadge(42)} <b>Maria</b>\nPick one:`, {
-      reply_markup,
-      parse_mode: "HTML",
-      reply_parameters: QUOTE_7,
-    })
+    expect(ctx.reply).toHaveBeenCalledWith("Pick one:", { reply_markup, reply_parameters: QUOTE(7) })
   })
 
-  test("quotes nothing when there is no user message, as after a button press", async () => {
-    const ctx = fakeCtx("group", "Maria")
+  test("after a button press, quotes the presser's message the button's message answered", async () => {
+    const ctx = pressCtx("group", { message_id: 5, from: { id: 42 } })
     await smartReply(ctx as unknown as Context, "What did you eat?")
-    expect(ctx.reply).toHaveBeenCalledWith(`${userBadge(42)} <b>Maria</b>\nWhat did you eat?`, { parse_mode: "HTML" })
+    expect(ctx.reply).toHaveBeenCalledWith("What did you eat?", { reply_parameters: QUOTE(5) })
+  })
+
+  test("with nothing of the user's to quote, starts with their name", async () => {
+    const ctx = pressCtx("group", undefined, "Fish & Chips")
+    await smartReply(ctx as unknown as Context, "Is <this> it?")
+    expect(ctx.reply).toHaveBeenCalledWith("<b>Fish &amp; Chips</b>\nIs &lt;this&gt; it?", { parse_mode: "HTML" })
+  })
+
+  test("never quotes someone else's message as the presser's", async () => {
+    const ctx = pressCtx("group", { message_id: 5, from: { id: 99 } })
+    await smartReply(ctx as unknown as Context, "Done.", { parse_mode: "HTML" })
+    expect(ctx.reply).toHaveBeenCalledWith("<b>Maria</b>\nDone.", { parse_mode: "HTML" })
+  })
+
+  test("falls back to 'friend' without a name", async () => {
+    const ctx = pressCtx("group", undefined, " ")
+    await smartReply(ctx as unknown as Context, "Done.")
+    expect(ctx.reply).toHaveBeenCalledWith("<b>friend</b>\nDone.", { parse_mode: "HTML" })
   })
 
   test("leaves private-chat messages unchanged", async () => {
-    const ctx = fakeCtx("private", "Tom & Jerry", 7)
+    const ctx = messageCtx("private")
     await smartReply(ctx as unknown as Context, "Here's what I'll log:", { parse_mode: "HTML" })
     expect(ctx.reply).toHaveBeenCalledWith("Here's what I'll log:", { parse_mode: "HTML" })
   })
 })
 
 describe("smartEdit", () => {
-  test("edits with the same header as smartReply", async () => {
-    const ctx = fakeCtx("supergroup", "Maria")
+  test("in a group, leaves a message that already quotes the user alone", async () => {
+    const ctx = pressCtx("supergroup", { message_id: 5, from: { id: 42 } })
     await smartEdit(ctx as unknown as Context, "✅ Logged to Fri, Sep 25:", { parse_mode: "HTML" })
-    expect(ctx.editMessageText).toHaveBeenCalledWith(`${userBadge(42)} <b>Maria</b>\n✅ Logged to Fri, Sep 25:`, {
-      parse_mode: "HTML",
-    })
+    expect(ctx.editMessageText).toHaveBeenCalledWith("✅ Logged to Fri, Sep 25:", { parse_mode: "HTML" })
+  })
+
+  test("in a group, names the user on a message that quotes nothing", async () => {
+    const ctx = pressCtx("group")
+    await smartEdit(ctx as unknown as Context, "Done.")
+    expect(ctx.editMessageText).toHaveBeenCalledWith("<b>Maria</b>\nDone.", { parse_mode: "HTML" })
   })
 
   test("leaves private-chat edits unchanged", async () => {
-    const ctx = fakeCtx("private", "Maria")
+    const ctx = pressCtx("private")
     await smartEdit(ctx as unknown as Context, "Done.")
     expect(ctx.editMessageText).toHaveBeenCalledWith("Done.", undefined)
   })
