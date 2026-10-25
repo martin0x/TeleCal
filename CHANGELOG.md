@@ -10,6 +10,17 @@ tied to release tags.
 
 ### Added
 
+- **`/log` takes the food inline.** `/log 2 eggs and toast` estimates it at
+  once and shows the confirmation, without the "What did you eat?" step. A
+  date can lead the food (`/log yesterday: 2 eggs`). An unfinished session is
+  replaced, and the reply says so. In groups this also works with bot privacy
+  mode on, since commands always reach the bot. The confirmation now names
+  the date: "Here's what I'll log for Sat, Oct 25:".
+- **Group replies say whose they are.** In groups, every bot reply starts with
+  a colour badge picked from the user's ID and their name in bold, and quotes
+  the message it answers. This replaces the name inserted into the first line
+  ("What did you eat, Maria?"). Private chats are unchanged.
+
 - **`/settings` → Meal Text Sharing.** On by default. Turned off, PostHog
   gets none of that user's text: AI-call events leave out the prompt, the
   reply and the error message, and error reports keep the error type and

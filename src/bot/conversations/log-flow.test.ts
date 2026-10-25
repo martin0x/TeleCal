@@ -235,7 +235,7 @@ describe("LogFlow", () => {
 
     expect(result.parseMode).toBe("HTML")
     expect(result.message).toBe(
-      "Here's what I'll log:\n\n<blockquote>🍗 Chicken — 200 cal · 25 g</blockquote>\n\n<b>Total: 200 cal · 25 g protein</b>"
+      "Here's what I'll log for Sat, Jan 31:\n\n<blockquote>🍗 Chicken — 200 cal · 25 g</blockquote>\n\n<b>Total: 200 cal · 25 g protein</b>"
     )
     const state = conversationsRepo.get(123)!
     expect(result.confirm).toEqual({
@@ -357,5 +357,36 @@ describe("LogFlow", () => {
 
     expect(result.message).toBe('Tap a button above, or reply "yes" / "no".')
     expect(conversationsRepo.get(123)?.state).toBe("confirming")
+  })
+
+  test("startWithFood() estimates straight away and moves to confirming", async () => {
+    const result = await logFlow.startWithFood(123, 456, "2026-01-30", "grilled chicken", "openai")
+
+    expect(mockAIService.estimate).toHaveBeenCalledTimes(1)
+    expect(mockAIService.estimate.mock.calls[0][0]).toBe("grilled chicken")
+    expect(result.message).toStartWith("Here's what I'll log for Fri, Jan 30:")
+    expect(result.confirm).toBeDefined()
+    const state = conversationsRepo.get(123)
+    expect(state?.state).toBe("confirming")
+    expect(state?.target_date).toBe("2026-01-30")
+  })
+
+  test("startWithFood() replaces an unfinished session and says so", async () => {
+    await reachConfirming()
+    const result = await logFlow.startWithFood(123, 456, "2026-02-01", "beef", "openai")
+
+    expect(result.message).toStartWith("Replaced your unfinished log for Sat, Jan 31.\n\nHere's what I'll log for Sun, Feb 1:")
+    expect(result.confirm).toBeDefined()
+    expect(conversationsRepo.get(123)?.target_date).toBe("2026-02-01")
+  })
+
+  test("startWithFood() can go to clarifying", async () => {
+    mockAIService.estimate = mock(() =>
+      Promise.resolve({ items: [], needsClarification: true, clarificationQuestion: "How big?", confidence: "low" as const })
+    )
+    const result = await logFlow.startWithFood(123, 456, "2026-01-31", "pizza", "openai")
+
+    expect(result.message).toBe("How big?")
+    expect(conversationsRepo.get(123)?.state).toBe("clarifying")
   })
 })

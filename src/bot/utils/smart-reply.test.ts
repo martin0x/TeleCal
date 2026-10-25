@@ -1,94 +1,100 @@
 // src/bot/utils/smart-reply.test.ts
 import { describe, test, expect, mock } from "bun:test"
 import type { Context } from "grammy"
-import { personalizeMessage, smartReply, smartEdit } from "./smart-reply"
+import { groupHeader, userBadge, smartReply, smartEdit } from "./smart-reply"
 
-describe("personalizeMessage", () => {
-  test("adds name before question mark", () => {
-    const result = personalizeMessage("What did you eat?", "Raymart")
-    expect(result).toBe("What did you eat, Raymart?")
+describe("userBadge", () => {
+  test("is the same for the same user", () => {
+    expect(userBadge(42)).toBe(userBadge(42))
   })
 
-  test("adds name before period", () => {
-    const result = personalizeMessage("Logged 500 calories.", "Raymart")
-    expect(result).toBe("Logged 500 calories, Raymart.")
-  })
-
-  test("adds name before colon", () => {
-    const result = personalizeMessage("Here's what I'll log:", "Raymart")
-    expect(result).toBe("Here's what I'll log, Raymart:")
-  })
-
-  test("adds name before exclamation mark", () => {
-    const result = personalizeMessage("Great choice!", "Raymart")
-    expect(result).toBe("Great choice, Raymart!")
-  })
-
-  test("adds name at end when no punctuation", () => {
-    const result = personalizeMessage("Cancelled", "Raymart")
-    expect(result).toBe("Cancelled, Raymart")
-  })
-
-  test("only personalizes first line of multi-line message", () => {
-    const input = "Here's what I'll log:\n🍕 Pizza — 300 cal"
-    const result = personalizeMessage(input, "Raymart")
-    expect(result).toBe("Here's what I'll log, Raymart:\n🍕 Pizza — 300 cal")
-  })
-
-  test("handles empty name by using 'friend'", () => {
-    const result = personalizeMessage("What did you eat?", "")
-    expect(result).toBe("What did you eat, friend?")
-  })
-
-  test("handles undefined name by using 'friend'", () => {
-    const result = personalizeMessage("What did you eat?", undefined)
-    expect(result).toBe("What did you eat, friend?")
-  })
-
-  test("returns empty string unchanged", () => {
-    const result = personalizeMessage("", "Raymart")
-    expect(result).toBe("")
-  })
-
-  test("handles first line with only whitespace", () => {
-    const result = personalizeMessage("   \nActual content", "Raymart")
-    expect(result).toBe("   \nActual content")
+  test("differs between neighbouring user IDs", () => {
+    expect(userBadge(42)).not.toBe(userBadge(43))
   })
 })
 
-function fakeCtx(chatType: "private" | "group" | "supergroup", firstName: string) {
+describe("groupHeader", () => {
+  test("is the badge and the bold name", () => {
+    expect(groupHeader(42, "Maria")).toBe(`${userBadge(42)} <b>Maria</b>`)
+  })
+
+  test("escapes the name", () => {
+    expect(groupHeader(42, "Tom & <Jerry>")).toBe(`${userBadge(42)} <b>Tom &amp; &lt;Jerry&gt;</b>`)
+  })
+
+  test("falls back to 'friend' without a name", () => {
+    expect(groupHeader(42, undefined)).toBe(`${userBadge(42)} <b>friend</b>`)
+    expect(groupHeader(42, "  ")).toBe(`${userBadge(42)} <b>friend</b>`)
+  })
+})
+
+function fakeCtx(chatType: "private" | "group" | "supergroup", firstName: string, messageId?: number) {
   return {
     chat: { id: 1, type: chatType },
     from: { id: 42, first_name: firstName },
+    message: messageId === undefined ? undefined : { message_id: messageId, text: "hi" },
     reply: mock(() => Promise.resolve()),
     editMessageText: mock(() => Promise.resolve(true)),
   }
 }
 
+const QUOTE_7 = { message_id: 7, allow_sending_without_reply: true }
+
 describe("smartReply", () => {
-  test("escapes the inserted name when sending HTML", async () => {
-    const ctx = fakeCtx("group", "Tom & Jerry")
+  test("in a group, heads an HTML message with the user and quotes their message", async () => {
+    const ctx = fakeCtx("group", "Tom & Jerry", 7)
     await smartReply(ctx as unknown as Context, "Here's what I'll log:", { parse_mode: "HTML" })
-    expect(ctx.reply).toHaveBeenCalledWith("Here's what I'll log, Tom &amp; Jerry:", { parse_mode: "HTML" })
+    expect(ctx.reply).toHaveBeenCalledWith(`${userBadge(42)} <b>Tom &amp; Jerry</b>\nHere's what I'll log:`, {
+      parse_mode: "HTML",
+      reply_parameters: QUOTE_7,
+    })
   })
 
-  test("inserts the name unescaped for plain text", async () => {
-    const ctx = fakeCtx("group", "Tom & Jerry")
-    await smartReply(ctx as unknown as Context, "Here's what I'll log:")
-    expect(ctx.reply).toHaveBeenCalledWith("Here's what I'll log, Tom & Jerry:", undefined)
+  test("in a group, escapes a plain-text message and sends it as HTML", async () => {
+    const ctx = fakeCtx("supergroup", "Maria", 7)
+    await smartReply(ctx as unknown as Context, "Fish & chips <3")
+    expect(ctx.reply).toHaveBeenCalledWith(`${userBadge(42)} <b>Maria</b>\nFish &amp; chips &lt;3`, {
+      parse_mode: "HTML",
+      reply_parameters: QUOTE_7,
+    })
+  })
+
+  test("keeps the caller's other options", async () => {
+    const ctx = fakeCtx("group", "Maria", 7)
+    const reply_markup = { inline_keyboard: [] }
+    await smartReply(ctx as unknown as Context, "Pick one:", { reply_markup })
+    expect(ctx.reply).toHaveBeenCalledWith(`${userBadge(42)} <b>Maria</b>\nPick one:`, {
+      reply_markup,
+      parse_mode: "HTML",
+      reply_parameters: QUOTE_7,
+    })
+  })
+
+  test("quotes nothing when there is no user message, as after a button press", async () => {
+    const ctx = fakeCtx("group", "Maria")
+    await smartReply(ctx as unknown as Context, "What did you eat?")
+    expect(ctx.reply).toHaveBeenCalledWith(`${userBadge(42)} <b>Maria</b>\nWhat did you eat?`, { parse_mode: "HTML" })
   })
 
   test("leaves private-chat messages unchanged", async () => {
-    const ctx = fakeCtx("private", "Tom & Jerry")
+    const ctx = fakeCtx("private", "Tom & Jerry", 7)
     await smartReply(ctx as unknown as Context, "Here's what I'll log:", { parse_mode: "HTML" })
     expect(ctx.reply).toHaveBeenCalledWith("Here's what I'll log:", { parse_mode: "HTML" })
   })
 })
 
 describe("smartEdit", () => {
-  test("edits with the same personalization as smartReply", async () => {
+  test("edits with the same header as smartReply", async () => {
     const ctx = fakeCtx("supergroup", "Maria")
     await smartEdit(ctx as unknown as Context, "✅ Logged to Fri, Sep 25:", { parse_mode: "HTML" })
-    expect(ctx.editMessageText).toHaveBeenCalledWith("✅ Logged to Fri, Sep 25, Maria:", { parse_mode: "HTML" })
+    expect(ctx.editMessageText).toHaveBeenCalledWith(`${userBadge(42)} <b>Maria</b>\n✅ Logged to Fri, Sep 25:`, {
+      parse_mode: "HTML",
+    })
+  })
+
+  test("leaves private-chat edits unchanged", async () => {
+    const ctx = fakeCtx("private", "Maria")
+    await smartEdit(ctx as unknown as Context, "Done.")
+    expect(ctx.editMessageText).toHaveBeenCalledWith("Done.", undefined)
   })
 })

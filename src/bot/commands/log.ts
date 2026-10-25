@@ -23,7 +23,7 @@ const MONTHS: Record<string, number> = {
   dec: 11, december: 11,
 }
 
-function parseDateArg(arg: string, timezone: string): string | null {
+export function parseDateArg(arg: string, timezone: string): string | null {
   const lower = arg.toLowerCase().trim()
 
   // Handle "today" and "yesterday"
@@ -66,6 +66,34 @@ function parseDateArg(arg: string, timezone: string): string | null {
   return null
 }
 
+const SEPARATOR = /^[\s:,\-–—]+|[\s:,\-–—]+$/g
+
+/**
+ * Splits `/log` arguments into a date and the food to log. The whole argument
+ * may be a date (`/log yesterday`), or a date may lead the food
+ * (`/log yesterday: 2 eggs`); anything else is all food, logged to today.
+ */
+export function parseLogArgs(args: string, timezone: string): { targetDate: string; food: string } {
+  const trimmed = args.trim()
+  const whole = parseDateArg(trimmed, timezone)
+  if (whole) return { targetDate: whole, food: "" }
+
+  const words = trimmed.split(/\s+/)
+  // Longest prefix first, so "jan 31 pizza" is not read as "jan" + "31 pizza".
+  for (const size of [2, 1]) {
+    if (words.length <= size) continue
+    const prefix = words.slice(0, size).join(" ").replace(SEPARATOR, "")
+    // parseDateArg reads "" as today; a bare separator is not a date.
+    if (prefix === "") continue
+    const date = parseDateArg(prefix, timezone)
+    if (!date) continue
+    const food = words.slice(size).join(" ").replace(SEPARATOR, "")
+    if (food) return { targetDate: date, food }
+  }
+
+  return { targetDate: getTodayInTimezone(timezone), food: trimmed }
+}
+
 export function createLogCommand(
   logFlow: LogFlow,
   conversationsRepo: ConversationsRepository,
@@ -80,10 +108,17 @@ export function createLogCommand(
     const provider = user?.ai_provider ?? "openai"
     const timezone = user?.timezone ?? DEFAULT_TIMEZONE
 
+    // Everything after "/log" or "/log@Bot", line breaks included.
     const text = ctx.message?.text ?? ""
-    const args = text.split(/\s+/).slice(1).join(" ")
+    const args = text.replace(/^\/\S+\s*/, "")
 
-    const targetDate = parseDateArg(args, timezone) ?? getTodayInTimezone(timezone)
+    const { targetDate, food } = parseLogArgs(args, timezone)
+
+    if (food) {
+      const result = await logFlow.startWithFood(userId, chatId, targetDate, food, provider)
+      await replyWithResult(ctx, userId, result)
+      return
+    }
 
     const result = await logFlow.start(userId, chatId, targetDate, provider)
     await smartReply(ctx, result.message)

@@ -2,70 +2,67 @@
 import { Context } from "grammy"
 import { escapeHtml } from "../../utils/format"
 
-/**
- * Personalizes a message by inserting the user's name into the first line.
- * Inserts ", Name" before ending punctuation (? . ! :) or at end if no punctuation.
- */
-export function personalizeMessage(
-  message: string,
-  firstName: string | undefined
-): string {
-  if (!message) return message
+// One per user, so a glance down a busy group tells whose replies are whose.
+// The name beside it settles the rare clash.
+const BADGES = ["🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "🟤", "⚪"]
 
+export function userBadge(userId: number): string {
+  return BADGES[Math.abs(userId) % BADGES.length]
+}
+
+/** The HTML first line of every group-chat reply: "🔵 <b>Maria</b>". */
+export function groupHeader(userId: number, firstName: string | undefined): string {
   const name = firstName?.trim() || "friend"
-  const lines = message.split("\n")
-  const firstLine = lines[0]
-
-  // Skip if first line is empty or whitespace only
-  if (!firstLine.trim()) return message
-
-  // Find ending punctuation
-  const punctuationMatch = firstLine.match(/([?!.:]+)\s*$/)
-
-  let personalizedFirstLine: string
-  if (punctuationMatch) {
-    const punctuation = punctuationMatch[1]
-    const beforePunctuation = firstLine.slice(0, punctuationMatch.index)
-    personalizedFirstLine = `${beforePunctuation}, ${name}${punctuation}`
-  } else {
-    personalizedFirstLine = `${firstLine}, ${name}`
-  }
-
-  lines[0] = personalizedFirstLine
-  return lines.join("\n")
+  return `${userBadge(userId)} <b>${escapeHtml(name)}</b>`
 }
 
-/**
- * Group-chat personalization shared by smartReply and smartEdit. Under HTML
- * parse mode the name is escaped: a first name like "Tom & Jerry" would
- * otherwise make Telegram reject the message.
- */
-function personalizeFor(ctx: Context, message: string, parseMode: string | undefined): string {
+function isGroupChat(ctx: Context): boolean {
   const chatType = ctx.chat?.type
-  const isGroupChat = chatType === "group" || chatType === "supergroup"
-  if (!isGroupChat) return message
-
-  const firstName = ctx.from?.first_name
-  return personalizeMessage(
-    message,
-    parseMode === "HTML" && firstName ? escapeHtml(firstName) : firstName
-  )
+  return chatType === "group" || chatType === "supergroup"
 }
 
 /**
- * Smart reply that adds name personalization in group chats.
- * In private chats, messages are sent unchanged.
+ * Group-chat labelling shared by smartReply and smartEdit. The header needs
+ * HTML, so a plain-text message is escaped and sent as HTML; the text the
+ * user sees is unchanged.
+ */
+function labelFor<O extends { parse_mode?: string }>(
+  ctx: Context,
+  message: string,
+  options: O | undefined
+): { text: string; options: O | undefined } {
+  if (!isGroupChat(ctx) || !ctx.from) return { text: message, options }
+
+  const body = options?.parse_mode === "HTML" ? message : escapeHtml(message)
+  return {
+    text: `${groupHeader(ctx.from.id, ctx.from.first_name)}\n${body}`,
+    options: { ...options, parse_mode: "HTML" } as O,
+  }
+}
+
+/**
+ * Reply that, in group chats, starts with the user's badge and name and
+ * quotes the message it answers. Private-chat messages are sent unchanged.
  */
 export async function smartReply(
   ctx: Context,
   message: string,
   options?: Parameters<Context["reply"]>[1]
 ): Promise<void> {
-  await ctx.reply(personalizeFor(ctx, message, options?.parse_mode), options)
+  const labelled = labelFor(ctx, message, options)
+  let sendOptions = labelled.options
+  // Only a user's own message is quoted; after a button press there is none.
+  if (isGroupChat(ctx) && ctx.message && !sendOptions?.reply_parameters) {
+    sendOptions = {
+      ...sendOptions,
+      reply_parameters: { message_id: ctx.message.message_id, allow_sending_without_reply: true },
+    }
+  }
+  await ctx.reply(labelled.text, sendOptions)
 }
 
 /**
- * Edits the message a button was pressed on, personalized like smartReply.
+ * Edits the message a button was pressed on, labelled like smartReply.
  * Without reply_markup in options, Telegram removes the inline keyboard.
  */
 export async function smartEdit(
@@ -73,5 +70,6 @@ export async function smartEdit(
   message: string,
   options?: Parameters<Context["editMessageText"]>[1]
 ): Promise<void> {
-  await ctx.editMessageText(personalizeFor(ctx, message, options?.parse_mode), options)
+  const labelled = labelFor(ctx, message, options)
+  await ctx.editMessageText(labelled.text, labelled.options)
 }
