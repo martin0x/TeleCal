@@ -118,14 +118,3 @@ CREATE TABLE IF NOT EXISTS ai_usage (
 
 CREATE INDEX IF NOT EXISTS idx_ai_usage_user_date
   ON ai_usage(telegram_id, created_at);
-
--- The emoji a member chose to head their replies in one group (/emoji).
--- Unique per chat, so no two members of a group share a badge.
-CREATE TABLE IF NOT EXISTS group_badges (
-  chat_id INTEGER NOT NULL,
-  telegram_id INTEGER NOT NULL,
-  emoji TEXT NOT NULL,
-  updated_at TEXT DEFAULT (datetime('now')),
-  PRIMARY KEY (chat_id, telegram_id),
-  UNIQUE (chat_id, emoji)
-);
