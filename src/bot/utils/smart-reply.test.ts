@@ -22,6 +22,11 @@ describe("groupHeader", () => {
     expect(groupHeader(42, "Tom & <Jerry>")).toBe(`${userBadge(42)} <b>Tom &amp; &lt;Jerry&gt;</b>`)
   })
 
+  test("uses the member's chosen badge when there is one", () => {
+    expect(groupHeader(42, "Maria", "🦊")).toBe("🦊 <b>Maria</b>")
+    expect(groupHeader(42, "Maria", null)).toBe(`${userBadge(42)} <b>Maria</b>`)
+  })
+
   test("falls back to 'friend' without a name", () => {
     expect(groupHeader(42, undefined)).toBe(`${userBadge(42)} <b>friend</b>`)
     expect(groupHeader(42, "  ")).toBe(`${userBadge(42)} <b>friend</b>`)
@@ -74,6 +79,12 @@ describe("smartReply", () => {
     const ctx = fakeCtx("group", "Maria")
     await smartReply(ctx as unknown as Context, "What did you eat?")
     expect(ctx.reply).toHaveBeenCalledWith(`${userBadge(42)} <b>Maria</b>\nWhat did you eat?`, { parse_mode: "HTML" })
+  })
+
+  test("heads the reply with the badge set on the context", async () => {
+    const ctx = { ...fakeCtx("group", "Maria", 7), groupBadge: "🦊" }
+    await smartReply(ctx as unknown as Context, "Done.")
+    expect(ctx.reply).toHaveBeenCalledWith("🦊 <b>Maria</b>\nDone.", { parse_mode: "HTML", reply_parameters: QUOTE_7 })
   })
 
   test("leaves private-chat messages unchanged", async () => {
