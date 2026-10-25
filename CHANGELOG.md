@@ -20,10 +20,6 @@ tied to release tags.
   a colour badge picked from the user's ID and their name in bold, and quotes
   the message it answers. This replaces the name inserted into the first line
   ("What did you eat, Maria?"). Private chats are unchanged.
-- **`/emoji` picks your badge in a group.** `/emoji 🦊` in a group replaces
-  your colour dot there with 🦊; each group keeps its own choice. An emoji
-  another member of the group already has is refused, so badges stay
-  distinct. `/emoji reset` goes back to the dot. New `group_badges` table.
 
 - **`/settings` → Meal Text Sharing.** On by default. Turned off, PostHog
   gets none of that user's text: AI-call events leave out the prompt, the

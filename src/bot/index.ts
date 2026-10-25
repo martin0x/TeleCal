@@ -11,7 +11,6 @@ import { CacheRepository } from "../db/repositories/cache"
 import { UsageRepository } from "../db/repositories/usage"
 import { AccessRequestsRepository } from "../db/repositories/access-requests"
 import { AnnouncementsRepository } from "../db/repositories/announcements"
-import { GroupBadgesRepository } from "../db/repositories/group-badges"
 import { createAllowlistMiddleware } from "./middleware/allowlist"
 import { createAccessDecisionHandler, createAdminNotifier } from "./access"
 import { HELP_TEXT } from "./help"
@@ -24,15 +23,14 @@ import { createEditCommand, createEditMessageHandler, hasEditState } from "./com
 import { createSettingsCommand, createSettingsCallbackHandler, createSettingsMessageHandler, hasPendingSettings } from "./commands/settings"
 import { createPendingCommand, createPendingCallbackHandler } from "./commands/pending"
 import { createUsageCommand } from "./commands/usage"
-import { createEmojiCommand } from "./commands/emoji"
 import { LogFlow } from "./conversations/log-flow"
 import { AIService } from "../ai/service"
 import { noopAnalytics, type Analytics } from "../analytics"
 import { withContentPreference } from "../analytics/content-preference"
 import { createBotErrorHandler } from "./errors"
-import { smartReply, type GroupBadgeFlavor } from "./utils/smart-reply"
+import { smartReply } from "./utils/smart-reply"
 
-export interface BotContext extends Context, GroupBadgeFlavor {}
+export interface BotContext extends Context {}
 
 export function createBot(baseAnalytics: Analytics = noopAnalytics) {
   const bot = new Bot<BotContext>(config.telegram.botToken)
@@ -54,7 +52,6 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
 
   const accessRequestsRepo = new AccessRequestsRepository(db)
   const announcementsRepo = new AnnouncementsRepository(db)
-  const groupBadgesRepo = new GroupBadgesRepository(db)
   bot.use(
     createAllowlistMiddleware({
       allowedUsersRepo,
@@ -68,15 +65,6 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
   bot.use(async (ctx, next) => {
     if (ctx.from) {
       usersRepo.upsert(ctx.from.id, ctx.from.username)
-    }
-    return next()
-  })
-
-  // The /emoji badge smartReply heads group replies with.
-  bot.use(async (ctx, next) => {
-    const chat = ctx.chat
-    if (ctx.from && chat && (chat.type === "group" || chat.type === "supergroup")) {
-      ctx.groupBadge = groupBadgesRepo.get(chat.id, ctx.from.id)
     }
     return next()
   })
@@ -95,7 +83,6 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
   bot.command("edit", createEditCommand(foodLogsRepo, usersRepo))
   bot.command("settings", createSettingsCommand(usersRepo, aiService))
   bot.command("pending", createPendingCommand(pendingRepo))
-  bot.command("emoji", createEmojiCommand(groupBadgesRepo))
 
   // Handle callback queries for inline keyboards
   bot.on("callback_query:data", async (ctx, next) => {

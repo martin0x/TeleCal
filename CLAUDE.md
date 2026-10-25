@@ -33,8 +33,7 @@ bun run scripts/smoke-posthog.ts   # sends one test exception to PostHog; needs 
 
 **Bot Layer** (`src/bot/`):
 - `index.ts` - Bot setup, middleware chain, command registration
-- `commands/` - Command handlers (log, today, week, month, edit, delete, settings, pending, emoji, admin)
-- `utils/smart-reply.ts` - Send every reply through `smartReply`/`smartEdit`: in groups they head it with the member's badge (`/emoji` choice from `ctx.groupBadge`, else a colour dot) and name, and quote the message answered
+- `commands/` - Command handlers (log, today, week, month, edit, delete, settings, pending, admin)
 - `conversations/log-flow.ts` - State machine for `/log` flow (awaiting_input → clarifying → confirming)
 - `middleware/allowlist.ts` - Gate: allowlisted users pass; strangers get an invite prompt and can file an access request (`access.ts` handles admin Approve/Decline)
 
@@ -97,7 +96,6 @@ All config via environment variables (see `.env.example`):
 - `conversation_state` - Active `/log` conversations
 - `pending_entries` - Failed AI calls awaiting retry
 - `estimation_cache` - Cached AI responses
-- `group_badges` - Per-group `/emoji` badge, unique per chat
 
 ## Testing
 
