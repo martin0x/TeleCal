@@ -2,8 +2,16 @@
 import { Context } from "grammy"
 import { escapeHtml } from "../../utils/format"
 
-// One per user, so a glance down a busy group tells whose replies are whose.
-// The name beside it settles the rare clash.
+/**
+ * The emoji a member picked with /emoji for the current group, set on the
+ * context by middleware in createBot. Unset or null: the default badge.
+ */
+export interface GroupBadgeFlavor {
+  groupBadge?: string | null
+}
+
+// The default badge, one per user, so a glance down a busy group tells whose
+// replies are whose. The name beside it settles the rare clash.
 const BADGES = ["🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "🟤", "⚪"]
 
 export function userBadge(userId: number): string {
@@ -11,9 +19,9 @@ export function userBadge(userId: number): string {
 }
 
 /** The HTML first line of every group-chat reply: "🔵 <b>Maria</b>". */
-export function groupHeader(userId: number, firstName: string | undefined): string {
+export function groupHeader(userId: number, firstName: string | undefined, badge?: string | null): string {
   const name = firstName?.trim() || "friend"
-  return `${userBadge(userId)} <b>${escapeHtml(name)}</b>`
+  return `${badge || userBadge(userId)} <b>${escapeHtml(name)}</b>`
 }
 
 function isGroupChat(ctx: Context): boolean {
@@ -35,7 +43,7 @@ function labelFor<O extends { parse_mode?: string }>(
 
   const body = options?.parse_mode === "HTML" ? message : escapeHtml(message)
   return {
-    text: `${groupHeader(ctx.from.id, ctx.from.first_name)}\n${body}`,
+    text: `${groupHeader(ctx.from.id, ctx.from.first_name, (ctx as Context & GroupBadgeFlavor).groupBadge)}\n${body}`,
     options: { ...options, parse_mode: "HTML" } as O,
   }
 }
