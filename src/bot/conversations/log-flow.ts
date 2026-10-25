@@ -91,6 +91,30 @@ export class LogFlow {
     }
   }
 
+  /**
+   * `/log <food>`: estimates the food straight away. An unfinished session is
+   * replaced, since the user has just said what they want to log; the reply
+   * says so, because an unconfirmed estimate may be dropped.
+   */
+  async startWithFood(
+    telegramId: number,
+    chatId: number,
+    targetDate: string,
+    food: string,
+    provider: string
+  ): Promise<LogFlowResult> {
+    const existing = this.conversations.get(telegramId)
+    this.conversations.delete(telegramId)
+    this.conversations.upsert(telegramId, chatId, "awaiting_input", targetDate)
+
+    const result = await this.processInput(telegramId, chatId, food, provider)
+    if (!existing) return result
+    return {
+      ...result,
+      message: `Replaced your unfinished log for ${formatDateForDisplay(existing.target_date)}.\n\n${result.message}`,
+    }
+  }
+
   async continueOrStartOver(
     telegramId: number,
     chatId: number,
@@ -377,7 +401,7 @@ export class LogFlow {
     })
 
     return this.confirmationResult(
-      "Here's what I'll log:",
+      `Here's what I'll log for ${formatDateForDisplay(targetDate)}:`,
       result.items,
       targetDate,
       pendingItems,

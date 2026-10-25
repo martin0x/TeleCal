@@ -15,7 +15,8 @@ import {
   privateRequestKeyboard,
   requestAccessKeyboard,
 } from "../access"
-import { personalizeMessage } from "../utils/smart-reply"
+import { groupHeader } from "../utils/smart-reply"
+import { escapeHtml } from "../../utils/format"
 import { createAllowlistMiddleware } from "./allowlist"
 import { FakeAnalytics } from "../../analytics/test-helpers"
 
@@ -51,7 +52,7 @@ function groupMessageCtx(userId: number, text: string) {
   return {
     from: { id: userId, first_name: "Maria", username: "maria" },
     chat: { id: -100, type: "group" },
-    message: { text },
+    message: { message_id: 7, text },
     me: { username: "TeleCalBot" },
     reply: mock(() => Promise.resolve()),
   }
@@ -127,9 +128,11 @@ describe("strangers", () => {
     const ctx = groupMessageCtx(STRANGER, "/log")
     const next = await run(ctx)
     expect(next).not.toHaveBeenCalled()
-    // smartReply personalizes group messages with the sender's name.
-    expect(ctx.reply).toHaveBeenCalledWith(personalizeMessage(GROUP_INVITE_PROMPT, "Maria"), {
+    // smartReply labels group messages with the sender and quotes their message.
+    expect(ctx.reply).toHaveBeenCalledWith(`${groupHeader(STRANGER, "Maria")}\n${escapeHtml(GROUP_INVITE_PROMPT)}`, {
       reply_markup: privateRequestKeyboard("TeleCalBot"),
+      parse_mode: "HTML",
+      reply_parameters: { message_id: 7, allow_sending_without_reply: true },
     })
   })
 

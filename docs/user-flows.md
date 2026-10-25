@@ -58,6 +58,7 @@ How the router behaves:
 - **States stack.** Starting one flow never clears another flow's state, and nothing times out. A user can hold all four at once, and text always goes to the highest-priority one. Example: tap *Set Daily Goal*, walk away, later send `/log`. The bot replies "What did you eat?", then answers "chicken adobo" with "Please enter a number between 100 and 10000, or 'off' to clear."
 - **Registered commands never reach the text router**, so they leave other flows' state alone. A flow's own command still resets its own state (§10). grammY matches the exact, case-sensitive name, with an optional `@` for this bot. Anything else starting with `/` arrives as plain text, including `/cancel`, `/Log` and `/log@OtherBot`. If the top-priority flow is `/edit`, `/delete` or `/settings`, its state is dropped without a reply. `/log` ignores such text and keeps its session.
 - **State is keyed by Telegram user id, not chat.** A flow started in a group continues from the DM, and the other way round.
+- **Group replies are labelled.** In a group or supergroup, every `smartReply` and `smartEdit` starts with a header line: a colour badge picked from the user id, then the first name in bold ("🔵 **Maria**"). Plain-text messages are escaped and sent as HTML so the header can be bold. A reply to a user's message also quotes that message (`reply_parameters`, `allow_sending_without_reply`); after a button press there is no user message, so nothing is quoted ([`smart-reply.ts`](../src/bot/utils/smart-reply.ts)). Private chats get the message unchanged.
 - **Callbacks:** `log:` and `del:` carry the owner's id and refuse other pressers. `settings:` and `pending:` act on whoever pressed (see [F11](#f11)).
 
 ## 2. Entry points
@@ -67,7 +68,7 @@ How the router behaves:
 | Command | Handler | State it opens | Notes |
 |---|---|---|---|
 | `/start` | [`index.ts:54`](../src/bot/index.ts#L54) | — | Help text. Says `Type "cancel" to abort any active conversation` (see [F1](#f1)). |
-| `/log [date]` | [`log.ts:69`](../src/bot/commands/log.ts#L69) | `conversation_state` row | `date`: `today`, `yesterday`, `YYYY-MM-DD`, `jan 31`. Anything else logs to today ([F4](#f4)). |
+| `/log [date] [food]` | [`createLogCommand`](../src/bot/commands/log.ts) | `conversation_state` row | `date`: `today`, `yesterday`, `YYYY-MM-DD`, `jan 31`, alone or leading the food (`/log yesterday: 2 eggs`). Arguments that aren't a date are food for today, estimated at once ([`parseLogArgs`](../src/bot/commands/log.ts)). |
 | `/edit`, `/edit N` | [`edit.ts:25`](../src/bot/commands/edit.ts#L25) | `editStates` | Today only. |
 | `/delete`, `/delete N`, `/delete all` | [`delete.ts:70`](../src/bot/commands/delete.ts#L70) | `deleteStates` | Today only. |
 | `/settings` | [`settings.ts:57`](../src/bot/commands/settings.ts#L57) | none until a button sets `pendingSettings` | Settings text and main keyboard. |
@@ -120,6 +121,7 @@ State lives in `conversation_state`, one row per user ([`schema.sql:43`](../src/
 stateDiagram-v2
   direction TB
   [*] --> awaiting_input : /log [date], no row yet
+  [*] --> confirming : /log [date] food, AI returns a result
   awaiting_input --> clarifying : food text, AI asks a question
   awaiting_input --> confirming : food text, AI returns a result
   clarifying --> clarifying : answer, AI asks again (no round limit)
@@ -155,7 +157,9 @@ stateDiagram-v2
 
 Steps 3–5 match the whole message, case-insensitive, in any state, not only after the "continue or new" question. A food description or clarification answer that is exactly `new` restarts the session.
 
-**`/log` while a row exists** ([`log-flow.ts:77-84`](../src/bot/conversations/log-flow.ts#L77-L84)) changes nothing. It replies "You already have an active log session for *old date*. Reply "continue" to resume it, or "new" to start fresh for *requested date*."
+**`/log food`** ([`startWithFood`](../src/bot/conversations/log-flow.ts)) skips "What did you eat?": it opens an `awaiting_input` row and runs the food through `processInput`, so it can clarify, confirm or park like typed food. An existing row is replaced, and the reply starts "Replaced your unfinished log for *old date*."
+
+**`/log` without food while a row exists** ([`log-flow.ts:77-84`](../src/bot/conversations/log-flow.ts#L77-L84)) changes nothing. It replies "You already have an active log session for *old date*. Reply "continue" to resume it, or "new" to start fresh for *requested date*."
 
 **AI calls.**
 
@@ -164,7 +168,7 @@ Steps 3–5 match the whole message, case-insensitive, in any state, not only af
 - A thrown error parks the entry ([`handleAIError`](../src/bot/conversations/log-flow.ts#L389)). The text saved is the input. In `clarifying` it is `"<previous message> - <this answer>"`. The previous message is the original description on the first answer and the last answer after that, so from the second round on the original description is lost.
 - "AI returns a result" means `needsClarification: false`. The item list isn't checked, so an empty list still moves to `confirming` ([F5](#f5)).
 
-**Confirmation.** The message reads "Here's what I'll log:", then the item summary, then the buttons **✅ Log N cal** / **✏️ Change** / **✖️ Cancel**. Typed replies and button presses share `commitPending` and `backToInput` ([`log-flow.ts:310-325`](../src/bot/conversations/log-flow.ts#L310-L325)), but they reply differently:
+**Confirmation.** The message reads "Here's what I'll log for *date*:", then the item summary, then the buttons **✅ Log N cal** / **✏️ Change** / **✖️ Cancel**. Typed replies and button presses share `commitPending` and `backToInput` ([`log-flow.ts:310-325`](../src/bot/conversations/log-flow.ts#L310-L325)), but they reply differently:
 
 | Choice | Typed | Button (edits the message in place) |
 |---|---|---|
@@ -430,7 +434,7 @@ Places where the code contradicts a user-facing claim, or where a path ends some
 
 <a id="f4"></a>**F4. `/log` date parsing is loose.**
 
-- An unparseable date silently logs to today ([`log.ts:86`](../src/bot/commands/log.ts#L86)).
+- An unparseable date is read as food for today: `/log tomorrow` estimates "tomorrow". A food that starts with a month and a number is read as a date: `/log may 2 eggs` logs "eggs" to May 2. The confirmation names the date, so the user can tap Change.
 - `YYYY-MM-DD` isn't validated ([`log.ts:38-41`](../src/bot/commands/log.ts#L38-L41)), so future dates and `2026-02-31` are stored as typed.
 - For `jan 31`-style dates, a day past the month's end rolls over: `feb 30` becomes March 2 ([`log.ts:55`](../src/bot/commands/log.ts#L55), [`:62`](../src/bot/commands/log.ts#L62)).
 - Whether such a date is in the future is judged by the server clock, not the user's timezone ([`log.ts:51-59`](../src/bot/commands/log.ts#L51-L59)).
