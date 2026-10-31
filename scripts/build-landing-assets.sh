@@ -4,6 +4,7 @@
 #
 # Raw phone screenshots go in scripts/screenshots/ (gitignored), named
 # shot-log, shot-today and shot-charts with any image extension. Missing ones are skipped.
+# scripts/telegram-mock/render.ts writes all three as mock Telegram screens.
 set -euo pipefail
 
 OUT=src/web/public

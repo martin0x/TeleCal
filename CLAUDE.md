@@ -15,6 +15,7 @@ bun test         # Run all tests
 bun test src/ai  # Run tests in specific directory
 bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--protein]   # one live API call to verify a provider; --protein exercises the batch call; with POSTHOG_* set, also sends the $ai_generation
 bun run scripts/smoke-posthog.ts   # sends one test exception to PostHog; needs POSTHOG_API_KEY and POSTHOG_ID_SECRET
+bun run scripts/telegram-mock/render.ts && bash scripts/build-landing-assets.sh   # re-render the landing page's Telegram screenshots from the bot's real formatters (macOS, Chrome)
 ```
 
 `smoke-providers.ts` needs `TELEGRAM_BOT_TOKEN` set even though it makes no Telegram calls — it imports `AIService`, which imports `src/config.ts`, which throws on a missing token.
