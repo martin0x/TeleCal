@@ -1,0 +1,91 @@
+/* Telegram for iOS, Day theme with TeleCal's violet as the accent. Sizes are in
+   iOS points: render.ts takes the screenshot at 390x845, 2x. */
+:root {
+  --accent:#6D4AFF;
+  --out-bg:#6D4AFF; --out-text:#FFFFFF; --out-meta:rgba(255,255,255,.72);
+  --in-bg:#FFFFFF; --in-text:#000000; --in-meta:#8E8E93;
+  --service:rgba(74,52,158,.30);
+  --bar:rgba(247,247,250,.94); --hairline:rgba(60,60,67,.29);
+  --lh:22px;
+}
+* { box-sizing:border-box; margin:0; padding:0 }
+html, body { width:390px; height:845px; overflow:hidden }
+body {
+  font:17px/var(--lh) -apple-system,"SF Pro Text",sans-serif; color:#000; -webkit-font-smoothing:antialiased;
+  display:flex; flex-direction:column; position:relative;
+  background:
+    radial-gradient(420px 380px at 8% 6%, #E6DEFF 0%, transparent 70%),
+    radial-gradient(460px 420px at 100% 38%, #C9B8FF 0%, transparent 70%),
+    radial-gradient(420px 420px at 0% 78%, #D9CCFF 0%, transparent 70%),
+    radial-gradient(480px 400px at 90% 104%, #EEE6FF 0%, transparent 70%),
+    #DCD1FF;
+}
+
+/* Status bar + nav bar */
+.top { background:var(--bar); border-bottom:.5px solid var(--hairline); flex:none; position:relative; z-index:2 }
+.status { height:54px; display:flex; align-items:center; justify-content:space-between; padding:6px 30px 0 46px; font:600 17px/1 -apple-system,"SF Pro Text",sans-serif; letter-spacing:-.01em }
+.status .icons { display:flex; gap:7px; align-items:center }
+.island { position:absolute; top:11px; left:50%; width:124px; height:36px; margin-left:-62px; background:#000; border-radius:20px }
+.nav { height:44px; display:flex; align-items:center; padding:0 10px 0 8px }
+.back { display:flex; align-items:center; gap:4px; color:var(--accent); font-size:17px; width:90px }
+.back .count { background:var(--accent); color:#fff; font:600 13px/1 -apple-system,sans-serif; border-radius:10px; padding:3px 6px }
+.title { flex:1; text-align:center; line-height:1.15 }
+.title b { display:block; font-size:16.5px; font-weight:600; letter-spacing:-.01em }
+.title span { font-size:13px; color:#8E8E93 }
+.avatar-wrap { width:90px; display:flex; justify-content:flex-end }
+.avatar { width:37px; height:37px; border-radius:50%; overflow:hidden }
+.avatar svg { width:100%; height:100%; display:block }
+
+/* Messages, anchored to the bottom like the real app */
+.chat { flex:1; display:flex; flex-direction:column; justify-content:flex-end; padding:8px 0 10px; overflow:hidden }
+.pill { align-self:center; background:var(--service); color:#fff; font:600 13px/1 -apple-system,sans-serif; padding:5px 9px; border-radius:11px; margin:6px 0 10px; backdrop-filter:blur(10px) }
+.row { display:flex; flex-direction:column; padding:0 8px; margin-top:8px }
+.row.me { align-items:flex-end; padding-left:62px }
+.row.bot { align-items:flex-start; padding-right:62px }
+.row + .row.same { margin-top:2px }
+
+.bubble { position:relative; border-radius:17px; padding:6px 12px 7px; white-space:pre-wrap; overflow-wrap:break-word; max-width:100% }
+.me .bubble { background:var(--out-bg); color:var(--out-text); border-bottom-right-radius:6px }
+.bot .bubble { background:var(--in-bg); color:var(--in-text); border-bottom-left-radius:6px; box-shadow:0 .5px .5px rgba(0,0,0,.08) }
+.bubble .tail { position:absolute; bottom:0; width:9px; height:17px }
+.bot .bubble .tail { left:-6px; fill:var(--in-bg) }
+.me .bubble .tail { right:-6px; fill:var(--out-bg); transform:scaleX(-1) }
+.bubble b { font-weight:600 }
+.bubble a { color:var(--accent); text-decoration:none }
+.me .bubble a { color:#fff; text-decoration:underline; text-underline-offset:2px }
+.bubble blockquote { white-space:pre-wrap; position:relative; background:rgba(109,74,255,.09); border-radius:6px; padding:3px 18px 3px 11px; overflow:hidden }
+.bubble blockquote::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent) }
+.bubble blockquote::after { content:""; position:absolute; top:5px; right:6px; width:9px; height:7px; background:var(--accent);
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 7'%3E%3Cpath d='M0 7V4.2C0 1.9 1 .5 3 0l.5.9C2.4 1.4 2 2.1 2 3h1.6v4zm5.4 0V4.2C5.4 1.9 6.4.5 8.4 0l.5.9C7.8 1.4 7.4 2.1 7.4 3H9v4z'/%3E%3C/svg%3E") center/contain no-repeat }
+
+/* Time (and ticks) bottom-right; the spacer reserves room on the last line */
+.spacer { display:inline-block; height:1px }
+.meta { position:absolute; right:11px; bottom:5px; font:400 11.5px/1 -apple-system,sans-serif; display:flex; gap:3px; align-items:center; white-space:nowrap }
+.bot .meta { color:var(--in-meta) }
+.me .meta { color:var(--out-meta) }
+.me .meta svg { fill:none; stroke:currentColor }
+
+/* Inline keyboard */
+.keyboard { display:flex; flex-direction:column; gap:3px; margin-top:3px; align-self:stretch }
+.keyboard .krow { display:flex; gap:3px }
+.keyboard .btn { flex:1; height:42px; display:flex; align-items:center; justify-content:center; gap:5px; background:var(--service); color:#fff; font-weight:600; font-size:16px; letter-spacing:-.01em; border-radius:8px; backdrop-filter:blur(12px); white-space:nowrap }
+.keyboard .krow:last-child .btn:first-child { border-bottom-left-radius:17px }
+.keyboard .krow:last-child .btn:last-child { border-bottom-right-radius:17px }
+
+/* Input panel */
+.input { flex:none; background:var(--bar); border-top:.5px solid var(--hairline); height:86px; padding:7px 8px 0; display:flex; align-items:flex-start; gap:8px; position:relative; z-index:2 }
+.menu { height:34px; display:flex; align-items:center; gap:5px; background:var(--accent); color:#fff; border-radius:17px; padding:0 12px 0 10px; font:600 15px/1 -apple-system,sans-serif }
+.field { flex:1; height:34px; border-radius:17px; background:#fff; border:.5px solid rgba(60,60,67,.18); color:#AEAEB2; display:flex; align-items:center; padding:0 12px; font-size:17px }
+.ic { width:34px; height:34px; display:grid; place-items:center; color:#8E8E93 }
+.home { position:absolute; bottom:8px; left:50%; width:134px; height:5px; margin-left:-67px; border-radius:3px; background:#000 }
+
+/* Mini App sheet */
+body.app { background:#000 }
+.sheet { flex:1; display:flex; flex-direction:column; background:#fff; position:relative }
+.sheet .status { background:#fff }
+.app-head { height:50px; display:flex; align-items:center; padding:0 14px; background:#fff; flex:none }
+.app-head .close { color:var(--accent); font-size:17px; width:80px }
+.app-head .more { width:80px; display:flex; justify-content:flex-end }
+.app-head .more span { width:30px; height:30px; border-radius:50%; background:rgba(116,116,128,.12); display:grid; place-items:center }
+.sheet iframe { flex:1; border:0; width:100%; display:block }
+.sheet .home { z-index:3 }
