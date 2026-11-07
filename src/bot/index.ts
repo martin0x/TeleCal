@@ -48,7 +48,7 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
   const pendingRepo = new PendingRepository(db)
   const usageRepo = new UsageRepository(db)
   const aiService = new AIService(new CacheRepository(db), usageRepo, analytics)
-  const logFlow = new LogFlow(conversationsRepo, foodLogsRepo, pendingRepo, aiService)
+  const logFlow = new LogFlow(conversationsRepo, foodLogsRepo, pendingRepo, aiService, usersRepo)
 
   const accessRequestsRepo = new AccessRequestsRepository(db)
   const announcementsRepo = new AnnouncementsRepository(db)
@@ -97,7 +97,7 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
       return createLogCallbackHandler(logFlow)(ctx)
     }
     if (data?.startsWith("del:")) {
-      return createDeleteCallbackHandler(foodLogsRepo)(ctx)
+      return createDeleteCallbackHandler(foodLogsRepo, usersRepo)(ctx)
     }
     if (data?.startsWith("access:")) {
       return createAccessDecisionHandler({ accessRequestsRepo, allowedUsersRepo, adminIds: config.adminUsers, analytics })(ctx)
@@ -107,7 +107,7 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
 
   // Create message handlers
   const logMessageHandler = createLogMessageHandler(logFlow, conversationsRepo, usersRepo)
-  const deleteMessageHandler = createDeleteMessageHandler(foodLogsRepo)
+  const deleteMessageHandler = createDeleteMessageHandler(foodLogsRepo, usersRepo)
   const editMessageHandler = createEditMessageHandler(foodLogsRepo, usersRepo, aiService)
   const settingsMessageHandler = createSettingsMessageHandler(usersRepo)
 

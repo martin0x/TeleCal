@@ -62,7 +62,7 @@ function html(text: string): string {
 }
 
 function keyboardLabels(totals: ReturnType<typeof sumTotals>): string[][] {
-  return buildLogConfirmKeyboard(1, { token: "mock", totals }).inline_keyboard.map((row) => row.map((b) => b.text))
+  return buildLogConfirmKeyboard(1, { token: "mock", totals, macros: DEFAULT_MACROS }).inline_keyboard.map((row) => row.map((b) => b.text))
 }
 
 const TICKS = '<svg width="16" height="10" viewBox="0 0 16 10"><path d="M1 5.2l3.1 3.1 6.5-6.8M7.2 7.6l.7.7 6.6-6.8" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'

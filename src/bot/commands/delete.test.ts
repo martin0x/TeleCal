@@ -3,6 +3,7 @@ import { describe, test, expect, beforeEach, mock, spyOn } from "bun:test"
 import type { Context } from "grammy"
 import { createTestDb } from "../../db/test-helpers"
 import { FoodLogsRepository } from "../../db/repositories/food-logs"
+import type { FoodItem } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
 import { getTodayInTimezone, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { encodeDeleteCallback } from "../utils/callback-data"
@@ -11,6 +12,7 @@ import {
   resolveDeleteCallback,
   createDeleteCallbackHandler,
   createDeleteCommand,
+  createDeleteMessageHandler,
   hasDeleteState,
 } from "./delete"
 
@@ -29,10 +31,7 @@ beforeEach(() => {
   foodLogsRepo = new FoodLogsRepository(db)
 })
 
-function logItems(
-  telegramId: number,
-  items: { description: string; calories: number; protein_g?: number | null; emoji?: string }[]
-) {
+function logItems(telegramId: number, items: FoodItem[]) {
   return foodLogsRepo.create(telegramId, 555, DATE, items).items
 }
 
@@ -47,7 +46,7 @@ describe("deleteAllToken", () => {
 describe("resolveDeleteCallback", () => {
   test("refuses a press by someone other than the owner", () => {
     const [item] = logItems(OWNER, [{ description: "Ramen", calories: 520, protein_g: 22, emoji: "🍜" }])
-    const decision = resolveDeleteCallback({ action: "one", ownerId: OWNER, itemId: item.id! }, OTHER, foodLogsRepo)
+    const decision = resolveDeleteCallback({ action: "one", ownerId: OWNER, itemId: item.id! }, OTHER, foodLogsRepo, ["protein"])
 
     expect(decision).toEqual({ kind: "not_owner" })
     expect(foodLogsRepo.getItemsByDate(OWNER, DATE)).toHaveLength(1)
@@ -55,7 +54,7 @@ describe("resolveDeleteCallback", () => {
 
   test("deletes one item", () => {
     const [item] = logItems(OWNER, [{ description: "Ramen", calories: 520, protein_g: 22, emoji: "🍜" }])
-    const decision = resolveDeleteCallback({ action: "one", ownerId: OWNER, itemId: item.id! }, OWNER, foodLogsRepo)
+    const decision = resolveDeleteCallback({ action: "one", ownerId: OWNER, itemId: item.id! }, OWNER, foodLogsRepo, ["protein"])
 
     expect(decision).toEqual({ kind: "done", edit: "🗑 Deleted: 🍜 Ramen — 520 cal · 22 g", toast: "Deleted" })
     expect(foodLogsRepo.getItemsByDate(OWNER, DATE)).toHaveLength(0)
@@ -63,14 +62,14 @@ describe("resolveDeleteCallback", () => {
 
   test("will not delete another user's item", () => {
     const [item] = logItems(OTHER, [{ description: "Toast", calories: 150 }])
-    const decision = resolveDeleteCallback({ action: "one", ownerId: OWNER, itemId: item.id! }, OWNER, foodLogsRepo)
+    const decision = resolveDeleteCallback({ action: "one", ownerId: OWNER, itemId: item.id! }, OWNER, foodLogsRepo, ["protein"])
 
     expect(decision).toEqual({ kind: "gone", toast: "That entry is no longer there." })
     expect(foodLogsRepo.getItemsByDate(OTHER, DATE)).toHaveLength(1)
   })
 
   test("reports an item that no longer exists", () => {
-    const decision = resolveDeleteCallback({ action: "one", ownerId: OWNER, itemId: 12345 }, OWNER, foodLogsRepo)
+    const decision = resolveDeleteCallback({ action: "one", ownerId: OWNER, itemId: 12345 }, OWNER, foodLogsRepo, ["protein"])
     expect(decision).toEqual({ kind: "gone", toast: "That entry is no longer there." })
   })
 
@@ -82,7 +81,8 @@ describe("resolveDeleteCallback", () => {
     const decision = resolveDeleteCallback(
       { action: "all", ownerId: OWNER, date: DATE, token: deleteAllToken(items) },
       OWNER,
-      foodLogsRepo
+      foodLogsRepo,
+      ["protein"]
     )
 
     expect(decision).toEqual({
@@ -98,7 +98,7 @@ describe("resolveDeleteCallback", () => {
     const token = deleteAllToken(items)
     logItems(OWNER, [{ description: "Apple", calories: 95 }])
 
-    const decision = resolveDeleteCallback({ action: "all", ownerId: OWNER, date: DATE, token }, OWNER, foodLogsRepo)
+    const decision = resolveDeleteCallback({ action: "all", ownerId: OWNER, date: DATE, token }, OWNER, foodLogsRepo, ["protein"])
 
     expect(decision).toEqual({ kind: "gone", toast: "The list changed — run /delete again." })
     expect(foodLogsRepo.getItemsByDate(OWNER, DATE)).toHaveLength(2)
@@ -106,10 +106,21 @@ describe("resolveDeleteCallback", () => {
 
   test("Cancel deletes nothing", () => {
     logItems(OWNER, [{ description: "Eggs", calories: 180 }])
-    const decision = resolveDeleteCallback({ action: "cxl", ownerId: OWNER }, OWNER, foodLogsRepo)
+    const decision = resolveDeleteCallback({ action: "cxl", ownerId: OWNER }, OWNER, foodLogsRepo, ["protein"])
 
     expect(decision).toEqual({ kind: "done", edit: "✖️ Cancelled — nothing deleted.", toast: "Cancelled" })
     expect(foodLogsRepo.getItemsByDate(OWNER, DATE)).toHaveLength(1)
+  })
+
+  test("the summary follows the macros it is given", () => {
+    const items = logItems(OWNER, [{ description: "Adobo", calories: 420, protein_g: 38, fiber_g: 1, emoji: "🍗" }])
+    const decision = resolveDeleteCallback(
+      { action: "all", ownerId: OWNER, date: DATE, token: deleteAllToken(items) },
+      OWNER,
+      foodLogsRepo,
+      ["fiber"]
+    )
+    expect(decision).toEqual({ kind: "done", edit: "🗑 Deleted 1 entries (420 cal · 1 g fiber) for Fri, Sep 25.", toast: "Deleted" })
   })
 })
 
@@ -128,7 +139,7 @@ describe("createDeleteCallbackHandler", () => {
 
   async function press(data: string, fromId = OWNER) {
     const ctx = fakeCallbackCtx(data, fromId)
-    await createDeleteCallbackHandler(foodLogsRepo)(ctx as unknown as Context)
+    await createDeleteCallbackHandler(foodLogsRepo, usersRepo)(ctx as unknown as Context)
     return ctx
   }
 
@@ -170,11 +181,19 @@ describe("createDeleteCallbackHandler", () => {
     const ctx = fakeCallbackCtx(encodeDeleteCallback({ action: "one", ownerId: OWNER, itemId: item.id! }), OWNER)
     ctx.answerCallbackQuery.mockImplementation(() => Promise.reject(new Error("query is too old")))
 
-    await createDeleteCallbackHandler(foodLogsRepo)(ctx as unknown as Context)
+    await createDeleteCallbackHandler(foodLogsRepo, usersRepo)(ctx as unknown as Context)
 
     expect(ctx.editMessageText).toHaveBeenCalledWith("🗑 Deleted: 🍜 Ramen — 520 cal · 22 g", undefined)
     expect(errorSpy).toHaveBeenCalledTimes(1)
     errorSpy.mockRestore()
+  })
+
+  test("the edited message uses the owner's macros", async () => {
+    usersRepo.updateSettings(OWNER, { tracked_macros: ["protein", "fat"] })
+    const [item] = logItems(OWNER, [{ description: "Ramen", calories: 520, protein_g: 22, fat_g: 18, emoji: "🍜" }])
+    const ctx = await press(encodeDeleteCallback({ action: "one", ownerId: OWNER, itemId: item.id! }))
+
+    expect(ctx.editMessageText).toHaveBeenCalledWith("🗑 Deleted: 🍜 Ramen — 520 cal · 22 g · 18 g fat", undefined)
   })
 })
 
@@ -211,7 +230,7 @@ describe("a stale button press vs. a newer typed /delete session", () => {
       encodeDeleteCallback({ action: "one", ownerId: OWNER, itemId: 999999 }),
       OWNER
     )
-    await createDeleteCallbackHandler(foodLogsRepo)(staleCtx as unknown as Context)
+    await createDeleteCallbackHandler(foodLogsRepo, usersRepo)(staleCtx as unknown as Context)
 
     expect(hasDeleteState(OWNER)).toBe(true)
   })
@@ -224,8 +243,24 @@ describe("a stale button press vs. a newer typed /delete session", () => {
     expect(hasDeleteState(OWNER)).toBe(true)
 
     const ctx = fakeCallbackCtx(encodeDeleteCallback({ action: "one", ownerId: OWNER, itemId: item.id! }), OWNER)
-    await createDeleteCallbackHandler(foodLogsRepo)(ctx as unknown as Context)
+    await createDeleteCallbackHandler(foodLogsRepo, usersRepo)(ctx as unknown as Context)
 
     expect(hasDeleteState(OWNER)).toBe(false)
+  })
+})
+
+describe("typed /delete follows the user's macros", () => {
+  test("the list and the single-item prompt show the tracked macros", async () => {
+    usersRepo.updateSettings(OWNER, { tracked_macros: ["added_sugar"] })
+    const today = getTodayInTimezone(DEFAULT_TIMEZONE)
+    foodLogsRepo.create(OWNER, 555, today, [{ description: "Halo-halo", calories: 350, added_sugar_g: 40, emoji: "🍧" }])
+
+    const command = { from: { id: OWNER, first_name: "Maria" }, chat: { type: "private" }, message: { text: "/delete" }, reply: mock(() => Promise.resolve()) }
+    await createDeleteCommand(foodLogsRepo, usersRepo)(command as unknown as Context)
+    expect(command.reply).toHaveBeenCalledWith(expect.stringContaining("1. 🍧 Halo-halo — 350 cal · 40 g sugar"), undefined)
+
+    const typed = { from: { id: OWNER, first_name: "Maria" }, chat: { type: "private" }, message: { text: "1" }, reply: mock(() => Promise.resolve()) }
+    await createDeleteMessageHandler(foodLogsRepo, usersRepo)(typed as unknown as Context)
+    expect(typed.reply).toHaveBeenCalledWith("Delete this entry?\n\n🍧 Halo-halo — 350 cal · 40 g sugar", expect.anything())
   })
 })

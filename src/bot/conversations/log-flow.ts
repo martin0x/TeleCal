@@ -5,18 +5,19 @@ import {
 } from "../../db/repositories/conversations"
 import { FoodLogsRepository, FoodItem } from "../../db/repositories/food-logs"
 import { PendingRepository } from "../../db/repositories/pending"
+import { UsersRepository } from "../../db/repositories/users"
 import { AIService } from "../../ai/service"
 import { EstimationResult } from "../../ai/types"
 import { formatItemsSummary, formatTotals, sumTotals, shortHash } from "../../utils/format"
 import { formatDateForDisplay } from "../../utils/dates"
-import { DEFAULT_MACROS, type Totals } from "../../macros"
+import { DEFAULT_MACROS, type MacroKey, type Totals } from "../../macros"
 
 export interface LogFlowResult {
   message: string
   action: "prompt" | "done" | "ask_continue" | "continue" | "error"
   parseMode?: "HTML"
   /** Set on a confirmation message; the bot layer turns it into the Log/Change/Cancel keyboard. */
-  confirm?: { token: string; totals: Totals }
+  confirm?: { token: string; totals: Totals; macros: MacroKey[] }
 }
 
 export type ConfirmChoice = "log" | "change" | "cancel"
@@ -64,8 +65,14 @@ export class LogFlow {
     private conversations: ConversationsRepository,
     private foodLogs: FoodLogsRepository,
     private pending: PendingRepository,
-    private aiService: AIService
+    private aiService: AIService,
+    private users: Pick<UsersRepository, "findById">
   ) {}
+
+  /** The macros this user's replies show. */
+  private macrosFor(telegramId: number): MacroKey[] {
+    return this.users.findById(telegramId)?.tracked_macros ?? [...DEFAULT_MACROS]
+  }
 
   async start(
     telegramId: number,
@@ -261,7 +268,7 @@ export class LogFlow {
       this.commitPending(telegramId, chatId, state.target_date, items)
 
       return {
-        message: `Logged ${formatTotals(sumTotals(items), DEFAULT_MACROS)} for ${formatDateForDisplay(state.target_date)}.`,
+        message: `Logged ${formatTotals(sumTotals(items), this.macrosFor(telegramId))} for ${formatDateForDisplay(state.target_date)}.`,
         action: "done",
       }
     }
@@ -302,27 +309,28 @@ export class LogFlow {
 
     const items = safeJsonParse<FoodItem[]>(state.pending_items, [])
     if (items.length === 0) return { stale: true }
+    const macros = this.macrosFor(telegramId)
 
     switch (choice) {
       case "log":
         this.commitPending(telegramId, chatId, state.target_date, items)
         return {
           stale: false,
-          edit: `✅ Logged to ${formatDateForDisplay(state.target_date)}:\n\n${formatItemsSummary(items, DEFAULT_MACROS)}`,
+          edit: `✅ Logged to ${formatDateForDisplay(state.target_date)}:\n\n${formatItemsSummary(items, macros)}`,
           toast: "Logged ✅",
         }
       case "change":
         this.backToInput(telegramId, state)
         return {
           stale: false,
-          edit: `✏️ Not logged — changing:\n\n${formatItemsSummary(items, DEFAULT_MACROS, { struck: true })}`,
+          edit: `✏️ Not logged — changing:\n\n${formatItemsSummary(items, macros, { struck: true })}`,
           followUp: "Okay, let's try again. What did you eat?",
         }
       case "cancel":
         this.conversations.delete(telegramId)
         return {
           stale: false,
-          edit: `✖️ Cancelled — not logged:\n\n${formatItemsSummary(items, DEFAULT_MACROS, { struck: true })}`,
+          edit: `✖️ Cancelled — not logged:\n\n${formatItemsSummary(items, macros, { struck: true })}`,
           toast: "Cancelled",
         }
     }
@@ -349,19 +357,22 @@ export class LogFlow {
   }
 
   private confirmationResult(
+    telegramId: number,
     header: string,
     items: FoodItem[],
     targetDate: string,
     pendingItems: string,
     action: "prompt" | "continue"
   ): LogFlowResult {
+    const macros = this.macrosFor(telegramId)
     return {
-      message: `${header}\n\n${formatItemsSummary(items, DEFAULT_MACROS)}`,
+      message: `${header}\n\n${formatItemsSummary(items, macros)}`,
       action,
       parseMode: "HTML",
       confirm: {
         token: confirmToken(targetDate, pendingItems),
         totals: sumTotals(items),
+        macros,
       },
     }
   }
@@ -402,6 +413,7 @@ export class LogFlow {
     })
 
     return this.confirmationResult(
+      telegramId,
       `Here's what I'll log for ${formatDateForDisplay(targetDate)}:`,
       result.items,
       targetDate,
@@ -451,6 +463,7 @@ export class LogFlow {
   }
 
   private getStatusMessage(state: {
+    telegram_id: number
     state: ConversationStateType
     pending_food: string | null
     pending_items: string | null
@@ -480,6 +493,7 @@ export class LogFlow {
             }
           }
           return this.confirmationResult(
+            state.telegram_id,
             `Continuing session for ${state.target_date}.`,
             items,
             state.target_date,

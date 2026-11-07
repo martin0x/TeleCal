@@ -87,7 +87,7 @@ function commandDeps() {
         message: "Here's what I'll log:",
         action: "prompt",
         parseMode: "HTML",
-        confirm: { token: "abcd1234", totals: { ...zeroTotals(), calories: 300, protein: 12 } },
+        confirm: { token: "abcd1234", totals: { ...zeroTotals(), calories: 300, protein: 12 }, macros: ["protein"] },
       })
     ),
   }
@@ -118,14 +118,14 @@ describe("createLogCommand", () => {
     expect(logFlow.startWithFood).toHaveBeenCalledWith(42, 555, getYesterdayInTimezone(TZ), "2 eggs and toast", "anthropic")
     expect(ctx.reply).toHaveBeenCalledWith("Here's what I'll log:", {
       parse_mode: "HTML",
-      reply_markup: buildLogConfirmKeyboard(42, { token: "abcd1234", totals: { ...zeroTotals(), calories: 300, protein: 12 } }),
+      reply_markup: buildLogConfirmKeyboard(42, { token: "abcd1234", totals: { ...zeroTotals(), calories: 300, protein: 12 }, macros: ["protein"] }),
     })
   })
 })
 
 describe("buildLogConfirmKeyboard", () => {
   test("puts Log full-width above Change and Cancel, with both totals on the button", () => {
-    const keyboard = buildLogConfirmKeyboard(42, { token: "abcd1234", totals: { ...zeroTotals(), calories: 335, protein: 28 } })
+    const keyboard = buildLogConfirmKeyboard(42, { token: "abcd1234", totals: { ...zeroTotals(), calories: 335, protein: 28 }, macros: ["protein"] })
     expect(keyboard.inline_keyboard).toEqual([
       [{ text: "✅ Log 335 cal · 28 g", callback_data: "log:ok:42:abcd1234" }],
       [
@@ -133,6 +133,15 @@ describe("buildLogConfirmKeyboard", () => {
         { text: "✖️ Cancel", callback_data: "log:cxl:42:abcd1234" },
       ],
     ])
+  })
+
+  test("leaves protein off the button when the user doesn't track it", () => {
+    const keyboard = buildLogConfirmKeyboard(42, {
+      token: "abcd1234",
+      totals: { ...zeroTotals(), calories: 335, protein: 28 },
+      macros: ["added_sugar"],
+    })
+    expect(keyboard.inline_keyboard[0][0].text).toBe("✅ Log 335 cal")
   })
 })
 

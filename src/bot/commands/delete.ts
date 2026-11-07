@@ -4,7 +4,7 @@ import { FoodLogsRepository, FoodItem } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
 import { getTodayInTimezone, formatDateForDisplay, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { shortHash, formatItemLine, formatTotals, sumTotals } from "../../utils/format"
-import { DEFAULT_MACROS } from "../../macros"
+import { DEFAULT_MACROS, type MacroKey } from "../../macros"
 import { DeleteCallback, encodeDeleteCallback, parseDeleteCallback } from "../utils/callback-data"
 import { stripKeyboard, answerCallback } from "../utils/keyboard"
 import { smartReply, smartEdit } from "../utils/smart-reply"
@@ -23,8 +23,8 @@ const deleteStates = new Map<number, DeleteState>()
 
 const CONFIRM_FALLBACK = 'Tap a button above, or reply "yes" / "cancel".'
 
-function formatItemsList(items: DeletableItem[]): string {
-  return items.map((item, i) => `${i + 1}. ${formatItemLine(item, DEFAULT_MACROS)}`).join("\n")
+function formatItemsList(items: DeletableItem[], macros: readonly MacroKey[]): string {
+  return items.map((item, i) => `${i + 1}. ${formatItemLine(item, macros)}`).join("\n")
 }
 
 /**
@@ -37,18 +37,19 @@ export function deleteAllToken(items: FoodItem[]): string {
   return shortHash(ids.join(","))
 }
 
-async function promptConfirmOne(ctx: Context, ownerId: number, item: DeletableItem): Promise<void> {
+async function promptConfirmOne(ctx: Context, ownerId: number, item: DeletableItem, macros: readonly MacroKey[]): Promise<void> {
   const keyboard = new InlineKeyboard()
     .text("🗑 Delete", encodeDeleteCallback({ action: "one", ownerId, itemId: Number(item.id) }))
     .text("✖️ Cancel", encodeDeleteCallback({ action: "cxl", ownerId }))
-  await smartReply(ctx, `Delete this entry?\n\n${formatItemLine(item, DEFAULT_MACROS)}`, { reply_markup: keyboard })
+  await smartReply(ctx, `Delete this entry?\n\n${formatItemLine(item, macros)}`, { reply_markup: keyboard })
 }
 
 async function promptConfirmAll(
   ctx: Context,
   ownerId: number,
   targetDate: string,
-  items: DeletableItem[]
+  items: DeletableItem[],
+  macros: readonly MacroKey[]
 ): Promise<void> {
   const keyboard = new InlineKeyboard()
     .text(
@@ -58,7 +59,7 @@ async function promptConfirmAll(
     .text("✖️ Cancel", encodeDeleteCallback({ action: "cxl", ownerId }))
   await smartReply(
     ctx,
-    `Delete all ${items.length} entries for ${formatDateForDisplay(targetDate)}? (${formatTotals(sumTotals(items), DEFAULT_MACROS)} total)`,
+    `Delete all ${items.length} entries for ${formatDateForDisplay(targetDate)}? (${formatTotals(sumTotals(items), macros)} total)`,
     { reply_markup: keyboard }
   )
 }
@@ -73,6 +74,7 @@ export function createDeleteCommand(foodLogsRepo: FoodLogsRepository, usersRepo:
 
     // Default to today in user's timezone
     const user = usersRepo.findById(userId)
+    const macros = user?.tracked_macros ?? DEFAULT_MACROS
     const timezone = user?.timezone ?? DEFAULT_TIMEZONE
     const targetDate = getTodayInTimezone(timezone)
     const items = foodLogsRepo.getItemsByDate(userId, targetDate)
@@ -91,7 +93,7 @@ export function createDeleteCommand(foodLogsRepo: FoodLogsRepository, usersRepo:
         pendingAction: "confirm_single",
         selectedItemIndex: itemNum - 1,
       })
-      await promptConfirmOne(ctx, userId, items[itemNum - 1])
+      await promptConfirmOne(ctx, userId, items[itemNum - 1], macros)
       return
     }
 
@@ -102,7 +104,7 @@ export function createDeleteCommand(foodLogsRepo: FoodLogsRepository, usersRepo:
         items,
         pendingAction: "confirm_all",
       })
-      await promptConfirmAll(ctx, userId, targetDate, items)
+      await promptConfirmAll(ctx, userId, targetDate, items, macros)
       return
     }
 
@@ -115,7 +117,7 @@ export function createDeleteCommand(foodLogsRepo: FoodLogsRepository, usersRepo:
 
     await smartReply(ctx,
       `${formatDateForDisplay(targetDate)} entries:\n\n` +
-        `${formatItemsList(items)}\n\n` +
+        `${formatItemsList(items, macros)}\n\n` +
         `What to delete?\n` +
         `• Enter a number to delete one item\n` +
         `• "all" to delete everything\n` +
@@ -124,13 +126,14 @@ export function createDeleteCommand(foodLogsRepo: FoodLogsRepository, usersRepo:
   }
 }
 
-export function createDeleteMessageHandler(foodLogsRepo: FoodLogsRepository) {
+export function createDeleteMessageHandler(foodLogsRepo: FoodLogsRepository, usersRepo: UsersRepository) {
   return async (ctx: Context) => {
     const userId = ctx.from?.id
     if (!userId) return
 
     const state = deleteStates.get(userId)
     if (!state) return
+    const macros = usersRepo.findById(userId)?.tracked_macros ?? DEFAULT_MACROS
 
     const text = ctx.message?.text?.trim().toLowerCase()
     if (!text) return
@@ -156,7 +159,7 @@ export function createDeleteMessageHandler(foodLogsRepo: FoodLogsRepository) {
           state.pendingAction = "confirm_single"
           state.selectedItemIndex = itemNum - 1
           deleteStates.set(userId, state)
-          await promptConfirmOne(ctx, userId, state.items[itemNum - 1])
+          await promptConfirmOne(ctx, userId, state.items[itemNum - 1], macros)
           return
         }
 
@@ -164,7 +167,7 @@ export function createDeleteMessageHandler(foodLogsRepo: FoodLogsRepository) {
         if (text === "all") {
           state.pendingAction = "confirm_all"
           deleteStates.set(userId, state)
-          await promptConfirmAll(ctx, userId, state.targetDate, state.items)
+          await promptConfirmAll(ctx, userId, state.targetDate, state.items, macros)
           return
         }
 
@@ -177,7 +180,7 @@ export function createDeleteMessageHandler(foodLogsRepo: FoodLogsRepository) {
           const item = state.items[state.selectedItemIndex!]
           foodLogsRepo.deleteItem(item.id!)
           deleteStates.delete(userId)
-          await smartReply(ctx, `Deleted: ${formatItemLine(item, DEFAULT_MACROS)}`)
+          await smartReply(ctx, `Deleted: ${formatItemLine(item, macros)}`)
           return
         }
         await smartReply(ctx, CONFIRM_FALLBACK)
@@ -189,7 +192,7 @@ export function createDeleteMessageHandler(foodLogsRepo: FoodLogsRepository) {
           const count = state.items.length
           foodLogsRepo.deleteAllForDate(userId, state.targetDate)
           deleteStates.delete(userId)
-          await smartReply(ctx, `Deleted ${count} entries (${formatTotals(sumTotals(state.items), DEFAULT_MACROS)}) for ${formatDateForDisplay(state.targetDate)}.`)
+          await smartReply(ctx, `Deleted ${count} entries (${formatTotals(sumTotals(state.items), macros)}) for ${formatDateForDisplay(state.targetDate)}.`)
           return
         }
         await smartReply(ctx, CONFIRM_FALLBACK)
@@ -212,7 +215,8 @@ export type DeleteDecision =
 export function resolveDeleteCallback(
   cb: DeleteCallback,
   presserId: number,
-  foodLogsRepo: FoodLogsRepository
+  foodLogsRepo: FoodLogsRepository,
+  macros: readonly MacroKey[]
 ): DeleteDecision {
   if (cb.ownerId !== presserId) return { kind: "not_owner" }
 
@@ -221,7 +225,7 @@ export function resolveDeleteCallback(
       const item = foodLogsRepo.getItemForUser(cb.itemId, presserId)
       if (!item) return { kind: "gone", toast: "That entry is no longer there." }
       foodLogsRepo.deleteItem(cb.itemId)
-      return { kind: "done", edit: `🗑 Deleted: ${formatItemLine(item, DEFAULT_MACROS)}`, toast: "Deleted" }
+      return { kind: "done", edit: `🗑 Deleted: ${formatItemLine(item, macros)}`, toast: "Deleted" }
     }
     case "all": {
       const items = foodLogsRepo.getItemsByDate(presserId, cb.date)
@@ -231,7 +235,7 @@ export function resolveDeleteCallback(
       foodLogsRepo.deleteAllForDate(presserId, cb.date)
       return {
         kind: "done",
-        edit: `🗑 Deleted ${items.length} entries (${formatTotals(sumTotals(items), DEFAULT_MACROS)}) for ${formatDateForDisplay(cb.date)}.`,
+        edit: `🗑 Deleted ${items.length} entries (${formatTotals(sumTotals(items), macros)}) for ${formatDateForDisplay(cb.date)}.`,
         toast: "Deleted",
       }
     }
@@ -240,7 +244,7 @@ export function resolveDeleteCallback(
   }
 }
 
-export function createDeleteCallbackHandler(foodLogsRepo: FoodLogsRepository) {
+export function createDeleteCallbackHandler(foodLogsRepo: FoodLogsRepository, usersRepo: UsersRepository) {
   return async (ctx: Context) => {
     const presserId = ctx.from?.id
     if (!presserId) {
@@ -255,7 +259,8 @@ export function createDeleteCallbackHandler(foodLogsRepo: FoodLogsRepository) {
       return
     }
 
-    const decision = resolveDeleteCallback(parsed, presserId, foodLogsRepo)
+    const macros = usersRepo.findById(presserId)?.tracked_macros ?? DEFAULT_MACROS
+    const decision = resolveDeleteCallback(parsed, presserId, foodLogsRepo, macros)
     if (decision.kind === "not_owner") {
       await answerCallback(ctx, "Only the person who started this can confirm it.")
       return

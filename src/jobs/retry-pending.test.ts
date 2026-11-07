@@ -131,3 +131,30 @@ test("a failure processing an entry is reported, and the entry stays for the nex
   expect(pendingRepo.getForRetry(5)[0].retry_count).toBe(1)
   errorLog.mockRestore()
 })
+
+test("the processed-entry message follows the user's macros", async () => {
+  const pendingRepo = new PendingRepository(db)
+  const foodLogsRepo = new FoodLogsRepository(db)
+  const usersRepo = new UsersRepository(db)
+  usersRepo.upsert(42, "ray")
+  usersRepo.updateSettings(42, { tracked_macros: ["fiber"] })
+  pendingRepo.create(42, -100, "chicken adobo", "2026-09-21")
+
+  const estimate = mock(() =>
+    Promise.resolve({
+      items: [{ description: "Chicken adobo", calories: 420, protein_g: 38, fiber_g: 1, emoji: "🍗" }],
+      needsClarification: false,
+      confidence: "high" as const,
+    })
+  )
+  const bot = { api: { sendMessage: mock(() => Promise.resolve()) } }
+
+  await createRetryPendingJob(bot as any, pendingRepo, foodLogsRepo, usersRepo, { estimate } as unknown as AIService)()
+
+  expect(bot.api.sendMessage).toHaveBeenCalledWith(
+    42,
+    "✅ Processed your saved entry — logged to Mon, Sep 21:\n\n" +
+      "<blockquote>🍗 Chicken adobo — 420 cal · 1 g fiber</blockquote>\n\n<b>Total: 420 cal · 1 g fiber</b>",
+    { parse_mode: "HTML" }
+  )
+})

@@ -3,7 +3,7 @@ import { Context, InlineKeyboard } from "grammy"
 import { LogFlow, LogFlowResult, ConfirmChoice } from "../conversations/log-flow"
 import { ConversationsRepository } from "../../db/repositories/conversations"
 import { UsersRepository } from "../../db/repositories/users"
-import type { Totals } from "../../macros"
+import type { MacroKey, Totals } from "../../macros"
 import { getTodayInTimezone, getYesterdayInTimezone, formatDate, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { encodeLogCallback, parseLogCallback, LogAction } from "../utils/callback-data"
 import { stripKeyboard, answerCallback } from "../utils/keyboard"
@@ -176,11 +176,13 @@ const LOG_CHOICES: Record<LogAction, ConfirmChoice> = {
 
 export function buildLogConfirmKeyboard(
   ownerId: number,
-  confirm: { token: string; totals: Totals }
+  confirm: { token: string; totals: Totals; macros: readonly MacroKey[] }
 ): InlineKeyboard {
   const data = (action: LogAction) => encodeLogCallback({ action, ownerId, token: confirm.token })
+  // Calories and protein only: a longer label does not fit on a button.
+  const protein = confirm.macros.includes("protein") ? ` · ${confirm.totals.protein} g` : ""
   return new InlineKeyboard()
-    .text(`✅ Log ${confirm.totals.calories} cal · ${confirm.totals.protein} g`, data("ok"))
+    .text(`✅ Log ${confirm.totals.calories} cal${protein}`, data("ok"))
     .row()
     .text("✏️ Change", data("chg"))
     .text("✖️ Cancel", data("cxl"))

@@ -6,6 +6,7 @@ import { LogFlow, LogFlowResult, confirmToken } from "./log-flow"
 import { ConversationsRepository } from "../../db/repositories/conversations"
 import { FoodLogsRepository } from "../../db/repositories/food-logs"
 import { PendingRepository } from "../../db/repositories/pending"
+import { UsersRepository } from "../../db/repositories/users"
 import { AIService } from "../../ai/service"
 import { EstimationResult } from "../../ai/types"
 import { zeroTotals } from "../../macros"
@@ -15,13 +16,15 @@ describe("LogFlow", () => {
   let conversationsRepo: ConversationsRepository
   let foodLogsRepo: FoodLogsRepository
   let pendingRepo: PendingRepository
+  let usersRepo: UsersRepository
   let mockAIService: { estimate: ReturnType<typeof mock> }
   let logFlow: LogFlow
 
   beforeEach(() => {
     db = createTestDb()
     // food_logs.telegram_id references users in the real schema.
-    db.run("INSERT INTO users (telegram_id) VALUES (123)")
+    usersRepo = new UsersRepository(db)
+    usersRepo.upsert(123, "maria")
 
     conversationsRepo = new ConversationsRepository(db)
     foodLogsRepo = new FoodLogsRepository(db)
@@ -41,7 +44,8 @@ describe("LogFlow", () => {
       conversationsRepo,
       foodLogsRepo,
       pendingRepo,
-      mockAIService as unknown as AIService
+      mockAIService as unknown as AIService,
+      usersRepo
     )
   })
 
@@ -198,6 +202,7 @@ describe("LogFlow", () => {
     expect(result.confirm).toEqual({
       token: confirmToken("2026-01-31", state.pending_items!),
       totals: { ...zeroTotals(), calories: 200, protein: 25 },
+      macros: ["protein"],
     })
   })
 
@@ -345,5 +350,38 @@ describe("LogFlow", () => {
 
     expect(result.message).toBe("How big?")
     expect(conversationsRepo.get(123)?.state).toBe("clarifying")
+  })
+
+  test("the card, its totals and the typed-yes reply follow the user's macros", async () => {
+    usersRepo.updateSettings(123, { tracked_macros: ["protein", "added_sugar"] })
+    mockAIService.estimate = mock(() =>
+      Promise.resolve({
+        items: [{ description: "Chicken adobo", calories: 420, protein_g: 38, fat_g: 24, fiber_g: 1, added_sugar_g: 2, emoji: "🍗" }],
+        needsClarification: false,
+        confidence: "high" as const,
+      })
+    )
+    await logFlow.start(123, 456, "2026-01-31", "openai")
+    const result = await logFlow.processInput(123, 456, "adobo", "openai")
+
+    expect(result.message).toBe(
+      "Here's what I'll log for Sat, Jan 31:\n\n<blockquote>🍗 Chicken adobo — 420 cal · 38 g · 2 g sugar</blockquote>\n\n" +
+        "<b>Total: 420 cal · 38 g protein · 2 g added sugar</b>"
+    )
+    expect(result.confirm?.macros).toEqual(["protein", "added_sugar"])
+
+    const logged = await logFlow.processInput(123, 456, "yes", "openai")
+    expect(logged.message).toBe("Logged 420 cal · 38 g protein · 2 g added sugar for Sat, Jan 31.")
+  })
+
+  test("with no macros the logged card shows calories only", async () => {
+    usersRepo.updateSettings(123, { tracked_macros: [] })
+    const token = await reachConfirming()
+
+    expect(logFlow.resolveConfirmation(123, 456, token, "log")).toEqual({
+      stale: false,
+      edit: "✅ Logged to Sat, Jan 31:\n\n<blockquote>🍗 Chicken — 200 cal</blockquote>\n\n<b>Total: 200 cal</b>",
+      toast: "Logged ✅",
+    })
   })
 })

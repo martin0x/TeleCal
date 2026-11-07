@@ -77,7 +77,7 @@ export function createRetryPendingJob(
         await bot.api.sendMessage(
           entry.telegram_id,
           `✅ Processed your saved entry — logged to ${formatDateForDisplay(entry.target_date)}:\n\n` +
-            formatItemsSummary(result.items, DEFAULT_MACROS),
+            formatItemsSummary(result.items, user?.tracked_macros ?? DEFAULT_MACROS),
           { parse_mode: "HTML" }
         )
 
