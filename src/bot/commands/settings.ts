@@ -4,6 +4,7 @@ import { UsersRepository } from "../../db/repositories/users"
 import { AIService } from "../../ai/service"
 import { isValidTimezone, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { smartReply } from "../utils/smart-reply"
+import { MACROS, isMacroKey, getMacro, withMacro, type MacroKey } from "../../macros"
 
 // Track users waiting for goal/reminder/timezone input
 const pendingSettings = new Map<number, "goal" | "protein" | "reminder" | "timezone">()
@@ -14,12 +15,29 @@ export function createMainKeyboard(): InlineKeyboard {
     .text("Set Calorie Goal", "settings:goal")
     .row()
     .text("Set Protein Goal", "settings:protein")
+    .text("Macros", "settings:macros")
+    .row()
     .text("Set Reminder", "settings:reminder")
-    .row()
     .text("Set Timezone", "settings:timezone")
-    .text("Meal Text Sharing", "settings:analytics")
     .row()
+    .text("Meal Text Sharing", "settings:analytics")
     .text("Close", "settings:close")
+}
+
+export const MACROS_SCREEN_TEXT =
+  "⚙️ Macros\n\n" +
+  "Calories always show. Pick what else shows beside them. Every meal is estimated for all four, so switching one on shows it for earlier meals too."
+
+/** Two macros a row, ✓ on the tracked ones (like the provider picker), then Back. */
+export function createMacrosKeyboard(tracked: readonly MacroKey[]): InlineKeyboard {
+  const keyboard = new InlineKeyboard()
+  for (let i = 0; i < MACROS.length; i += 2) {
+    for (const m of MACROS.slice(i, i + 2)) {
+      keyboard.text(tracked.includes(m.key) ? `${m.name} ✓` : m.name, `settings:macro:${m.key}`)
+    }
+    keyboard.row()
+  }
+  return keyboard.text("← Back", "settings:back")
 }
 
 function createProviderKeyboard(currentProvider: string, availableProviders: string[]): InlineKeyboard {
@@ -42,10 +60,12 @@ export function formatSettings(user: {
   reminder_mention: boolean
   timezone: string
   analytics_content: boolean
+  tracked_macros: readonly MacroKey[]
 }): string {
   const provider = user.ai_provider.charAt(0).toUpperCase() + user.ai_provider.slice(1)
   const goal = user.daily_goal ? `${user.daily_goal.toLocaleString("en-US")} cal` : "Not set"
   const proteinGoal = user.daily_protein_goal ? `${user.daily_protein_goal} g` : "Not set"
+  const macros = user.tracked_macros.length > 0 ? user.tracked_macros.map((key) => getMacro(key).name).join(", ") : "None"
   const reminder = user.reminder_time
     ? `${user.reminder_time} (mention: ${user.reminder_mention ? "on" : "off"})`
     : "Off"
@@ -56,6 +76,7 @@ export function formatSettings(user: {
     `AI Provider: ${provider}\n` +
     `Calorie Goal: ${goal}\n` +
     `Protein Goal: ${proteinGoal}\n` +
+    `Macros: ${macros}\n` +
     `Reminder: ${reminder}\n` +
     `Timezone: ${timezone}\n` +
     `Meal text in analytics: ${user.analytics_content ? "On" : "Off"}`
@@ -130,6 +151,12 @@ export function createSettingsCallbackHandler(usersRepo: UsersRepository, aiServ
         break
       }
 
+      case "macros": {
+        await ctx.editMessageText(MACROS_SCREEN_TEXT, { reply_markup: createMacrosKeyboard(user.tracked_macros) })
+        await ctx.answerCallbackQuery()
+        break
+      }
+
       case "reminder": {
         pendingSettings.set(userId, "reminder")
         await ctx.editMessageText(
@@ -183,6 +210,21 @@ export function createSettingsCallbackHandler(usersRepo: UsersRepository, aiServ
       }
 
       default: {
+        // Handle a macro toggle: settings:macro:fiber
+        if (action.startsWith("macro:")) {
+          const key = action.slice("macro:".length)
+          if (!isMacroKey(key)) {
+            await ctx.answerCallbackQuery()
+            break
+          }
+          const on = !user.tracked_macros.includes(key)
+          const next = on ? withMacro(user.tracked_macros, key) : user.tracked_macros.filter((k) => k !== key)
+          usersRepo.updateSettings(userId, { tracked_macros: next })
+          await ctx.editMessageText(MACROS_SCREEN_TEXT, { reply_markup: createMacrosKeyboard(next) })
+          await ctx.answerCallbackQuery(`${getMacro(key).name} ${on ? "on" : "off"}`)
+          break
+        }
+
         // Handle provider selection: settings:provider:openai
         if (action.startsWith("provider:")) {
           const provider = action.replace("provider:", "")

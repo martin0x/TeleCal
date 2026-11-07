@@ -11,6 +11,8 @@ import {
   createSettingsMessageHandler,
   hasPendingSettings,
   clearPendingSettings,
+  MACROS_SCREEN_TEXT,
+  createMacrosKeyboard,
 } from "./settings"
 
 const USER = 42
@@ -51,13 +53,13 @@ async function pressThenType(button: string, text: string) {
 }
 
 describe("createMainKeyboard", () => {
-  test("offers calorie and protein goals on separate buttons", () => {
+  test("has a Macros button beside the protein goal", () => {
     const rows = createMainKeyboard().inline_keyboard.map((row) => row.map((b) => b.text))
     expect(rows).toEqual([
       ["Change Provider", "Set Calorie Goal"],
-      ["Set Protein Goal", "Set Reminder"],
-      ["Set Timezone", "Meal Text Sharing"],
-      ["Close"],
+      ["Set Protein Goal", "Macros"],
+      ["Set Reminder", "Set Timezone"],
+      ["Meal Text Sharing", "Close"],
     ])
   })
 })
@@ -70,6 +72,16 @@ describe("formatSettings", () => {
 
   test("shows Not set for missing goals", () => {
     expect(formatSettings(usersRepo.findById(USER)!)).toContain("Calorie Goal: Not set\nProtein Goal: Not set\n")
+  })
+
+  test("lists the tracked macros after the protein goal", () => {
+    expect(formatSettings(usersRepo.findById(USER)!)).toContain("Protein Goal: Not set\nMacros: Protein\n")
+
+    usersRepo.updateSettings(USER, { tracked_macros: ["added_sugar", "protein"] })
+    expect(formatSettings(usersRepo.findById(USER)!)).toContain("Macros: Protein, Added sugar\n")
+
+    usersRepo.updateSettings(USER, { tracked_macros: [] })
+    expect(formatSettings(usersRepo.findById(USER)!)).toContain("Macros: None\n")
   })
 })
 
@@ -140,5 +152,59 @@ describe("protein goal flow", () => {
 
     expect(usersRepo.findById(USER)!.daily_goal).toBe(1800)
     expect(ctx.reply).toHaveBeenCalledWith("Daily goal set to 1,800 cal. Use /settings to view settings.", undefined)
+  })
+})
+
+describe("Macros screen", () => {
+  test("the text says what the toggles do", () => {
+    expect(MACROS_SCREEN_TEXT).toBe(
+      "⚙️ Macros\n\nCalories always show. Pick what else shows beside them. Every meal is estimated for all four, so switching one on shows it for earlier meals too."
+    )
+  })
+
+  test("Macros opens the screen with a button per macro", async () => {
+    const ctx = callbackCtx("settings:macros")
+    await createSettingsCallbackHandler(usersRepo, aiService)(ctx as unknown as Context)
+
+    expect(ctx.editMessageText).toHaveBeenCalledWith(MACROS_SCREEN_TEXT, { reply_markup: createMacrosKeyboard(["protein"]) })
+    expect(ctx.answerCallbackQuery).toHaveBeenCalled()
+    const rows = createMacrosKeyboard(["protein"]).inline_keyboard.map((row) => row.map((b) => b.text))
+    expect(rows).toEqual([["Protein ✓", "Fat"], ["Fiber", "Added sugar"], ["← Back"]])
+  })
+
+  test("a macro button switches it on, then off, and redraws", async () => {
+    const on = callbackCtx("settings:macro:fiber")
+    await createSettingsCallbackHandler(usersRepo, aiService)(on as unknown as Context)
+
+    expect(usersRepo.findById(USER)!.tracked_macros).toEqual(["protein", "fiber"])
+    expect(on.editMessageText).toHaveBeenCalledWith(MACROS_SCREEN_TEXT, { reply_markup: createMacrosKeyboard(["protein", "fiber"]) })
+    expect(on.answerCallbackQuery).toHaveBeenCalledWith("Fiber on")
+
+    const off = callbackCtx("settings:macro:fiber")
+    await createSettingsCallbackHandler(usersRepo, aiService)(off as unknown as Context)
+
+    expect(usersRepo.findById(USER)!.tracked_macros).toEqual(["protein"])
+    expect(off.answerCallbackQuery).toHaveBeenCalledWith("Fiber off")
+  })
+
+  test("protein can be switched off too", async () => {
+    await createSettingsCallbackHandler(usersRepo, aiService)(callbackCtx("settings:macro:protein") as unknown as Context)
+    expect(usersRepo.findById(USER)!.tracked_macros).toEqual([])
+  })
+
+  test("an unknown macro changes nothing", async () => {
+    const ctx = callbackCtx("settings:macro:carbs")
+    await createSettingsCallbackHandler(usersRepo, aiService)(ctx as unknown as Context)
+
+    expect(usersRepo.findById(USER)!.tracked_macros).toEqual(["protein"])
+    expect(ctx.editMessageText).not.toHaveBeenCalled()
+    expect(ctx.answerCallbackQuery).toHaveBeenCalled()
+  })
+
+  test("Back returns to the main settings view", async () => {
+    const ctx = callbackCtx("settings:back")
+    await createSettingsCallbackHandler(usersRepo, aiService)(ctx as unknown as Context)
+
+    expect(ctx.editMessageText).toHaveBeenCalledWith(formatSettings(usersRepo.findById(USER)!), { reply_markup: createMainKeyboard() })
   })
 })

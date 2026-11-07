@@ -4,7 +4,7 @@ import { config } from "../config"
 
 export const HELP_TEXT =
   "Welcome to TeleCal! 🍽️\n\n" +
-  "Track your calories and protein with AI-powered estimation.\n\n" +
+  "Track your calories and protein with AI-powered estimation. Switch on fat, fiber and added sugar in /settings → Macros.\n\n" +
   "Commands:\n" +
   "/log - Log what you ate, e.g. /log 2 eggs and toast\n" +
   "/today - See today's calories and protein\n" +
