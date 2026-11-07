@@ -6,7 +6,17 @@ import { AIService } from "../../ai/service"
 import { getTodayInTimezone, formatDateForDisplay, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { smartReply } from "../utils/smart-reply"
 import { formatItemLine } from "../../utils/format"
-import { DEFAULT_MACROS, macroValuesOf } from "../../macros"
+import {
+  MACROS,
+  MAX_GRAMS,
+  DEFAULT_MACROS,
+  getMacro,
+  macroByKeyword,
+  macroValuesOf,
+  withMacro,
+  type MacroKey,
+  type MacroValues,
+} from "../../macros"
 
 interface EditState {
   targetDate: string
@@ -18,34 +28,41 @@ interface EditState {
 // Simple in-memory state for edit flow
 const editStates = new Map<number, EditState>()
 
-function formatItemsList(items: (FoodItem & { log_id: number })[]): string {
-  return items.map((item, i) => `${i + 1}. ${formatItemLine(item, DEFAULT_MACROS)}`).join("\n")
+function formatItemsList(items: (FoodItem & { log_id: number })[], macros: readonly MacroKey[]): string {
+  return items.map((item, i) => `${i + 1}. ${formatItemLine(item, macros)}`).join("\n")
 }
 
-function editPrompt(item: FoodItem): string {
-  return (
-    `Editing: ${formatItemLine(item, DEFAULT_MACROS)}\n\n` +
-    `What would you like to change?\n` +
-    `• Type a number to set calories (e.g. 200 or 200 cal)\n` +
-    `• Type a number with g to set protein (e.g. 18g)\n` +
-    `• Or describe the food to re-estimate\n` +
-    `• Type "cancel" to abort`
-  )
+function editPrompt(item: FoodItem, macros: readonly MacroKey[]): string {
+  const hints = ["• Type a number to set calories (e.g. 200 or 200 cal)"]
+  if (macros.includes("protein")) hints.push("• Type a number with g to set protein (e.g. 18g)")
+  const extra = MACROS.find((m) => m.key !== "protein" && macros.includes(m.key))
+  if (extra) hints.push(`• Add the macro's name to set another (e.g. 5g ${extra.keywords[0]})`)
+  hints.push("• Or describe the food to re-estimate", '• Type "cancel" to abort')
+  return `Editing: ${formatItemLine(item, macros)}\n\nWhat would you like to change?\n${hints.join("\n")}`
 }
 
 export type EditInput =
   | { kind: "calories"; value: number }
-  | { kind: "protein"; value: number }
+  | { kind: "macro"; key: MacroKey; value: number }
   | { kind: "invalid"; message: string }
   | { kind: "describe"; text: string }
 
-/** "200" → calories, "18g" → protein, anything else → re-estimate. */
+/** Every macro's /edit words, longest first, a space matching any run of whitespace. */
+const MACRO_WORDS = MACROS.flatMap((m) => [...m.keywords])
+  .sort((a, b) => b.length - a.length)
+  .map((word) => word.replace(/ /g, "\\s+"))
+  .join("|")
+/** "18g" or "18 g" (protein), or "3g sugar": grams, then optionally a macro's word. */
+const MACRO_INPUT = new RegExp(`^\\s*(\\d+)\\s*g(?:\\s+(${MACRO_WORDS}))?\\s*$`, "i")
+
+/** "200" → calories, "18g" → protein, "3g sugar" → that macro, anything else → re-estimate. */
 export function parseEditInput(text: string): EditInput {
-  const protein = text.match(/^\s*(\d+)\s*g\s*$/i)
-  if (protein) {
-    const value = parseInt(protein[1], 10)
-    if (value < 0 || value > 1000) return { kind: "invalid", message: "Protein must be between 0 and 1000 g." }
-    return { kind: "protein", value }
+  const grams = text.match(MACRO_INPUT)
+  if (grams) {
+    const macro = grams[2] ? macroByKeyword(grams[2])! : getMacro("protein")
+    const value = parseInt(grams[1], 10)
+    if (value > MAX_GRAMS) return { kind: "invalid", message: `${macro.name} must be between 0 and ${MAX_GRAMS} g.` }
+    return { kind: "macro", key: macro.key, value }
   }
 
   const calories = text.match(/^\s*(\d+)\s*(?:k?cal(?:ories)?)?\s*$/i)
@@ -67,6 +84,7 @@ export function createEditCommand(foodLogsRepo: FoodLogsRepository, usersRepo: U
     const args = text.split(/\s+/).slice(1).join(" ").trim()
 
     const user = usersRepo.findById(userId)
+    const macros = user?.tracked_macros ?? DEFAULT_MACROS
     const timezone = user?.timezone ?? DEFAULT_TIMEZONE
     const targetDate = getTodayInTimezone(timezone)
     const items = foodLogsRepo.getItemsByDate(userId, targetDate)
@@ -86,7 +104,7 @@ export function createEditCommand(foodLogsRepo: FoodLogsRepository, usersRepo: U
         pendingAction: "edit",
         selectedItemIndex: itemNum - 1,
       })
-      await smartReply(ctx, editPrompt(item))
+      await smartReply(ctx, editPrompt(item, macros))
       return
     }
 
@@ -99,7 +117,7 @@ export function createEditCommand(foodLogsRepo: FoodLogsRepository, usersRepo: U
 
     await smartReply(ctx,
       `${formatDateForDisplay(targetDate)} entries:\n\n` +
-        `${formatItemsList(items)}\n\n` +
+        `${formatItemsList(items, macros)}\n\n` +
         `Which item to edit? (enter number or "cancel")`
     )
   }
@@ -116,6 +134,8 @@ export function createEditMessageHandler(
 
     const state = editStates.get(userId)
     if (!state) return
+
+    const macros = usersRepo.findById(userId)?.tracked_macros ?? DEFAULT_MACROS
 
     const text = ctx.message?.text?.trim()
     if (!text) return
@@ -143,7 +163,7 @@ export function createEditMessageHandler(
           state.pendingAction = "edit"
           state.selectedItemIndex = itemNum - 1
           editStates.set(userId, state)
-          await smartReply(ctx, editPrompt(item))
+          await smartReply(ctx, editPrompt(item, macros))
           return
         }
 
@@ -163,14 +183,16 @@ export function createEditMessageHandler(
         if (input.kind === "calories") {
           foodLogsRepo.updateItem(item.id!, { calories: input.value })
           editStates.delete(userId)
-          await smartReply(ctx, `Updated: ${formatItemLine({ ...item, calories: input.value }, DEFAULT_MACROS)}`)
+          await smartReply(ctx, `Updated: ${formatItemLine({ ...item, calories: input.value }, macros)}`)
           return
         }
 
-        if (input.kind === "protein") {
-          foodLogsRepo.updateItem(item.id!, { protein_g: input.value })
+        if (input.kind === "macro") {
+          const update: Partial<MacroValues> = { [getMacro(input.key).column]: input.value }
+          foodLogsRepo.updateItem(item.id!, update)
           editStates.delete(userId)
-          await smartReply(ctx, `Updated: ${formatItemLine({ ...item, protein_g: input.value }, DEFAULT_MACROS)}`)
+          // The edited macro shows even if the user doesn't track it, so they see it took.
+          await smartReply(ctx, `Updated: ${formatItemLine({ ...item, ...update }, withMacro(macros, input.key))}`)
           return
         }
 
@@ -200,7 +222,7 @@ export function createEditMessageHandler(
             emoji: newItem.emoji,
           })
           editStates.delete(userId)
-          await smartReply(ctx, `Updated: ${formatItemLine(newItem, DEFAULT_MACROS)}`)
+          await smartReply(ctx, `Updated: ${formatItemLine(newItem, macros)}`)
         } catch (error) {
           await smartReply(ctx,
             `Couldn't reach AI to estimate. Try a number instead, or "cancel" to abort.`
