@@ -9,22 +9,7 @@ describe("UsersRepository", () => {
   let repo: UsersRepository
 
   beforeEach(() => {
-    db = new Database(":memory:")
-    db.run(`
-      CREATE TABLE users (
-        telegram_id INTEGER PRIMARY KEY,
-        username TEXT,
-        -- Fixture DDL intentionally diverges from schema.sql (which now defaults to
-        -- 'gemini'); a shared createTestDb() helper unifies this in a later branch.
-        ai_provider TEXT DEFAULT 'openai',
-        daily_goal INTEGER,
-        daily_protein_goal INTEGER,
-        reminder_time TEXT,
-        reminder_mention INTEGER DEFAULT 1,
-        timezone TEXT DEFAULT 'Asia/Manila',
-        created_at TEXT DEFAULT (datetime('now'))
-      )
-    `)
+    db = createTestDb()
     repo = new UsersRepository(db)
   })
 
@@ -36,7 +21,7 @@ describe("UsersRepository", () => {
     const user = repo.upsert(123, "john")
     expect(user.telegram_id).toBe(123)
     expect(user.username).toBe("john")
-    expect(user.ai_provider).toBe("openai")
+    expect(user.ai_provider).toBe("gemini")
   })
 
   test("updates existing user", () => {
@@ -98,5 +83,30 @@ describe("UsersRepository analytics_content", () => {
 
     repo.updateSettings(123, { analytics_content: true })
     expect(repo.findById(123)!.analytics_content).toBe(true)
+  })
+})
+
+describe("UsersRepository tracked_macros", () => {
+  test("a new user tracks protein only", () => {
+    const repo = new UsersRepository(createTestDb())
+    expect(repo.upsert(123, "john").tracked_macros).toEqual(["protein"])
+  })
+
+  test("round-trips in registry order, including none", () => {
+    const repo = new UsersRepository(createTestDb())
+    repo.upsert(123, "john")
+
+    repo.updateSettings(123, { tracked_macros: ["added_sugar", "protein"] })
+    expect(repo.findById(123)!.tracked_macros).toEqual(["protein", "added_sugar"])
+
+    repo.updateSettings(123, { tracked_macros: [] })
+    expect(repo.findById(123)!.tracked_macros).toEqual([])
+  })
+
+  test("getUsersWithReminders carries them too", () => {
+    const repo = new UsersRepository(createTestDb())
+    repo.upsert(123, "john")
+    repo.updateSettings(123, { reminder_time: "20:00", tracked_macros: ["fiber"] })
+    expect(repo.getUsersWithReminders()[0].tracked_macros).toEqual(["fiber"])
   })
 })

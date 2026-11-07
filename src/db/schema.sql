@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS users (
   timezone TEXT DEFAULT 'Asia/Manila',
   -- 0 = keep meal text (prompts, AI replies, error messages) out of PostHog (/settings)
   analytics_content INTEGER DEFAULT 1,
+  -- comma list of macro keys shown beside calories (/settings → Macros); '' = none
+  tracked_macros TEXT DEFAULT 'protein',
   created_at TEXT DEFAULT (datetime('now'))
 );
 

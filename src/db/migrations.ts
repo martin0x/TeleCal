@@ -19,6 +19,7 @@ export const COLUMN_MIGRATIONS: ColumnMigration[] = [
   { table: "food_items", column: "fat_g", ddl: "INTEGER" },
   { table: "food_items", column: "fiber_g", ddl: "INTEGER" },
   { table: "food_items", column: "added_sugar_g", ddl: "INTEGER" },
+  { table: "users", column: "tracked_macros", ddl: "TEXT DEFAULT 'protein'" },
 ]
 
 export function hasColumn(db: Database, table: string, column: string): boolean {

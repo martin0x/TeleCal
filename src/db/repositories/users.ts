@@ -1,5 +1,6 @@
 // src/db/repositories/users.ts
 import { Database } from "bun:sqlite"
+import { parseTrackedMacros, serializeTrackedMacros, type MacroKey } from "../../macros"
 
 export interface User {
   telegram_id: number
@@ -12,6 +13,8 @@ export interface User {
   timezone: string
   /** Meal text (prompts, AI replies, error messages) may go to PostHog. On by default. */
   analytics_content: boolean
+  /** Macros shown beside calories, in registry order (/settings → Macros). */
+  tracked_macros: MacroKey[]
   created_at: string
 }
 
@@ -25,6 +28,7 @@ interface UserRow {
   reminder_mention: number
   timezone: string
   analytics_content: number
+  tracked_macros: string | null
   created_at: string
 }
 
@@ -59,6 +63,7 @@ export class UsersRepository {
       reminder_mention: boolean
       timezone: string
       analytics_content: boolean
+      tracked_macros: readonly MacroKey[]
     }>
   ): void {
     // Explicit allowlist - TypeScript enforces only these columns can be used
@@ -70,6 +75,7 @@ export class UsersRepository {
       "reminder_mention",
       "timezone",
       "analytics_content",
+      "tracked_macros",
     ] as const
     type AllowedColumn = (typeof allowedColumns)[number]
 
@@ -105,6 +111,9 @@ export class UsersRepository {
     if (settings.analytics_content !== undefined) {
       columnUpdates.push({ column: "analytics_content", value: settings.analytics_content ? 1 : 0 })
     }
+    if (settings.tracked_macros !== undefined) {
+      columnUpdates.push({ column: "tracked_macros", value: serializeTrackedMacros(settings.tracked_macros) })
+    }
 
     if (columnUpdates.length === 0) return
 
@@ -132,6 +141,7 @@ export class UsersRepository {
       reminder_mention: row.reminder_mention === 1,
       // Only an explicit 0 opts out, so a row from an older fixture without the column stays on.
       analytics_content: row.analytics_content !== 0,
+      tracked_macros: parseTrackedMacros(row.tracked_macros),
     }
   }
 }

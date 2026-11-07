@@ -93,4 +93,11 @@ describe("runMigrations", () => {
       added_sugar_g: null,
     })
   })
+
+  test("adds users.tracked_macros, protein for existing users", () => {
+    const db = preProteinDb()
+    runMigrations(db, undefined, () => {})
+
+    expect(db.prepare("SELECT tracked_macros FROM users").get()).toEqual({ tracked_macros: "protein" })
+  })
 })

@@ -55,5 +55,6 @@ describe("createTestDb", () => {
 
     for (const m of MACROS) expect(names("food_items")).toContain(m.column)
     expect(names("users")).toContain("daily_protein_goal")
+    expect(names("users")).toContain("tracked_macros")
   })
 })
