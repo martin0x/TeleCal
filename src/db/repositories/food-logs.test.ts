@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach } from "bun:test"
 import { Database } from "bun:sqlite"
 import { createTestDb } from "../test-helpers"
 import { FoodLogsRepository, FoodItem } from "./food-logs"
+import { MACROS, zeroTotals } from "../../macros"
 
 describe("FoodLogsRepository", () => {
   let db: Database
@@ -40,17 +41,23 @@ describe("FoodLogsRepository", () => {
     expect(entries[0].items[0].protein_g).toBe(12)
   })
 
+  test("items read back carry every macro column, null when unknown", () => {
+    repo.create(123, 456, "2026-01-31", [{ description: "Eggs", calories: 180 }])
+    const item = repo.getByDate(123, "2026-01-31")[0].items[0] as Record<string, unknown>
+    for (const m of MACROS) expect(item[m.column]).toBeNull()
+  })
+
   test("getTotals sums calories and protein, skipping null protein", () => {
     repo.create(123, 456, "2026-01-31", [
       { description: "Eggs", calories: 180, protein_g: 12, emoji: "🍳" },
       { description: "Toast", calories: 120, protein_g: 4, emoji: "🍞" },
       { description: "Mystery", calories: 50, protein_g: null },
     ])
-    expect(repo.getTotals(123, "2026-01-31")).toEqual({ calories: 350, protein: 16 })
+    expect(repo.getTotals(123, "2026-01-31")).toEqual({ ...zeroTotals(), calories: 350, protein: 16 })
   })
 
   test("getTotals returns zeros for an empty day", () => {
-    expect(repo.getTotals(123, "2026-01-31")).toEqual({ calories: 0, protein: 0 })
+    expect(repo.getTotals(123, "2026-01-31")).toEqual(zeroTotals())
   })
 
   test("gets daily totals for date range", () => {
@@ -58,8 +65,8 @@ describe("FoodLogsRepository", () => {
     repo.create(123, 456, "2026-01-31", [{ description: "Food", calories: 1500, protein_g: null, emoji: "🍕" }])
 
     const totals = repo.getDailyTotals(123, "2026-01-25", "2026-01-31")
-    expect(totals["2026-01-30"]).toEqual({ calories: 1000, protein: 60 })
-    expect(totals["2026-01-31"]).toEqual({ calories: 1500, protein: 0 })
+    expect(totals["2026-01-30"]).toEqual({ ...zeroTotals(), calories: 1000, protein: 60 })
+    expect(totals["2026-01-31"]).toEqual({ ...zeroTotals(), calories: 1500, protein: 0 })
   })
 
   test("deletes a food item", () => {

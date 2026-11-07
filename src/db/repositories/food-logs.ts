@@ -1,19 +1,29 @@
 // src/db/repositories/food-logs.ts
 import { Database } from "bun:sqlite"
+import { MACROS, type MacroColumn, type Totals } from "../../macros"
 
-export interface FoodItem {
+/**
+ * A logged item. The macro columns (protein_g, …) are whole grams; null means
+ * unknown: a row from before that macro existed, or a model miss. Optional on
+ * input only; rows read back always carry every column.
+ */
+export type FoodItem = {
   id?: number
   description: string
   calories: number
-  /** Whole grams. null = unknown (pre-feature row or model miss). Optional on input only. */
-  protein_g?: number | null
   emoji?: string
-}
+} & Partial<Record<MacroColumn, number | null>>
 
-export interface DayTotals {
-  calories: number
-  protein: number
-}
+export type DayTotals = Totals
+
+type FoodItemRow = { id: number; description: string; calories: number; emoji: string | null } & Record<
+  MacroColumn,
+  number | null
+>
+
+const MACRO_COLUMNS = MACROS.map((m) => m.column)
+/** `COALESCE(SUM(fi.protein_g), 0) AS protein, …`, built from registry constants, never from input. */
+const MACRO_SUMS = MACROS.map((m) => `COALESCE(SUM(fi.${m.column}), 0) AS ${m.key}`).join(", ")
 
 export interface FoodLog {
   id: number
@@ -47,8 +57,8 @@ export class FoodLogsRepository {
     }
 
     const itemStmt = this.db.prepare(`
-      INSERT INTO food_items (log_id, description, calories, protein_g, emoji)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO food_items (log_id, description, calories, ${MACRO_COLUMNS.join(", ")}, emoji)
+      VALUES (?, ?, ?, ${MACRO_COLUMNS.map(() => "?").join(", ")}, ?)
       RETURNING *
     `)
 
@@ -57,9 +67,9 @@ export class FoodLogsRepository {
         logRow.id,
         item.description,
         item.calories,
-        item.protein_g ?? null,
+        ...MACRO_COLUMNS.map((column) => item[column] ?? null),
         item.emoji ?? null
-      ) as { id: number; description: string; calories: number; protein_g: number | null; emoji: string | null }
+      ) as FoodItemRow
       return { ...row, emoji: row.emoji ?? undefined }
     })
 
@@ -85,13 +95,7 @@ export class FoodLogsRepository {
     )
 
     return logs.map((log) => {
-      const items = itemsStmt.all(log.id) as {
-        id: number
-        description: string
-        calories: number
-        protein_g: number | null
-        emoji: string | null
-      }[]
+      const items = itemsStmt.all(log.id) as FoodItemRow[]
       return {
         ...log,
         items: items.map((i) => ({ ...i, emoji: i.emoji ?? undefined })),
@@ -101,8 +105,7 @@ export class FoodLogsRepository {
 
   getTotals(telegramId: number, targetDate: string): DayTotals {
     const stmt = this.db.prepare(`
-      SELECT COALESCE(SUM(fi.calories), 0) as calories,
-             COALESCE(SUM(fi.protein_g), 0) as protein
+      SELECT COALESCE(SUM(fi.calories), 0) AS calories, ${MACRO_SUMS}
       FROM food_logs fl
       JOIN food_items fi ON fi.log_id = fl.id
       WHERE fl.telegram_id = ? AND fl.target_date = ?
@@ -116,9 +119,7 @@ export class FoodLogsRepository {
     endDate: string
   ): Record<string, DayTotals> {
     const stmt = this.db.prepare(`
-      SELECT fl.target_date,
-             COALESCE(SUM(fi.calories), 0) as calories,
-             COALESCE(SUM(fi.protein_g), 0) as protein
+      SELECT fl.target_date, COALESCE(SUM(fi.calories), 0) AS calories, ${MACRO_SUMS}
       FROM food_logs fl
       JOIN food_items fi ON fi.log_id = fl.id
       WHERE fl.telegram_id = ?
@@ -126,12 +127,8 @@ export class FoodLogsRepository {
         AND fl.target_date <= ?
       GROUP BY fl.target_date
     `)
-    const rows = stmt.all(telegramId, startDate, endDate) as {
-      target_date: string
-      calories: number
-      protein: number
-    }[]
-    return Object.fromEntries(rows.map((r) => [r.target_date, { calories: r.calories, protein: r.protein }]))
+    const rows = stmt.all(telegramId, startDate, endDate) as ({ target_date: string } & DayTotals)[]
+    return Object.fromEntries(rows.map(({ target_date, ...totals }) => [target_date, totals as DayTotals]))
   }
 
   deleteItem(itemId: number): void {
@@ -150,13 +147,10 @@ export class FoodLogsRepository {
 
   updateItem(
     itemId: number,
-    updates: Partial<{ description: string; calories: number; protein_g: number | null; emoji: string }>
+    updates: Partial<{ description: string; calories: number; emoji: string } & Record<MacroColumn, number | null>>
   ): void {
-    // Explicit allowlist - TypeScript enforces only these columns can be used
-    const allowedColumns = ["description", "calories", "protein_g", "emoji"] as const
-    type AllowedColumn = (typeof allowedColumns)[number]
-
-    const columnUpdates: { column: AllowedColumn; value: string | number | null }[] = []
+    // Column names come from this list and the registry, never from the keys of `updates`.
+    const columnUpdates: { column: "description" | "calories" | "emoji" | MacroColumn; value: string | number | null }[] = []
 
     if (updates.description !== undefined) {
       columnUpdates.push({ column: "description", value: updates.description })
@@ -164,8 +158,9 @@ export class FoodLogsRepository {
     if (updates.calories !== undefined) {
       columnUpdates.push({ column: "calories", value: updates.calories })
     }
-    if (updates.protein_g !== undefined) {
-      columnUpdates.push({ column: "protein_g", value: updates.protein_g })
+    for (const column of MACRO_COLUMNS) {
+      const value = updates[column]
+      if (value !== undefined) columnUpdates.push({ column, value })
     }
     if (updates.emoji !== undefined) {
       columnUpdates.push({ column: "emoji", value: updates.emoji })
@@ -173,7 +168,6 @@ export class FoodLogsRepository {
 
     if (columnUpdates.length === 0) return
 
-    // TypeScript guarantees column names are from the literal union
     const setClause = columnUpdates.map((u) => `${u.column} = ?`).join(", ")
     const values = columnUpdates.map((u) => u.value)
 

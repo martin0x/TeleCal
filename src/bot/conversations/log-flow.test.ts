@@ -1,6 +1,7 @@
 // src/bot/conversations/log-flow.test.ts
 import { describe, test, expect, beforeEach, mock } from "bun:test"
 import { Database } from "bun:sqlite"
+import { createTestDb } from "../../db/test-helpers"
 import { LogFlow, LogFlowResult, confirmToken } from "./log-flow"
 import { ConversationsRepository } from "../../db/repositories/conversations"
 import { FoodLogsRepository } from "../../db/repositories/food-logs"
@@ -17,54 +18,9 @@ describe("LogFlow", () => {
   let logFlow: LogFlow
 
   beforeEach(() => {
-    db = new Database(":memory:")
-    db.run("PRAGMA foreign_keys = ON")
-
-    // Create tables
-    db.run(`
-      CREATE TABLE conversation_state (
-        telegram_id INTEGER PRIMARY KEY,
-        chat_id INTEGER NOT NULL,
-        state TEXT NOT NULL,
-        pending_food TEXT,
-        pending_items TEXT,
-        context TEXT,
-        target_date TEXT,
-        updated_at TEXT DEFAULT (datetime('now'))
-      )
-    `)
-    db.run(`
-      CREATE TABLE food_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        telegram_id INTEGER NOT NULL,
-        chat_id INTEGER NOT NULL,
-        logged_at TEXT DEFAULT (datetime('now')),
-        target_date TEXT NOT NULL
-      )
-    `)
-    db.run(`
-      CREATE TABLE food_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        log_id INTEGER NOT NULL,
-        description TEXT NOT NULL,
-        calories INTEGER NOT NULL,
-        protein_g INTEGER,
-        emoji TEXT,
-        FOREIGN KEY (log_id) REFERENCES food_logs(id) ON DELETE CASCADE
-      )
-    `)
-    db.run(`
-      CREATE TABLE pending_entries (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        telegram_id INTEGER NOT NULL,
-        chat_id INTEGER NOT NULL,
-        food_text TEXT NOT NULL,
-        submitted_at TEXT DEFAULT (datetime('now')),
-        target_date TEXT NOT NULL,
-        retry_count INTEGER DEFAULT 0,
-        last_retry_at TEXT
-      )
-    `)
+    db = createTestDb()
+    // food_logs.telegram_id references users in the real schema.
+    db.run("INSERT INTO users (telegram_id) VALUES (123)")
 
     conversationsRepo = new ConversationsRepository(db)
     foodLogsRepo = new FoodLogsRepository(db)
