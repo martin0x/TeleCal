@@ -149,7 +149,22 @@
       transition: width 0.3s;
     }
 
-    /* Calories | Protein toggle */
+    .protein-wrap.hidden,
+    .macros-text.hidden,
+    .segmented.hidden {
+      display: none;
+    }
+
+    /* The other tracked macros, one line under the protein bar */
+    .macros-text {
+      font-size: 14px;
+      color: var(--hint-color);
+      text-align: center;
+      max-width: 280px;
+      margin: 0 auto 8px;
+    }
+
+    /* Calories | each tracked macro */
     .segmented {
       display: flex;
       background: var(--secondary-bg);
@@ -285,6 +300,11 @@
       margin-bottom: 2px;
     }
 
+    .food-macros {
+      font-size: 13px;
+      color: var(--hint-color);
+    }
+
     .food-calories {
       font-size: 15px;
       font-weight: 600;
@@ -340,18 +360,16 @@
         </div>
       </div>
     </div>
-    <div class="protein-wrap">
+    <div class="protein-wrap" id="today-protein-wrap">
       <div class="protein-text" id="today-protein">--</div>
       <div class="protein-bar" id="today-protein-bar"><div class="protein-bar-fill" id="today-protein-fill"></div></div>
     </div>
+    <div class="macros-text hidden" id="today-macros"></div>
     <div class="food-log" id="today-log"></div>
   </div>
 
   <div id="week-view" class="view">
-    <div class="segmented" data-view="week">
-      <button data-metric="calories" class="active">Calories</button>
-      <button data-metric="protein">Protein</button>
-    </div>
+    <div class="segmented" data-view="week"></div>
     <div class="chart-container">
       <canvas id="week-chart"></canvas>
     </div>
@@ -360,10 +378,7 @@
 
   <div id="month-view" class="view">
     <div class="section-title">30-Day Trend</div>
-    <div class="segmented" data-view="month">
-      <button data-metric="calories" class="active">Calories</button>
-      <button data-metric="protein">Protein</button>
-    </div>
+    <div class="segmented" data-view="month"></div>
     <div class="chart-container">
       <canvas id="month-chart"></canvas>
     </div>
@@ -386,13 +401,38 @@
     // Which series the week/month charts show. Shared by both views on purpose.
     let metric = 'calories';
 
-    const METRICS = {
-      calories: { series: (data) => data.daily, goal: (user) => user && user.daily_goal },
-      protein: { series: (data) => data.dailyProtein || {}, goal: (user) => user && user.daily_protein_goal },
+    // Every macro /api/user can list in tracked_macros, in the registry's
+    // order (src/macros.ts; app-page.test.ts checks each key is here).
+    const MACRO_LABELS = {
+      protein: { column: 'protein_g', toggle: 'Protein', item: '', total: 'protein' },
+      fat: { column: 'fat_g', toggle: 'Fat', item: 'fat', total: 'fat' },
+      fiber: { column: 'fiber_g', toggle: 'Fiber', item: 'fiber', total: 'fiber' },
+      added_sugar: { column: 'added_sugar_g', toggle: 'Sugar', item: 'sugar', total: 'added sugar' },
     };
 
-    function proteinText(grams) {
-      return grams === null || grams === undefined ? '? g' : `${grams} g`;
+    // The user's macros. A server that predates tracked_macros only knew protein.
+    function trackedMacros() {
+      const keys = (userData && userData.tracked_macros) || ['protein'];
+      return keys.filter(key => key in MACRO_LABELS);
+    }
+
+    // `14 g`, `24 g fat`, `? g sugar`.
+    function gramsText(value, label) {
+      const grams = value === null || value === undefined ? '? g' : `${value} g`;
+      return label ? `${grams} ${label}` : grams;
+    }
+
+    function metricSeries(data, key) {
+      if (key === 'calories') return data.daily;
+      if (data.dailyMacros && data.dailyMacros[key]) return data.dailyMacros[key];
+      return key === 'protein' ? data.dailyProtein || {} : {};
+    }
+
+    // Only calories and protein have goals.
+    function metricGoal(user, key) {
+      if (key === 'calories') return user && user.daily_goal;
+      if (key === 'protein') return user && user.daily_protein_goal;
+      return null;
     }
 
     // PostHog, when the server injected it (window.telecalAnalytics) and
@@ -459,13 +499,19 @@
         return;
       }
 
+      const tracked = trackedMacros();
+      const extras = tracked.filter(key => key !== 'protein');
       const headerText = date ? formatDate(date) : "Today's Log";
       const total = items.reduce((sum, item) => sum + item.calories, 0);
-      const protein = items.reduce((sum, item) => sum + (typeof item.protein_g === 'number' ? item.protein_g : 0), 0);
+      const sumOf = key => items.reduce((sum, item) => {
+        const value = item[MACRO_LABELS[key].column];
+        return sum + (typeof value === 'number' ? value : 0);
+      }, 0);
 
       const headerDiv = document.createElement('div');
       headerDiv.className = 'food-log-header';
-      headerDiv.textContent = `${headerText} • ${total} cal · ${protein} g protein`;
+      const parts = [`${total} cal`, ...tracked.map(key => `${sumOf(key)} g ${MACRO_LABELS[key].total}`)];
+      headerDiv.textContent = `${headerText} • ${parts.join(' · ')}`;
       container.appendChild(headerDiv);
 
       items.forEach(item => {
@@ -485,9 +531,19 @@
 
         detailsDiv.appendChild(nameDiv);
 
+        // Tracked macros other than protein go on a second line under the name.
+        if (extras.length > 0) {
+          const macrosDiv = document.createElement('div');
+          macrosDiv.className = 'food-macros';
+          macrosDiv.textContent = extras.map(key => gramsText(item[MACRO_LABELS[key].column], MACRO_LABELS[key].item)).join(' · ');
+          detailsDiv.appendChild(macrosDiv);
+        }
+
         const caloriesDiv = document.createElement('div');
         caloriesDiv.className = 'food-calories';
-        caloriesDiv.textContent = `${item.calories} cal · ${proteinText(item.protein_g)}`;
+        caloriesDiv.textContent = tracked.includes('protein')
+          ? `${item.calories} cal · ${gramsText(item.protein_g, '')}`
+          : `${item.calories} cal`;
 
         itemDiv.appendChild(emojiDiv);
         itemDiv.appendChild(detailsDiv);
@@ -549,11 +605,26 @@
       }
     }
 
+    // Under the ring: the protein bar when protein is tracked, then one line
+    // for any other tracked macros.
+    function renderMacros(today, user) {
+      const tracked = trackedMacros();
+      const showProtein = tracked.includes('protein');
+      document.getElementById('today-protein-wrap').classList.toggle('hidden', !showProtein);
+      if (showProtein) renderProteinBar(today.protein || 0, user.daily_protein_goal);
+
+      const totals = today.macros || {};
+      const extras = tracked.filter(key => key !== 'protein');
+      const line = document.getElementById('today-macros');
+      line.textContent = extras.map(key => `${(totals[key] || 0).toLocaleString()} g ${MACRO_LABELS[key].total}`).join(' · ');
+      line.classList.toggle('hidden', extras.length === 0);
+    }
+
     // Initialize week bar chart
     function createWeekChart(data, user, metric) {
       const ctx = document.getElementById('week-chart').getContext('2d');
-      const series = METRICS[metric].series(data);
-      const goal = METRICS[metric].goal(user);
+      const series = metricSeries(data, metric);
+      const goal = metricGoal(user, metric);
       const dates = Object.keys(data.daily).sort();
       const values = dates.map(d => series[d] || 0);
       const labels = dates.map(d => getDayAbbr(d));
@@ -610,7 +681,7 @@
     // Initialize month line chart
     function createMonthChart(data, metric) {
       const ctx = document.getElementById('month-chart').getContext('2d');
-      const series = METRICS[metric].series(data);
+      const series = metricSeries(data, metric);
       const dates = Object.keys(data.daily).sort();
       const values = dates.map(d => series[d] || 0);
 
@@ -649,7 +720,7 @@
     // Create calendar for month view
     function createCalendar(data, metric) {
       const container = document.getElementById('calendar');
-      const series = METRICS[metric].series(data);
+      const series = metricSeries(data, metric);
       const dates = Object.keys(data.daily).sort();
       const startDate = new Date(dates[0] + 'T00:00:00');
       const endDate = new Date(dates[dates.length - 1] + 'T00:00:00');
@@ -741,22 +812,38 @@
       });
     });
 
-    // Calories | Protein toggle. One shared metric: switching on Week also
-    // switches Month, so the two views never disagree.
-    document.querySelectorAll('.segmented button').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (btn.dataset.metric !== metric) track('miniapp_metric_changed', { metric: btn.dataset.metric });
-        metric = btn.dataset.metric;
-        document.querySelectorAll('.segmented button').forEach(b => {
-          b.classList.toggle('active', b.dataset.metric === metric);
-        });
-        if (weekData && userData) createWeekChart(weekData, userData, metric);
-        if (monthData) {
-          createMonthChart(monthData, metric);
-          createCalendar(monthData, metric);
+    // Calories plus each tracked macro, hidden when there is nothing to switch
+    // to. One shared metric: switching on Week also switches Month, so the two
+    // views never disagree.
+    function renderMetricToggles() {
+      const keys = ['calories', ...trackedMacros()];
+      if (!keys.includes(metric)) metric = 'calories';
+      document.querySelectorAll('.segmented').forEach(group => {
+        group.innerHTML = '';
+        group.classList.toggle('hidden', keys.length < 2);
+        for (const key of keys) {
+          const btn = document.createElement('button');
+          btn.dataset.metric = key;
+          btn.textContent = key === 'calories' ? 'Calories' : MACRO_LABELS[key].toggle;
+          btn.classList.toggle('active', key === metric);
+          btn.addEventListener('click', () => selectMetric(key));
+          group.appendChild(btn);
         }
       });
-    });
+    }
+
+    function selectMetric(key) {
+      if (key !== metric) track('miniapp_metric_changed', { metric: key });
+      metric = key;
+      document.querySelectorAll('.segmented button').forEach(b => {
+        b.classList.toggle('active', b.dataset.metric === metric);
+      });
+      if (weekData && userData) createWeekChart(weekData, userData, metric);
+      if (monthData) {
+        createMonthChart(monthData, metric);
+        createCalendar(monthData, metric);
+      }
+    }
 
     async function loadTabData(tab) {
       try {
@@ -768,7 +855,7 @@
           userData = user;
 
           createProgressChart(today.total, user.daily_goal || 2000);
-          renderProteinBar(today.protein || 0, user.daily_protein_goal);
+          renderMacros(today, user);
           renderFoodLog(document.getElementById('today-log'), today.items);
         }
 
@@ -776,6 +863,7 @@
           if (!weekData) weekData = await api('/api/stats?period=week');
           if (!userData) userData = await getUser();
 
+          renderMetricToggles();
           createWeekChart(weekData, userData, metric);
           document.getElementById('week-log').innerHTML = `
             <div class="empty-state">
@@ -787,6 +875,8 @@
 
         if (tab === 'month') {
           if (!monthData) monthData = await api('/api/stats?period=month');
+          if (!userData) userData = await getUser();
+          renderMetricToggles();
 
           createMonthChart(monthData, metric);
           createCalendar(monthData, metric);

@@ -6,6 +6,7 @@ import { FoodLogsRepository, FoodLog } from "../db/repositories/food-logs"
 import { getTodayInTimezone, getDateRangeInTimezone, DEFAULT_TIMEZONE } from "../utils/dates"
 import { sumTotals } from "../utils/format"
 import { hashTelegramId } from "../analytics"
+import { MACROS, DEFAULT_MACROS, macroValuesOf, type MacroKey } from "../macros"
 
 export interface ApiDeps {
   usersRepo: UsersRepository
@@ -20,12 +21,12 @@ function dayPayload(date: string, entries: FoodLog[]) {
       id: item.id,
       description: item.description,
       calories: item.calories,
-      protein_g: item.protein_g ?? null,
+      ...macroValuesOf(item),
       emoji: item.emoji,
     }))
   )
-  const totals = sumTotals(items)
-  return { date, total: totals.calories, protein: totals.protein, items }
+  const { calories, ...macros } = sumTotals(items)
+  return { date, total: calories, protein: macros.protein, macros, items }
 }
 
 export function createApiHandlers(deps: ApiDeps) {
@@ -37,6 +38,8 @@ export function createApiHandlers(deps: ApiDeps) {
       return {
         daily_goal: user?.daily_goal ?? null,
         daily_protein_goal: user?.daily_protein_goal ?? null,
+        // Registry order. A Telegram-cached page that predates this ignores it.
+        tracked_macros: user?.tracked_macros ?? [...DEFAULT_MACROS],
         username: user?.username ?? null,
         // The same distinct ID as this user's server-side events; null means no analytics.
         analytics_id: analyticsIdSecret ? hashTelegramId(telegramId, analyticsIdSecret) : null,
@@ -64,9 +67,12 @@ export function createApiHandlers(deps: ApiDeps) {
       // Fill in missing days with 0
       const daily: Record<string, number> = {}
       const dailyProtein: Record<string, number> = {}
+      const dailyMacros = Object.fromEntries(MACROS.map((m) => [m.key, {}])) as Record<MacroKey, Record<string, number>>
       for (const date of dateRange) {
-        daily[date] = dailyTotals[date]?.calories ?? 0
-        dailyProtein[date] = dailyTotals[date]?.protein ?? 0
+        const day = dailyTotals[date]
+        daily[date] = day?.calories ?? 0
+        dailyProtein[date] = day?.protein ?? 0
+        for (const m of MACROS) dailyMacros[m.key][date] = day?.[m.key] ?? 0
       }
 
       return {
@@ -74,6 +80,7 @@ export function createApiHandlers(deps: ApiDeps) {
         end: endDate,
         daily,
         dailyProtein,
+        dailyMacros,
       }
     },
 
