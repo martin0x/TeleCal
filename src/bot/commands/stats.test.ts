@@ -1,15 +1,16 @@
 // src/bot/commands/stats.test.ts
 import { describe, test, expect } from "bun:test"
 import { buildStatsMessage } from "./stats"
+import { zeroTotals, type Totals } from "../../macros"
 
 // Mon 2026-09-21 .. Sun 2026-09-27
 const WEEK = ["2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25", "2026-09-26", "2026-09-27"]
 
 describe("buildStatsMessage (week)", () => {
   const dailyTotals = {
-    "2026-09-21": { calories: 1450, protein: 82 },
-    "2026-09-22": { calories: 2100, protein: 130 },
-    "2026-09-25": { calories: 1800, protein: 100 },
+    "2026-09-21": { ...zeroTotals(), calories: 1450, protein: 82 },
+    "2026-09-22": { ...zeroTotals(), calories: 2100, protein: 130 },
+    "2026-09-25": { ...zeroTotals(), calories: 1800, protein: 100 },
   }
 
   test("renders daily rows with protein, both totals, and both goal lines", () => {
@@ -30,7 +31,7 @@ describe("buildStatsMessage (week)", () => {
       period: "Week",
       days: 7,
       dateRange: WEEK,
-      dailyTotals: { "2026-09-21": { calories: 1000, protein: 120 } },
+      dailyTotals: { "2026-09-21": { ...zeroTotals(), calories: 1000, protein: 120 } },
       dailyGoal: null,
       proteinGoal: 120,
     })
@@ -54,9 +55,9 @@ describe("buildStatsMessage (month)", () => {
   test("renders weekly rows with both units and per-day averages", () => {
     const dateRange: string[] = []
     for (let d = 1; d <= 30; d++) dateRange.push(`2026-09-${String(d).padStart(2, "0")}`)
-    const dailyTotals: Record<string, { calories: number; protein: number }> = {
-      "2026-09-01": { calories: 9800, protein: 520 }, // all of week 1 on one day
-      "2026-09-10": { calories: 1400, protein: 70 },
+    const dailyTotals: Record<string, Totals> = {
+      "2026-09-01": { ...zeroTotals(), calories: 9800, protein: 520 }, // all of week 1 on one day
+      "2026-09-10": { ...zeroTotals(), calories: 1400, protein: 70 },
     }
 
     const out = buildStatsMessage({ period: "Month", days: 30, dateRange, dailyTotals, dailyGoal: null, proteinGoal: null })

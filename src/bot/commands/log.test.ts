@@ -6,6 +6,7 @@ import type { ConversationsRepository } from "../../db/repositories/conversation
 import type { UsersRepository } from "../../db/repositories/users"
 import { getTodayInTimezone, getYesterdayInTimezone } from "../../utils/dates"
 import { buildLogConfirmKeyboard, createLogCallbackHandler, createLogCommand, parseLogArgs } from "./log"
+import { zeroTotals } from "../../macros"
 
 function fakeCallbackCtx(data: string, fromId = 42) {
   return {
@@ -86,7 +87,7 @@ function commandDeps() {
         message: "Here's what I'll log:",
         action: "prompt",
         parseMode: "HTML",
-        confirm: { token: "abcd1234", totals: { calories: 300, protein: 12 } },
+        confirm: { token: "abcd1234", totals: { ...zeroTotals(), calories: 300, protein: 12 } },
       })
     ),
   }
@@ -117,14 +118,14 @@ describe("createLogCommand", () => {
     expect(logFlow.startWithFood).toHaveBeenCalledWith(42, 555, getYesterdayInTimezone(TZ), "2 eggs and toast", "anthropic")
     expect(ctx.reply).toHaveBeenCalledWith("Here's what I'll log:", {
       parse_mode: "HTML",
-      reply_markup: buildLogConfirmKeyboard(42, { token: "abcd1234", totals: { calories: 300, protein: 12 } }),
+      reply_markup: buildLogConfirmKeyboard(42, { token: "abcd1234", totals: { ...zeroTotals(), calories: 300, protein: 12 } }),
     })
   })
 })
 
 describe("buildLogConfirmKeyboard", () => {
   test("puts Log full-width above Change and Cancel, with both totals on the button", () => {
-    const keyboard = buildLogConfirmKeyboard(42, { token: "abcd1234", totals: { calories: 335, protein: 28 } })
+    const keyboard = buildLogConfirmKeyboard(42, { token: "abcd1234", totals: { ...zeroTotals(), calories: 335, protein: 28 } })
     expect(keyboard.inline_keyboard).toEqual([
       [{ text: "✅ Log 335 cal · 28 g", callback_data: "log:ok:42:abcd1234" }],
       [

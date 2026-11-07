@@ -3,6 +3,7 @@ import { Bot } from "grammy"
 import { UsersRepository } from "../db/repositories/users"
 import { FoodLogsRepository, DayTotals } from "../db/repositories/food-logs"
 import { getTodayInTimezone, getCurrentTimeInTimezone, DEFAULT_TIMEZONE } from "../utils/dates"
+import { formatNumber } from "../utils/format"
 import { redactUserId } from "../utils/logging"
 import { config } from "../config"
 import { noopAnalytics, type Analytics } from "../analytics"
@@ -11,6 +12,8 @@ import { reportJobFailure } from "./report"
 
 // Track the last date each user was reminded (per-user timezone aware)
 const lastRemindedDate = new Map<number, string>()
+
+const n = formatNumber
 
 export function formatReminderMessage(
   username: string | null,
@@ -21,7 +24,6 @@ export function formatReminderMessage(
   hasLogs: boolean
 ): string {
   const namePrefix = mention && username ? `@${username} ` : ""
-  const n = (value: number) => value.toLocaleString("en-US")
 
   if (!hasLogs) {
     const goalText = dailyGoal ? `Goal: ${n(dailyGoal)} cal` : ""

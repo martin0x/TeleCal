@@ -7,6 +7,7 @@ import { AIService } from "../ai/service"
 import { config } from "../config"
 import { formatDateForDisplay } from "../utils/dates"
 import { formatItemsSummary } from "../utils/format"
+import { DEFAULT_MACROS } from "../macros"
 import { redactUserId } from "../utils/logging"
 import { noopAnalytics, type Analytics } from "../analytics"
 import { isExpectedTelegramError } from "../bot/utils/telegram-errors"
@@ -76,7 +77,7 @@ export function createRetryPendingJob(
         await bot.api.sendMessage(
           entry.telegram_id,
           `✅ Processed your saved entry — logged to ${formatDateForDisplay(entry.target_date)}:\n\n` +
-            formatItemsSummary(result.items),
+            formatItemsSummary(result.items, DEFAULT_MACROS),
           { parse_mode: "HTML" }
         )
 

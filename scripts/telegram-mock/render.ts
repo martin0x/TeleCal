@@ -13,6 +13,7 @@ const { formatItemsSummary, sumTotals, escapeHtml } = await import("../../src/ut
 const { formatDateForDisplay } = await import("../../src/utils/dates")
 const { buildTodayMessage } = await import("../../src/bot/commands/today")
 const { buildLogConfirmKeyboard } = await import("../../src/bot/commands/log")
+const { DEFAULT_MACROS } = await import("../../src/macros")
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 const HERE = import.meta.dir
@@ -60,7 +61,7 @@ function html(text: string): string {
     .replace(/<\/blockquote>(\n*)/g, (_, nl: string) => `</blockquote><div style="height:${lines(nl.length)}px"></div>`)
 }
 
-function keyboardLabels(totals: { calories: number; protein: number }): string[][] {
+function keyboardLabels(totals: ReturnType<typeof sumTotals>): string[][] {
   return buildLogConfirmKeyboard(1, { token: "mock", totals }).inline_keyboard.map((row) => row.map((b) => b.text))
 }
 
@@ -113,13 +114,13 @@ const lunchTotals = sumTotals(LUNCH)
 
 const logScreen = chatPage([
   { from: "me", body: plain("/log 2 scrambled eggs, 2 pandesal, black coffee"), time: "7:52" },
-  { from: "bot", body: html(`✅ Logged to ${day}:\n\n${formatItemsSummary(BREAKFAST)}`), time: "7:52", edited: true },
+  { from: "bot", body: html(`✅ Logged to ${day}:\n\n${formatItemsSummary(BREAKFAST, DEFAULT_MACROS)}`), time: "7:52", edited: true },
   { from: "me", body: plain("/log chicken adobo with rice"), time: "12:40" },
   { from: "bot", body: plain("How many pieces of chicken, and about how much rice?"), time: "12:40" },
   { from: "me", body: plain("2 pieces, 1 cup of rice"), time: "12:41" },
   {
     from: "bot",
-    body: html(`Here's what I'll log for ${day}:\n\n${formatItemsSummary(LUNCH)}`),
+    body: html(`Here's what I'll log for ${day}:\n\n${formatItemsSummary(LUNCH, DEFAULT_MACROS)}`),
     time: "12:41",
     keyboard: keyboardLabels(lunchTotals),
   },
@@ -127,7 +128,7 @@ const logScreen = chatPage([
 
 const allToday = [...BREAKFAST, ...LUNCH]
 const todayScreen = chatPage([
-  { from: "bot", body: html(`✅ Logged to ${day}:\n\n${formatItemsSummary(LUNCH)}`), time: "12:41", edited: true },
+  { from: "bot", body: html(`✅ Logged to ${day}:\n\n${formatItemsSummary(LUNCH, DEFAULT_MACROS)}`), time: "12:41", edited: true },
   { from: "me", body: plain("/today"), time: "12:47" },
   {
     from: "bot",

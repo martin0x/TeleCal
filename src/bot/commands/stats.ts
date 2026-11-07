@@ -3,7 +3,8 @@ import { Context } from "grammy"
 import { FoodLogsRepository, DayTotals } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
 import { getTodayInTimezone, getDateRangeInTimezone, formatDateForDisplay, getDayOfWeek, DEFAULT_TIMEZONE } from "../../utils/dates"
-import { formatTotals } from "../../utils/format"
+import { formatTotals, formatNumber } from "../../utils/format"
+import { DEFAULT_MACROS, zeroTotals, addTotals, averageTotals } from "../../macros"
 import { config } from "../../config"
 import { smartReply } from "../utils/smart-reply"
 
@@ -31,7 +32,7 @@ export function createMonthCommand(
   }
 }
 
-const n = (value: number) => value.toLocaleString("en-US")
+const n = formatNumber
 
 /**
  * The /week and /month body. Calories are a ceiling and protein a floor, so the
@@ -60,14 +61,8 @@ export function buildStatsMessage(opts: {
     return message
   }
 
-  const total = loggedDays.reduce(
-    (acc, d) => ({ calories: acc.calories + d.calories, protein: acc.protein + d.protein }),
-    { calories: 0, protein: 0 }
-  )
-  const avg = {
-    calories: Math.round(total.calories / daysWithData),
-    protein: Math.round(total.protein / daysWithData),
-  }
+  const total = loggedDays.reduce(addTotals, zeroTotals())
+  const avg = averageTotals(total, daysWithData)
 
   if (days <= 7) {
     for (const date of dateRange) {
@@ -84,14 +79,14 @@ export function buildStatsMessage(opts: {
     const weeks = splitIntoWeeks(dateRange, dailyTotals)
     weeks.forEach((week, i) => {
       message +=
-        `Week ${i + 1}: ${formatTotals(week)} ` +
+        `Week ${i + 1}: ${formatTotals(week, DEFAULT_MACROS)} ` +
         `(avg ${n(Math.round(week.calories / 7))} cal · ${n(Math.round(week.protein / 7))} g/day)\n`
     })
   }
 
   message += "\n"
-  message += `📈 Total: ${formatTotals(total)}\n`
-  message += `📊 Daily avg: ${formatTotals(avg)}\n`
+  message += `📈 Total: ${formatTotals(total, DEFAULT_MACROS)}\n`
+  message += `📊 Daily avg: ${formatTotals(avg, DEFAULT_MACROS)}\n`
   message += `📅 Days tracked: ${daysWithData}/${days}`
   if (dailyGoal || proteinGoal) message += "\n"
 
@@ -168,16 +163,14 @@ function createMiniBar(value: number, max: number): string {
 
 function splitIntoWeeks(dateRange: string[], dailyTotals: Record<string, DayTotals>): DayTotals[] {
   const weeks: DayTotals[] = []
-  let week: DayTotals = { calories: 0, protein: 0 }
+  let week = zeroTotals()
 
   for (let i = 0; i < dateRange.length; i++) {
     const day = dailyTotals[dateRange[i]]
-    if (day) {
-      week = { calories: week.calories + day.calories, protein: week.protein + day.protein }
-    }
+    if (day) week = addTotals(week, day)
     if ((i + 1) % 7 === 0) {
       weeks.push(week)
-      week = { calories: 0, protein: 0 }
+      week = zeroTotals()
     }
   }
 

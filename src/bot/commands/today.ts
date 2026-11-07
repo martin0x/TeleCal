@@ -4,6 +4,7 @@ import { FoodLogsRepository, FoodItem, DayTotals } from "../../db/repositories/f
 import { UsersRepository } from "../../db/repositories/users"
 import { getTodayInTimezone, formatDateForDisplay, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { formatItemLine, formatGoalProgress } from "../../utils/format"
+import { DEFAULT_MACROS } from "../../macros"
 import { config } from "../../config"
 import { smartReply } from "../utils/smart-reply"
 
@@ -20,7 +21,7 @@ export function buildTodayMessage(opts: {
 }): string {
   let message = `📅 ${formatDateForDisplay(opts.date)}\n\n`
   opts.items.forEach((item, i) => {
-    message += `${i + 1}. ${formatItemLine(item)}\n`
+    message += `${i + 1}. ${formatItemLine(item, DEFAULT_MACROS)}\n`
   })
   message += "\n"
   message += formatGoalProgress({ emoji: "📊", label: "Calories", current: opts.totals.calories, goal: opts.dailyGoal, unit: "cal" })

@@ -4,6 +4,7 @@ import { FoodLogsRepository, FoodItem } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
 import { getTodayInTimezone, formatDateForDisplay, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { shortHash, formatItemLine, formatTotals, sumTotals } from "../../utils/format"
+import { DEFAULT_MACROS } from "../../macros"
 import { DeleteCallback, encodeDeleteCallback, parseDeleteCallback } from "../utils/callback-data"
 import { stripKeyboard, answerCallback } from "../utils/keyboard"
 import { smartReply, smartEdit } from "../utils/smart-reply"
@@ -23,7 +24,7 @@ const deleteStates = new Map<number, DeleteState>()
 const CONFIRM_FALLBACK = 'Tap a button above, or reply "yes" / "cancel".'
 
 function formatItemsList(items: DeletableItem[]): string {
-  return items.map((item, i) => `${i + 1}. ${formatItemLine(item)}`).join("\n")
+  return items.map((item, i) => `${i + 1}. ${formatItemLine(item, DEFAULT_MACROS)}`).join("\n")
 }
 
 /**
@@ -40,7 +41,7 @@ async function promptConfirmOne(ctx: Context, ownerId: number, item: DeletableIt
   const keyboard = new InlineKeyboard()
     .text("🗑 Delete", encodeDeleteCallback({ action: "one", ownerId, itemId: Number(item.id) }))
     .text("✖️ Cancel", encodeDeleteCallback({ action: "cxl", ownerId }))
-  await smartReply(ctx, `Delete this entry?\n\n${formatItemLine(item)}`, { reply_markup: keyboard })
+  await smartReply(ctx, `Delete this entry?\n\n${formatItemLine(item, DEFAULT_MACROS)}`, { reply_markup: keyboard })
 }
 
 async function promptConfirmAll(
@@ -57,7 +58,7 @@ async function promptConfirmAll(
     .text("✖️ Cancel", encodeDeleteCallback({ action: "cxl", ownerId }))
   await smartReply(
     ctx,
-    `Delete all ${items.length} entries for ${formatDateForDisplay(targetDate)}? (${formatTotals(sumTotals(items))} total)`,
+    `Delete all ${items.length} entries for ${formatDateForDisplay(targetDate)}? (${formatTotals(sumTotals(items), DEFAULT_MACROS)} total)`,
     { reply_markup: keyboard }
   )
 }
@@ -176,7 +177,7 @@ export function createDeleteMessageHandler(foodLogsRepo: FoodLogsRepository) {
           const item = state.items[state.selectedItemIndex!]
           foodLogsRepo.deleteItem(item.id!)
           deleteStates.delete(userId)
-          await smartReply(ctx, `Deleted: ${formatItemLine(item)}`)
+          await smartReply(ctx, `Deleted: ${formatItemLine(item, DEFAULT_MACROS)}`)
           return
         }
         await smartReply(ctx, CONFIRM_FALLBACK)
@@ -188,7 +189,7 @@ export function createDeleteMessageHandler(foodLogsRepo: FoodLogsRepository) {
           const count = state.items.length
           foodLogsRepo.deleteAllForDate(userId, state.targetDate)
           deleteStates.delete(userId)
-          await smartReply(ctx, `Deleted ${count} entries (${formatTotals(sumTotals(state.items))}) for ${formatDateForDisplay(state.targetDate)}.`)
+          await smartReply(ctx, `Deleted ${count} entries (${formatTotals(sumTotals(state.items), DEFAULT_MACROS)}) for ${formatDateForDisplay(state.targetDate)}.`)
           return
         }
         await smartReply(ctx, CONFIRM_FALLBACK)
@@ -220,7 +221,7 @@ export function resolveDeleteCallback(
       const item = foodLogsRepo.getItemForUser(cb.itemId, presserId)
       if (!item) return { kind: "gone", toast: "That entry is no longer there." }
       foodLogsRepo.deleteItem(cb.itemId)
-      return { kind: "done", edit: `🗑 Deleted: ${formatItemLine(item)}`, toast: "Deleted" }
+      return { kind: "done", edit: `🗑 Deleted: ${formatItemLine(item, DEFAULT_MACROS)}`, toast: "Deleted" }
     }
     case "all": {
       const items = foodLogsRepo.getItemsByDate(presserId, cb.date)
@@ -230,7 +231,7 @@ export function resolveDeleteCallback(
       foodLogsRepo.deleteAllForDate(presserId, cb.date)
       return {
         kind: "done",
-        edit: `🗑 Deleted ${items.length} entries (${formatTotals(sumTotals(items))}) for ${formatDateForDisplay(cb.date)}.`,
+        edit: `🗑 Deleted ${items.length} entries (${formatTotals(sumTotals(items), DEFAULT_MACROS)}) for ${formatDateForDisplay(cb.date)}.`,
         toast: "Deleted",
       }
     }

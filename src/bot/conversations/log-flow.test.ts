@@ -8,6 +8,7 @@ import { FoodLogsRepository } from "../../db/repositories/food-logs"
 import { PendingRepository } from "../../db/repositories/pending"
 import { AIService } from "../../ai/service"
 import { EstimationResult } from "../../ai/types"
+import { zeroTotals } from "../../macros"
 
 describe("LogFlow", () => {
   let db: Database
@@ -196,7 +197,7 @@ describe("LogFlow", () => {
     const state = conversationsRepo.get(123)!
     expect(result.confirm).toEqual({
       token: confirmToken("2026-01-31", state.pending_items!),
-      totals: { calories: 200, protein: 25 },
+      totals: { ...zeroTotals(), calories: 200, protein: 25 },
     })
   })
 

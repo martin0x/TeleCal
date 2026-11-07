@@ -6,6 +6,7 @@ import { AIService } from "../../ai/service"
 import { getTodayInTimezone, formatDateForDisplay, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { smartReply } from "../utils/smart-reply"
 import { formatItemLine } from "../../utils/format"
+import { DEFAULT_MACROS } from "../../macros"
 
 interface EditState {
   targetDate: string
@@ -18,12 +19,12 @@ interface EditState {
 const editStates = new Map<number, EditState>()
 
 function formatItemsList(items: (FoodItem & { log_id: number })[]): string {
-  return items.map((item, i) => `${i + 1}. ${formatItemLine(item)}`).join("\n")
+  return items.map((item, i) => `${i + 1}. ${formatItemLine(item, DEFAULT_MACROS)}`).join("\n")
 }
 
 function editPrompt(item: FoodItem): string {
   return (
-    `Editing: ${formatItemLine(item)}\n\n` +
+    `Editing: ${formatItemLine(item, DEFAULT_MACROS)}\n\n` +
     `What would you like to change?\n` +
     `• Type a number to set calories (e.g. 200 or 200 cal)\n` +
     `• Type a number with g to set protein (e.g. 18g)\n` +
@@ -162,14 +163,14 @@ export function createEditMessageHandler(
         if (input.kind === "calories") {
           foodLogsRepo.updateItem(item.id!, { calories: input.value })
           editStates.delete(userId)
-          await smartReply(ctx, `Updated: ${formatItemLine({ ...item, calories: input.value })}`)
+          await smartReply(ctx, `Updated: ${formatItemLine({ ...item, calories: input.value }, DEFAULT_MACROS)}`)
           return
         }
 
         if (input.kind === "protein") {
           foodLogsRepo.updateItem(item.id!, { protein_g: input.value })
           editStates.delete(userId)
-          await smartReply(ctx, `Updated: ${formatItemLine({ ...item, protein_g: input.value })}`)
+          await smartReply(ctx, `Updated: ${formatItemLine({ ...item, protein_g: input.value }, DEFAULT_MACROS)}`)
           return
         }
 
@@ -199,7 +200,7 @@ export function createEditMessageHandler(
             emoji: newItem.emoji,
           })
           editStates.delete(userId)
-          await smartReply(ctx, `Updated: ${formatItemLine(newItem)}`)
+          await smartReply(ctx, `Updated: ${formatItemLine(newItem, DEFAULT_MACROS)}`)
         } catch (error) {
           await smartReply(ctx,
             `Couldn't reach AI to estimate. Try a number instead, or "cancel" to abort.`

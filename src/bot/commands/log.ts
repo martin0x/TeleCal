@@ -3,6 +3,7 @@ import { Context, InlineKeyboard } from "grammy"
 import { LogFlow, LogFlowResult, ConfirmChoice } from "../conversations/log-flow"
 import { ConversationsRepository } from "../../db/repositories/conversations"
 import { UsersRepository } from "../../db/repositories/users"
+import type { Totals } from "../../macros"
 import { getTodayInTimezone, getYesterdayInTimezone, formatDate, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { encodeLogCallback, parseLogCallback, LogAction } from "../utils/callback-data"
 import { stripKeyboard, answerCallback } from "../utils/keyboard"
@@ -175,7 +176,7 @@ const LOG_CHOICES: Record<LogAction, ConfirmChoice> = {
 
 export function buildLogConfirmKeyboard(
   ownerId: number,
-  confirm: { token: string; totals: { calories: number; protein: number } }
+  confirm: { token: string; totals: Totals }
 ): InlineKeyboard {
   const data = (action: LogAction) => encodeLogCallback({ action, ownerId, token: confirm.token })
   return new InlineKeyboard()

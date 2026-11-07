@@ -9,13 +9,14 @@ import { AIService } from "../../ai/service"
 import { EstimationResult } from "../../ai/types"
 import { formatItemsSummary, formatTotals, sumTotals, shortHash } from "../../utils/format"
 import { formatDateForDisplay } from "../../utils/dates"
+import { DEFAULT_MACROS, type Totals } from "../../macros"
 
 export interface LogFlowResult {
   message: string
   action: "prompt" | "done" | "ask_continue" | "continue" | "error"
   parseMode?: "HTML"
   /** Set on a confirmation message; the bot layer turns it into the Log/Change/Cancel keyboard. */
-  confirm?: { token: string; totals: { calories: number; protein: number } }
+  confirm?: { token: string; totals: Totals }
 }
 
 export type ConfirmChoice = "log" | "change" | "cancel"
@@ -260,7 +261,7 @@ export class LogFlow {
       this.commitPending(telegramId, chatId, state.target_date, items)
 
       return {
-        message: `Logged ${formatTotals(sumTotals(items))} for ${formatDateForDisplay(state.target_date)}.`,
+        message: `Logged ${formatTotals(sumTotals(items), DEFAULT_MACROS)} for ${formatDateForDisplay(state.target_date)}.`,
         action: "done",
       }
     }
@@ -307,21 +308,21 @@ export class LogFlow {
         this.commitPending(telegramId, chatId, state.target_date, items)
         return {
           stale: false,
-          edit: `✅ Logged to ${formatDateForDisplay(state.target_date)}:\n\n${formatItemsSummary(items)}`,
+          edit: `✅ Logged to ${formatDateForDisplay(state.target_date)}:\n\n${formatItemsSummary(items, DEFAULT_MACROS)}`,
           toast: "Logged ✅",
         }
       case "change":
         this.backToInput(telegramId, state)
         return {
           stale: false,
-          edit: `✏️ Not logged — changing:\n\n${formatItemsSummary(items, { struck: true })}`,
+          edit: `✏️ Not logged — changing:\n\n${formatItemsSummary(items, DEFAULT_MACROS, { struck: true })}`,
           followUp: "Okay, let's try again. What did you eat?",
         }
       case "cancel":
         this.conversations.delete(telegramId)
         return {
           stale: false,
-          edit: `✖️ Cancelled — not logged:\n\n${formatItemsSummary(items, { struck: true })}`,
+          edit: `✖️ Cancelled — not logged:\n\n${formatItemsSummary(items, DEFAULT_MACROS, { struck: true })}`,
           toast: "Cancelled",
         }
     }
@@ -355,7 +356,7 @@ export class LogFlow {
     action: "prompt" | "continue"
   ): LogFlowResult {
     return {
-      message: `${header}\n\n${formatItemsSummary(items)}`,
+      message: `${header}\n\n${formatItemsSummary(items, DEFAULT_MACROS)}`,
       action,
       parseMode: "HTML",
       confirm: {

@@ -1,6 +1,7 @@
 // src/bot/commands/today.test.ts
 import { describe, test, expect } from "bun:test"
 import { buildTodayMessage } from "./today"
+import { zeroTotals } from "../../macros"
 
 const items = [
   { id: 1, description: "2 scrambled eggs", calories: 180, protein_g: 14, emoji: "🍳" },
@@ -13,7 +14,7 @@ describe("buildTodayMessage", () => {
       buildTodayMessage({
         date: "2026-09-25",
         items,
-        totals: { calories: 1450, protein: 82 },
+        totals: { ...zeroTotals(), calories: 1450, protein: 82 },
         dailyGoal: 2000,
         proteinGoal: 120,
       })
@@ -30,7 +31,7 @@ describe("buildTodayMessage", () => {
     const out = buildTodayMessage({
       date: "2026-09-25",
       items,
-      totals: { calories: 330, protein: 14 },
+      totals: { ...zeroTotals(), calories: 330, protein: 14 },
       dailyGoal: 2000,
       proteinGoal: null,
     })
@@ -42,7 +43,7 @@ describe("buildTodayMessage", () => {
     const out = buildTodayMessage({
       date: "2026-09-25",
       items,
-      totals: { calories: 330, protein: 14 },
+      totals: { ...zeroTotals(), calories: 330, protein: 14 },
       dailyGoal: undefined,
       proteinGoal: undefined,
     })
