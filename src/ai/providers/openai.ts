@@ -6,7 +6,7 @@ import { MACRO_RULES, MACRO_BATCH_PROMPT, formatBatchInput } from "../prompt"
 import { normalizeItems, alignMacroBatch, parseReply, traceOf } from "../parse"
 import { MACROS } from "../../macros"
 
-const INSTRUCTIONS = `You are a nutrition expert that estimates calories and protein in food.
+const INSTRUCTIONS = `You are a nutrition expert that estimates calories, protein, fat, fiber and added sugar in food.
 
 Rules:
 - Be accurate but err on the side of slightly higher estimates

@@ -4,7 +4,7 @@ import OpenAI from "openai"
 import { OpenAIProvider } from "./openai"
 import { ProviderParseError } from "../types"
 import { MACRO_BATCH_PROMPT } from "../prompt"
-import { emptyMacroValues } from "../../macros"
+import { MACROS, emptyMacroValues } from "../../macros"
 
 /** Captures the arguments a Responses call was made with, and returns a canned reply. */
 function fakeClient(outputText: string) {
@@ -88,13 +88,15 @@ describe("OpenAIProvider", () => {
     expect(calls[0].previous_response_id).toBeUndefined()
   })
 
-  test("requires protein_g in the strict schema", async () => {
+  test("requires every macro in the strict schema", async () => {
     const { client, calls } = fakeClient(VALID_REPLY)
     await new OpenAIProvider(client).estimate("two scrambled eggs")
 
     const itemSchema = calls[0].text.format.schema.properties.items.items
-    expect(itemSchema.properties.protein_g).toEqual({ type: "number" })
-    expect(itemSchema.required).toContain("protein_g")
+    for (const m of MACROS) {
+      expect(itemSchema.properties[m.column]).toEqual({ type: "number" })
+      expect(itemSchema.required).toContain(m.column)
+    }
   })
 
   test("surfaces protein_g on each item, rounded", async () => {
@@ -108,10 +110,13 @@ describe("OpenAIProvider", () => {
     expect(result.estimate.items[0].protein_g).toBe(13)
   })
 
-  test("mentions protein in the instructions", async () => {
+  test("asks for every macro in the instructions", async () => {
     const { client, calls } = fakeClient(VALID_REPLY)
     await new OpenAIProvider(client).estimate("two scrambled eggs")
-    expect(calls[0].instructions).toContain("protein_g")
+    expect(calls[0].instructions).toStartWith(
+      "You are a nutrition expert that estimates calories, protein, fat, fiber and added sugar in food."
+    )
+    for (const m of MACROS) expect(calls[0].instructions).toContain(m.column)
   })
 })
 
@@ -134,6 +139,17 @@ describe("OpenAIProvider.estimateMacros", () => {
     const { client } = fakeClient(JSON.stringify({ items: [{ index: 2, protein_g: 4 }] }))
     const result = await new OpenAIProvider(client).estimateMacros(["Mystery", "Rice"])
     expect(result.values).toEqual([emptyMacroValues(), { ...emptyMacroValues(), protein_g: 4 }])
+  })
+
+  test("the batch schema requires every macro", async () => {
+    const { client, calls } = fakeClient(BATCH_REPLY)
+    await new OpenAIProvider(client).estimateMacros(["Rice"])
+
+    const entry = calls[0].text.format.schema.properties.items.items
+    for (const m of MACROS) {
+      expect(entry.properties[m.column]).toEqual({ type: "number" })
+      expect(entry.required).toContain(m.column)
+    }
   })
 })
 

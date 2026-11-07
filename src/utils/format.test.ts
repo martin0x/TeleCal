@@ -220,3 +220,31 @@ describe("formatNumber", () => {
     expect(formatNumber(95)).toBe("95")
   })
 })
+
+describe("fat, fiber and added sugar", () => {
+  const adobo = { description: "Chicken adobo (2 pcs)", calories: 420, protein_g: 38, fat_g: 24, fiber_g: 1, added_sugar_g: 2, emoji: "🍗" }
+  const rice = { description: "Steamed rice (1 cup)", calories: 205, protein_g: 4, fat_g: 0, fiber_g: 1, added_sugar_g: 0, emoji: "🍚" }
+  const ALL: MacroKey[] = ["protein", "fat", "fiber", "added_sugar"]
+
+  test("item lines label every macro but protein", () => {
+    expect(formatItemLine(adobo, ALL)).toBe("🍗 Chicken adobo (2 pcs) — 420 cal · 38 g · 24 g fat · 1 g fiber · 2 g sugar")
+    expect(formatItemLine(adobo, ["added_sugar"])).toBe("🍗 Chicken adobo (2 pcs) — 420 cal · 2 g sugar")
+  })
+
+  test("unknown values show ? g with their label", () => {
+    expect(formatItemLine({ description: "Rice", calories: 200 }, ALL)).toBe("🍽️ Rice — 200 cal · ? g · ? g fat · ? g fiber · ? g sugar")
+  })
+
+  test("totals spell out added sugar", () => {
+    expect(formatTotals(sumTotals([adobo, rice]), ALL)).toBe("625 cal · 42 g protein · 24 g fat · 2 g fiber · 2 g added sugar")
+  })
+
+  test("the order on screen is the registry's, whatever order the list is in", () => {
+    expect(formatItemLine(adobo, ["added_sugar", "protein"])).toBe("🍗 Chicken adobo (2 pcs) — 420 cal · 38 g · 2 g sugar")
+  })
+
+  test("protein only is unchanged", () => {
+    expect(formatItemLine(adobo, PROTEIN)).toBe("🍗 Chicken adobo (2 pcs) — 420 cal · 38 g")
+    expect(formatTotals(sumTotals([adobo, rice]), PROTEIN)).toBe("625 cal · 42 g protein")
+  })
+})

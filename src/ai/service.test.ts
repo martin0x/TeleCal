@@ -9,7 +9,7 @@ import { FakeAnalytics } from "../analytics/test-helpers"
 import { emptyMacroValues, type MacroValues } from "../macros"
 
 const ESTIMATE: EstimationResult = {
-  items: [{ description: "Chicken adobo", calories: 420, protein_g: 38, emoji: "🍗" }],
+  items: [{ description: "Chicken adobo", calories: 420, protein_g: 38, fat_g: 24, fiber_g: 1, added_sugar_g: 2, emoji: "🍗" }],
   needsClarification: false,
   confidence: "high",
 }
@@ -174,7 +174,7 @@ describe("usage recording", () => {
   })
 })
 
-describe("protein-aware cache", () => {
+describe("macro-aware cache", () => {
   test("treats a cached result without protein_g as a miss and overwrites it", async () => {
     const stale = {
       items: [{ description: "Chicken adobo", calories: 420, emoji: "🍗" }],
@@ -194,13 +194,24 @@ describe("protein-aware cache", () => {
   test("does not cache a result with unknown protein", async () => {
     const partial: EstimationResult = {
       ...ESTIMATE,
-      items: [{ description: "Mystery", calories: 100, protein_g: null }],
+      items: [{ ...emptyMacroValues(), description: "Mystery", calories: 100 }],
     }
     service = build(fakeProvider({ ...OK_RESULT, estimate: partial }))
 
     await service.estimate("mystery", "openai", OPTS)
 
     expect(cache.store.size).toBe(0)
+  })
+
+  test("treats a cached result missing a newer macro as a miss", async () => {
+    const { added_sugar_g, ...withoutSugar } = ESTIMATE.items[0]
+    cache.set("chicken adobo", { ...ESTIMATE, items: [withoutSugar] } as unknown as EstimationResult)
+    service = build(fakeProvider(OK_RESULT))
+
+    await service.estimate("chicken adobo", "openai", OPTS)
+
+    expect(usage.rows).toHaveLength(1)
+    expect(cache.store.get("chicken adobo")).toEqual(ESTIMATE)
   })
 })
 

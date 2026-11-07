@@ -4,7 +4,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import { AnthropicProvider } from "./anthropic"
 import { ProviderParseError } from "../types"
 import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT } from "../prompt"
-import { emptyMacroValues } from "../../macros"
+import { MACROS, emptyMacroValues } from "../../macros"
 
 const VALID_REPLY = JSON.stringify({
   items: [{ description: "Scrambled eggs", calories: 180, emoji: "🍳" }],
@@ -67,7 +67,7 @@ describe("AnthropicProvider", () => {
     expect(result.estimate.items.map((i) => i.protein_g)).toEqual([12, null])
   })
 
-  test("asks for protein_g in the system prompt", async () => {
+  test("asks for every macro in the system prompt", async () => {
     const calls: any[] = []
     const client = {
       messages: {
@@ -78,7 +78,7 @@ describe("AnthropicProvider", () => {
       },
     } as unknown as Anthropic
     await new AnthropicProvider(client).estimate("two eggs")
-    expect(calls[0].system).toContain("protein_g")
+    for (const m of MACROS) expect(calls[0].system).toContain(m.column)
   })
 })
 

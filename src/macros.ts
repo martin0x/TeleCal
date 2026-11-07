@@ -20,6 +20,37 @@ export const MACROS = [
     /** The prompt line asking the model for this value. */
     rule: "- protein_g: estimated grams of protein for the item, as a whole number",
   },
+  {
+    key: "fat",
+    column: "fat_g",
+    name: "Fat",
+    itemLabel: "fat",
+    totalLabel: "fat",
+    keywords: ["fat"],
+    rule: "- fat_g: estimated grams of total fat for the item, as a whole number",
+  },
+  {
+    key: "fiber",
+    column: "fiber_g",
+    name: "Fiber",
+    itemLabel: "fiber",
+    totalLabel: "fiber",
+    keywords: ["fiber", "fibre"],
+    rule: "- fiber_g: estimated grams of dietary fiber for the item, as a whole number",
+  },
+  {
+    key: "added_sugar",
+    column: "added_sugar_g",
+    name: "Added sugar",
+    // "sugar" on item lines to save width; totals spell out "added sugar".
+    itemLabel: "sugar",
+    totalLabel: "added sugar",
+    keywords: ["sugar", "added sugar"],
+    rule:
+      "- added_sugar_g: estimated grams of added sugar for the item, as a whole number. " +
+      "Count sugar, syrups, honey and other sweeteners added in processing or cooking, including in sauces, drinks and desserts. " +
+      "Sugar that occurs naturally in whole fruit, vegetables and plain milk counts as 0",
+  },
 ] as const
 
 export type Macro = (typeof MACROS)[number]

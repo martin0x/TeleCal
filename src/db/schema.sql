@@ -59,6 +59,9 @@ CREATE TABLE IF NOT EXISTS food_items (
   description TEXT NOT NULL,
   calories INTEGER NOT NULL,
   protein_g INTEGER,            -- whole grams; null = not yet estimated
+  fat_g INTEGER,                -- whole grams; null = not yet estimated
+  fiber_g INTEGER,              -- whole grams; null = not yet estimated
+  added_sugar_g INTEGER,        -- whole grams; null = not yet estimated
   emoji TEXT,
   FOREIGN KEY (log_id) REFERENCES food_logs(id) ON DELETE CASCADE
 );

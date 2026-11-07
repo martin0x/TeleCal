@@ -3,7 +3,7 @@ import { describe, test, expect } from "bun:test"
 import { GeminiProvider } from "./gemini"
 import { ProviderParseError } from "../types"
 import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT } from "../prompt"
-import { emptyMacroValues } from "../../macros"
+import { MACROS, emptyMacroValues } from "../../macros"
 
 const VALID_REPLY = JSON.stringify({
   items: [{ description: "Scrambled eggs", calories: 180, emoji: "🍳" }],
@@ -75,7 +75,7 @@ describe("GeminiProvider", () => {
     expect(result.estimate.items.map((i) => i.protein_g)).toEqual([12, null])
   })
 
-  test("asks for protein_g in the system instruction", async () => {
+  test("asks for every macro in the system instruction", async () => {
     const seen: any[] = []
     const client = {
       getGenerativeModel: (opts: any) => {
@@ -86,7 +86,7 @@ describe("GeminiProvider", () => {
       },
     } as any
     await new GeminiProvider(client).estimate("two eggs")
-    expect(seen[0].systemInstruction).toContain("protein_g")
+    for (const m of MACROS) expect(seen[0].systemInstruction).toContain(m.column)
   })
 })
 

@@ -63,6 +63,12 @@ describe("normalizeItems", () => {
       { description: "X", calories: 1, ...(Object.fromEntries(MACROS.map((m, i) => [m.column, i + 1])) as MacroValues) },
     ])
   })
+
+  test("coerces fat, fiber and added sugar", () => {
+    expect(
+      normalizeItems([{ description: "Adobo", calories: 420, protein_g: 38, fat_g: "24.4", fiber_g: 1.2, added_sugar_g: "lots" }])
+    ).toEqual([{ description: "Adobo", calories: 420, protein_g: 38, fat_g: 24, fiber_g: 1, added_sugar_g: null }])
+  })
 })
 
 describe("stripFences", () => {
@@ -92,5 +98,10 @@ describe("alignMacroBatch", () => {
     expect(alignMacroBatch(null, 2)).toEqual([emptyMacroValues(), emptyMacroValues()])
     expect(alignMacroBatch({ items: "x" }, 2)).toEqual([emptyMacroValues(), emptyMacroValues()])
     expect(alignMacroBatch({ items: [null, 7] }, 1)).toEqual([emptyMacroValues()])
+  })
+
+  test("keeps the values a row has and nulls the rest", () => {
+    const reply = { items: [{ index: 1, protein_g: 14, fat_g: 10, fiber_g: 0 }] }
+    expect(alignMacroBatch(reply, 1)).toEqual([{ protein_g: 14, fat_g: 10, fiber_g: 0, added_sugar_g: null }])
   })
 })

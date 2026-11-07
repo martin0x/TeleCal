@@ -108,6 +108,34 @@ describe("FoodLogsRepository", () => {
     expect(repo.getItemForUser(99999, 1)).toBeNull()
   })
 
+  test("stores and sums fat, fiber and added sugar", () => {
+    repo.create(123, 456, "2026-01-31", [
+      { description: "Adobo", calories: 420, protein_g: 38, fat_g: 24, fiber_g: 1, added_sugar_g: 2 },
+      { description: "Rice", calories: 205, protein_g: 4, fat_g: 0, fiber_g: 1, added_sugar_g: 0 },
+      { description: "Mystery", calories: 50 },
+    ])
+    const items = repo.getByDate(123, "2026-01-31")[0].items
+    expect(items[0]).toMatchObject({ fat_g: 24, fiber_g: 1, added_sugar_g: 2 })
+    expect(items[2]).toMatchObject({ fat_g: null, fiber_g: null, added_sugar_g: null })
+    expect(repo.getTotals(123, "2026-01-31")).toEqual({ calories: 675, protein: 42, fat: 24, fiber: 2, added_sugar: 2 })
+  })
+
+  test("updateItem sets one new macro alone", () => {
+    const id = repo.create(123, 456, "2026-01-31", [{ description: "Adobo", calories: 420, protein_g: 38 }]).items[0].id!
+    repo.updateItem(id, { added_sugar_g: 3 })
+    expect(repo.getByDate(123, "2026-01-31")[0].items[0]).toMatchObject({ protein_g: 38, added_sugar_g: 3, fat_g: null })
+  })
+
+  test("fillMissingMacros fills the new columns and leaves protein alone", () => {
+    repo.create(1, 100, "2026-09-25", [{ description: "Adobo", calories: 420, protein_g: 38 }])
+    expect(repo.listDescriptionsMissingMacros()).toEqual(["Adobo"])
+
+    expect(repo.fillMissingMacros("Adobo", { protein_g: 30, fat_g: 24, fiber_g: 1, added_sugar_g: 2 })).toBe(1)
+
+    expect(repo.getItemsByDate(1, "2026-09-25")[0]).toMatchObject({ protein_g: 38, fat_g: 24, fiber_g: 1, added_sugar_g: 2 })
+    expect(repo.listDescriptionsMissingMacros()).toEqual([])
+  })
+
   describe("backfill queries", () => {
     /** Every macro known, so the item has no gap. */
     const complete = Object.fromEntries(MACROS.map((m) => [m.column, 12]))

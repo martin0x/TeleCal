@@ -116,3 +116,37 @@ describe("macro values", () => {
     expect(macroValuesOf({})).toEqual(emptyMacroValues())
   })
 })
+
+describe("fat, fiber and added sugar", () => {
+  test("follow protein in this order", () => {
+    expect(MACROS.map((m) => m.key)).toEqual(["protein", "fat", "fiber", "added_sugar"])
+    expect(MACROS.map((m) => m.column)).toEqual(["protein_g", "fat_g", "fiber_g", "added_sugar_g"])
+  })
+
+  test("carry the spec's labels", () => {
+    expect(MACROS.map((m) => [m.name, m.itemLabel, m.totalLabel])).toEqual([
+      ["Protein", "", "protein"],
+      ["Fat", "fat", "fat"],
+      ["Fiber", "fiber", "fiber"],
+      ["Added sugar", "sugar", "added sugar"],
+    ])
+  })
+
+  test("are found by their /edit words", () => {
+    expect(macroByKeyword("fat")?.key).toBe("fat")
+    expect(macroByKeyword("Fibre")?.key).toBe("fiber")
+    expect(macroByKeyword("sugar")?.key).toBe("added_sugar")
+    expect(macroByKeyword("added  sugar")?.key).toBe("added_sugar")
+  })
+
+  test("the added sugar rule says what counts", () => {
+    const rule = getMacro("added_sugar").rule
+    expect(rule).toContain("added in processing or cooking")
+    expect(rule).toContain("whole fruit, vegetables and plain milk counts as 0")
+  })
+
+  test("parsing and withMacro keep registry order", () => {
+    expect(parseTrackedMacros("added_sugar,protein")).toEqual(["protein", "added_sugar"])
+    expect(withMacro(["added_sugar"], "fat")).toEqual(["fat", "added_sugar"])
+  })
+})

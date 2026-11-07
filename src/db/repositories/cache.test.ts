@@ -4,12 +4,13 @@ import { Database } from "bun:sqlite"
 import { createTestDb } from "../test-helpers"
 import { CacheRepository } from "./cache"
 import type { EstimationResult } from "../../ai/types"
+import { emptyMacroValues } from "../../macros"
 
 let db: Database
 let repo: CacheRepository
 
 const RESULT: EstimationResult = {
-  items: [{ description: "Chicken adobo", calories: 420, protein_g: 38, emoji: "🍗" }],
+  items: [{ description: "Chicken adobo", calories: 420, protein_g: 38, fat_g: 24, fiber_g: 1, added_sugar_g: 2, emoji: "🍗" }],
   needsClarification: false,
   confidence: "high",
 }
@@ -30,7 +31,7 @@ test("round-trips a stored estimate", () => {
 
 test("overwrites an existing entry for the same key", () => {
   repo.set("chicken adobo", RESULT)
-  repo.set("chicken adobo", { ...RESULT, items: [{ description: "Adobo", calories: 500, protein_g: 40 }] })
+  repo.set("chicken adobo", { ...RESULT, items: [{ ...emptyMacroValues(), description: "Adobo", calories: 500, protein_g: 40 }] })
 
   expect(repo.get("chicken adobo")!.items[0].calories).toBe(500)
   expect(db.prepare("SELECT COUNT(*) as n FROM estimation_cache").get()).toEqual({ n: 1 })

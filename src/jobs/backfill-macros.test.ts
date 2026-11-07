@@ -111,6 +111,16 @@ describe("runMacroBackfill", () => {
     expect(estimateMacros).not.toHaveBeenCalled()
     expect(report).toEqual({ descriptions: 0, calls: 0, itemsFilled: 0, unresolved: 0 })
   })
+
+  test("a reply row with only some values fills those and stays unresolved", async () => {
+    foodLogsRepo.create(1, 1, "2026-09-25", [{ description: "Rice", calories: 200 }])
+    const estimateMacros = mock(async () => [{ ...emptyMacroValues(), protein_g: 4, fiber_g: 1 }])
+
+    const report = await runMacroBackfill({ foodLogsRepo, aiService: { estimateMacros } }, OPTS)
+
+    expect(report).toEqual({ descriptions: 1, calls: 1, itemsFilled: 1, unresolved: 1 })
+    expect(foodLogsRepo.getItemsByDate(1, "2026-09-25")[0]).toMatchObject({ protein_g: 4, fiber_g: 1, fat_g: null, added_sugar_g: null })
+  })
 })
 
 describe("runMacroBackfill error reporting", () => {

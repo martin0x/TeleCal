@@ -82,4 +82,15 @@ describe("runMigrations", () => {
     const cols = db.prepare("PRAGMA table_info(food_items)").all() as { name: string }[]
     expect(cols.filter((c) => c.name === "protein_g")).toHaveLength(1)
   })
+
+  test("adds the fat, fiber and added sugar columns, null on existing rows", () => {
+    const db = preProteinDb()
+    runMigrations(db, undefined, () => {})
+
+    expect(db.prepare("SELECT fat_g, fiber_g, added_sugar_g FROM food_items").get()).toEqual({
+      fat_g: null,
+      fiber_g: null,
+      added_sugar_g: null,
+    })
+  })
 })
