@@ -135,6 +135,12 @@ describe("routes", () => {
     expect(body).not.toContain("{{")
   })
 
+  test("/ says fat, fiber and added sugar can be switched on", async () => {
+    const body = await (await get("/")).text()
+    expect(body).toContain("Fat, fiber and added sugar can be switched on too.")
+    expect(body).toContain("Calories, protein, fat, fiber and added sugar</li>")
+  })
+
   test("/ has a privacy FAQ entry that names PostHog", async () => {
     const body = await (await get("/")).text()
     const entry = body.match(/<details id="privacy"[\s\S]*?<\/details>/)?.[0] ?? ""

@@ -2,7 +2,7 @@
 
 A Telegram bot for conversational calorie tracking with AI-powered food estimation.
 
-Describe what you ate in natural language, and TeleCal estimates the calories and protein using AI (OpenAI, Anthropic, or Google Gemini).
+Describe what you ate in natural language, and TeleCal estimates calories, protein, fat, fiber and added sugar using AI (OpenAI, Anthropic, or Google Gemini). Each user picks which macros their replies show.
 
 ## Features
 
@@ -78,22 +78,22 @@ bun run start
 |---------|-------------|
 | `/start` | Welcome message and command list |
 | `/log` | Start logging food |
-| `/today` | View today's calories and protein |
+| `/today` | View today's calories and macros |
 | `/week` | View past 7 days |
 | `/month` | View past 30 days |
 | `/edit` | Edit a logged entry |
 | `/delete` | Delete a logged entry |
-| `/settings` | Change AI provider, calorie and protein goals, reminders |
+| `/settings` | Change AI provider, calorie and protein goals, which macros to show, reminders |
 | `/pending` | View entries awaiting AI processing |
 | `/usage` | View your own AI token usage |
-| `/admin` | Manage allowed users and access requests, view AI usage and cost, backfill protein (admin only) |
+| `/admin` | Manage allowed users and access requests, view AI usage and cost, backfill macros (admin only) |
 
 ### Privacy
 
 Food descriptions are sent to whichever AI provider the user has selected in
-`/settings` (OpenAI, Anthropic, or Google) to estimate calories and protein.
+`/settings` (OpenAI, Anthropic, or Google) to estimate calories and macros.
 
-The one-off `/admin backfill-protein` command sends the descriptions of items logged before protein tracking existed to the **admin's** selected provider, not each user's.
+The one-off `/admin backfill-macros` command sends the descriptions of items with a macro still missing (logged before that macro existed, or skipped by the model) to the **admin's** selected provider, not each user's.
 
 TeleCal disables server-side retention where the provider offers the option —
 OpenAI calls are made with `store: false`, so requests are not kept in the
@@ -138,7 +138,7 @@ ID, and delete the person. Deleting a person also deletes their events.
 
 1. Send `/log` to start a session
 2. Describe what you ate (e.g., "2 eggs and toast with butter")
-3. AI estimates calories and protein and may ask clarifying questions
+3. AI estimates calories and macros and may ask clarifying questions
 4. Tap **✅ Log** to save it, or **✏️ Change** to describe it again (typing "yes" / "no" also works)
 5. Tap **✖️ Cancel**, or send "cancel" at any point, to exit
 

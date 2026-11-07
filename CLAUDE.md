@@ -13,7 +13,7 @@ bun run dev      # Start with hot reload
 bun run start    # Production start
 bun test         # Run all tests
 bun test src/ai  # Run tests in specific directory
-bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--protein]   # one live API call to verify a provider; --protein exercises the batch call; with POSTHOG_* set, also sends the $ai_generation
+bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--macros]   # one live API call to verify a provider; --macros exercises the batch call; with POSTHOG_* set, also sends the $ai_generation
 bun run scripts/smoke-posthog.ts   # sends one test exception to PostHog; needs POSTHOG_API_KEY and POSTHOG_ID_SECRET
 bun run scripts/telegram-mock/render.ts && bash scripts/build-landing-assets.sh   # re-render the landing page's Telegram screenshots from the bot's real formatters (macOS, Chrome)
 ```
@@ -39,10 +39,12 @@ bun run scripts/telegram-mock/render.ts && bash scripts/build-landing-assets.sh 
 - `conversations/log-flow.ts` - State machine for `/log` flow (awaiting_input → clarifying → confirming)
 - `middleware/allowlist.ts` - Gate: allowlisted users pass; strangers get an invite prompt and can file an access request (`access.ts` handles admin Approve/Decline)
 
+**Macros** (`src/macros.ts`): the registry of tracked macros (protein, fat, fiber, added sugar), with each one's column, labels, `/edit` words and prompt rule. Prompts, parsing, the cache check, repository SQL, formatters, the backfill, `/settings` and the API loop over it; nothing else names a macro. Calories are not in it. Each user's choice is `users.tracked_macros`; formatters take that list (`DEFAULT_MACROS` is protein only).
+
 **AI Service** (`src/ai/`):
 - `service.ts` - Provider abstraction with caching layer
 - `providers/` - OpenAI, Anthropic, Gemini implementations with shared `AIProvider` interface
-- Caching uses `estimation_cache` table keyed by normalized food description
+- Caching uses `estimation_cache` table keyed by normalized food description; an entry counts only if every macro is a number
 
 **Database** (`src/db/`):
 - Uses `bun:sqlite` (built-in SQLite)
@@ -71,7 +73,7 @@ bun run scripts/telegram-mock/render.ts && bash scripts/build-landing-assets.sh 
 **Background Jobs** (`src/jobs/`):
 - `reminders.ts` - Daily reminder notifications
 - `retry-pending.ts` - Retries failed AI estimations from `pending_entries` table
-- `backfill-protein.ts` - Fills `protein_g` on pre-feature rows, 25 descriptions per AI call; run via `/admin backfill-protein`
+- `backfill-macros.ts` - Fills every missing macro (null cells only), 25 descriptions per AI call; run via `/admin backfill-macros`
 
 ### State Machine (LogFlow)
 
@@ -93,8 +95,8 @@ All config via environment variables (see `.env.example`):
 
 - `allowed_users` - Access control allowlist
 - `access_requests` - Requests from non-allowlisted users (pending → approved | declined)
-- `users` - User preferences (ai_provider, daily_goal, daily_protein_goal, reminder_time, analytics_content)
-- `food_logs` / `food_items` - Log sessions and individual items (`calories`, nullable `protein_g`)
+- `users` - User preferences (ai_provider, daily_goal, daily_protein_goal, tracked_macros, reminder_time, analytics_content)
+- `food_logs` / `food_items` - Log sessions and individual items (`calories`, nullable `protein_g`, `fat_g`, `fiber_g`, `added_sugar_g`)
 - `conversation_state` - Active `/log` conversations
 - `pending_entries` - Failed AI calls awaiting retry
 - `estimation_cache` - Cached AI responses
