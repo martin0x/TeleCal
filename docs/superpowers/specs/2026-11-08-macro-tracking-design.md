@@ -1,8 +1,8 @@
 # Macro Tracking (Fat, Fiber, Added Sugar) — Design
 
 **Date:** 2026-11-08
-**Status:** Design approved in chat; written spec awaiting review
-**Related:** [#10 — Track protein (grams) alongside calories](https://github.com/martin0x/TeleCal/issues/10), whose design this extends
+**Status:** Approved for planning
+**Related:** [#30 — Track fat, fiber and added sugar, switchable per user](https://github.com/martin0x/TeleCal/issues/30); extends [#10 — Track protein (grams) alongside calories](https://github.com/martin0x/TeleCal/issues/10)
 
 ## Problem
 
@@ -545,8 +545,7 @@ the page script, as for #10.
 
 ## Rollout
 
-1. Implement on `feat/macros`, tracked in a GitHub issue opened once this spec is
-   approved.
+1. Implement on `feat/macros`, tracked in #30.
 2. Check on the test bot, then merge fast-forward to `main`. Pushing `main`
    deploys to Railway.
 3. Run `/admin backfill-macros` once in production. It also fills the protein
