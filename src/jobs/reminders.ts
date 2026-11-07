@@ -4,6 +4,7 @@ import { UsersRepository } from "../db/repositories/users"
 import { FoodLogsRepository, DayTotals } from "../db/repositories/food-logs"
 import { getTodayInTimezone, getCurrentTimeInTimezone, DEFAULT_TIMEZONE } from "../utils/dates"
 import { formatNumber } from "../utils/format"
+import { MACROS, type MacroKey } from "../macros"
 import { redactUserId } from "../utils/logging"
 import { config } from "../config"
 import { noopAnalytics, type Analytics } from "../analytics"
@@ -21,7 +22,8 @@ export function formatReminderMessage(
   totals: DayTotals,
   dailyGoal: number | null,
   proteinGoal: number | null,
-  hasLogs: boolean
+  hasLogs: boolean,
+  macros: readonly MacroKey[]
 ): string {
   const namePrefix = mention && username ? `@${username} ` : ""
 
@@ -34,28 +36,28 @@ export function formatReminderMessage(
     )
   }
 
-  const proteinLine = proteinGoal
-    ? `Protein: ${n(totals.protein)} / ${n(proteinGoal)} g (${Math.round((totals.protein / proteinGoal) * 100)}%)`
-    : `Protein: ${n(totals.protein)} g`
+  const macroLines: string[] = []
+  if (macros.includes("protein")) {
+    macroLines.push(
+      proteinGoal
+        ? `Protein: ${n(totals.protein)} / ${n(proteinGoal)} g (${Math.round((totals.protein / proteinGoal) * 100)}%)`
+        : `Protein: ${n(totals.protein)} g`
+    )
+  }
+  for (const m of MACROS) {
+    if (m.key !== "protein" && macros.includes(m.key)) macroLines.push(`${m.name}: ${n(totals[m.key])} g`)
+  }
 
   if (dailyGoal) {
     const percent = Math.round((totals.calories / dailyGoal) * 100)
     const remaining = dailyGoal - totals.calories
     const closing = remaining > 0 ? `${n(remaining)} cal remaining — keep it up!` : `You've reached your goal for today!`
-
-    return (
-      `${namePrefix}Daily check-in 🍽️\n\n` +
-      `Current: ${n(totals.calories)} / ${n(dailyGoal)} cal (${percent}%)\n` +
-      `${proteinLine}\n\n` +
-      closing
-    )
+    const lines = [`Current: ${n(totals.calories)} / ${n(dailyGoal)} cal (${percent}%)`, ...macroLines]
+    return `${namePrefix}Daily check-in 🍽️\n\n${lines.join("\n")}\n\n${closing}`
   }
 
-  return (
-    `${namePrefix}Daily check-in 🍽️\n\n` +
-    `Today's total: ${n(totals.calories)} cal\n` +
-    proteinLine
-  )
+  const lines = [`Today's total: ${n(totals.calories)} cal`, ...macroLines]
+  return `${namePrefix}Daily check-in 🍽️\n\n${lines.join("\n")}`
 }
 
 export function createReminderJob(
@@ -93,7 +95,8 @@ export function createReminderJob(
           totals,
           user.daily_goal,
           user.daily_protein_goal,
-          hasLogs
+          hasLogs,
+          user.tracked_macros
         )
 
         // Send to user's DM (telegram_id is also the chat_id for DMs)

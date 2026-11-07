@@ -14,7 +14,7 @@ describe("buildStatsMessage (week)", () => {
   }
 
   test("renders daily rows with protein, both totals, and both goal lines", () => {
-    const out = buildStatsMessage({ period: "Week", days: 7, dateRange: WEEK, dailyTotals, dailyGoal: 2000, proteinGoal: 120 })
+    const out = buildStatsMessage({ period: "Week", days: 7, dateRange: WEEK, dailyTotals, dailyGoal: 2000, proteinGoal: 120, macros: ["protein"] })
 
     expect(out).toContain("📊 Week Summary\nMon, Sep 21 - Sun, Sep 27\n\n")
     expect(out).toContain("Mon: ████░ 1,450 cal · 82 g\n")
@@ -34,6 +34,7 @@ describe("buildStatsMessage (week)", () => {
       dailyTotals: { "2026-09-21": { ...zeroTotals(), calories: 1000, protein: 120 } },
       dailyGoal: null,
       proteinGoal: 120,
+      macros: ["protein"],
     })
     expect(out).toContain("💪 Protein goal met: 1/1 days (100%)")
     expect(out).toContain("📅 Days tracked: 1/7\n\n💪 Protein goal met")
@@ -41,13 +42,43 @@ describe("buildStatsMessage (week)", () => {
   })
 
   test("omits goal lines when no goals are set", () => {
-    const out = buildStatsMessage({ period: "Week", days: 7, dateRange: WEEK, dailyTotals, dailyGoal: undefined, proteinGoal: undefined })
+    const out = buildStatsMessage({ period: "Week", days: 7, dateRange: WEEK, dailyTotals, dailyGoal: undefined, proteinGoal: undefined, macros: ["protein"] })
     expect(out).not.toContain("goal")
   })
 
   test("says so when nothing was logged", () => {
-    const out = buildStatsMessage({ period: "Week", days: 7, dateRange: WEEK, dailyTotals: {}, dailyGoal: 2000, proteinGoal: 120 })
+    const out = buildStatsMessage({ period: "Week", days: 7, dateRange: WEEK, dailyTotals: {}, dailyGoal: 2000, proteinGoal: 120, macros: ["protein"] })
     expect(out).toBe("📊 Week Summary\nMon, Sep 21 - Sun, Sep 27\n\nNo data logged for this period.\n\nUse /log to start tracking!")
+  })
+
+  test("rows keep calories and protein; total and average carry every tracked macro", () => {
+    const totals = {
+      "2026-09-21": { calories: 1450, protein: 82, fat: 48, fiber: 18, added_sugar: 22 },
+      "2026-09-22": { calories: 2100, protein: 130, fat: 70, fiber: 25, added_sugar: 40 },
+    }
+    const out = buildStatsMessage({
+      period: "Week",
+      days: 7,
+      dateRange: WEEK,
+      dailyTotals: totals,
+      dailyGoal: null,
+      proteinGoal: null,
+      macros: ["protein", "fat", "fiber", "added_sugar"],
+    })
+
+    expect(out).toContain("Mon: ███░░ 1,450 cal · 82 g\n")
+    expect(out).toContain("📈 Total: 3,550 cal · 212 g protein · 118 g fat · 43 g fiber · 62 g added sugar\n")
+    expect(out).toContain("📊 Daily avg: 1,775 cal · 106 g protein · 59 g fat · 22 g fiber · 31 g added sugar\n")
+  })
+
+  test("with protein off: no protein in rows, totals or goal lines", () => {
+    const out = buildStatsMessage({ period: "Week", days: 7, dateRange: WEEK, dailyTotals, dailyGoal: 2000, proteinGoal: 120, macros: [] })
+
+    expect(out).toContain("Mon: ████░ 1,450 cal\n")
+    expect(out).toContain("📈 Total: 5,350 cal\n")
+    expect(out).toContain("📅 Days tracked: 3/7\n\n🎯 Under calorie goal: 2/3 days (67%)")
+    expect(out).not.toContain("protein")
+    expect(out).not.toContain("Protein")
   })
 })
 
@@ -60,11 +91,26 @@ describe("buildStatsMessage (month)", () => {
       "2026-09-10": { ...zeroTotals(), calories: 1400, protein: 70 },
     }
 
-    const out = buildStatsMessage({ period: "Month", days: 30, dateRange, dailyTotals, dailyGoal: null, proteinGoal: null })
+    const out = buildStatsMessage({ period: "Month", days: 30, dateRange, dailyTotals, dailyGoal: null, proteinGoal: null, macros: ["protein"] })
 
     expect(out).toContain("Week 1: 9,800 cal · 520 g protein (avg 1,400 cal · 74 g/day)\n")
     expect(out).toContain("Week 2: 1,400 cal · 70 g protein (avg 200 cal · 10 g/day)\n")
     expect(out).toContain("Week 3: 0 cal · 0 g protein (avg 0 cal · 0 g/day)\n")
     expect(out).toContain("📅 Days tracked: 2/30")
+  })
+
+  test("weekly rows drop protein when it is off", () => {
+    const dateRange: string[] = []
+    for (let d = 1; d <= 30; d++) dateRange.push(`2026-09-${String(d).padStart(2, "0")}`)
+    const out = buildStatsMessage({
+      period: "Month",
+      days: 30,
+      dateRange,
+      dailyTotals: { "2026-09-01": { ...zeroTotals(), calories: 9800, protein: 520 } },
+      dailyGoal: null,
+      proteinGoal: null,
+      macros: [],
+    })
+    expect(out).toContain("Week 1: 9,800 cal (avg 1,400 cal/day)\n")
   })
 })

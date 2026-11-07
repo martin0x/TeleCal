@@ -4,7 +4,7 @@ import { FoodLogsRepository, DayTotals } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
 import { getTodayInTimezone, getDateRangeInTimezone, formatDateForDisplay, getDayOfWeek, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { formatTotals, formatNumber } from "../../utils/format"
-import { DEFAULT_MACROS, zeroTotals, addTotals, averageTotals } from "../../macros"
+import { DEFAULT_MACROS, zeroTotals, addTotals, averageTotals, type MacroKey } from "../../macros"
 import { config } from "../../config"
 import { smartReply } from "../utils/smart-reply"
 
@@ -45,8 +45,9 @@ export function buildStatsMessage(opts: {
   dailyTotals: Record<string, DayTotals>
   dailyGoal: number | null | undefined
   proteinGoal: number | null | undefined
+  macros: readonly MacroKey[]
 }): string {
-  const { period, days, dateRange, dailyTotals, dailyGoal, proteinGoal } = opts
+  const { period, days, dateRange, dailyTotals, dailyGoal, proteinGoal, macros } = opts
   const startDate = dateRange[0]
   const endDate = dateRange[dateRange.length - 1]
   const loggedDays = Object.values(dailyTotals)
@@ -64,13 +65,18 @@ export function buildStatsMessage(opts: {
   const total = loggedDays.reduce(addTotals, zeroTotals())
   const avg = averageTotals(total, daysWithData)
 
+  // Rows show calories and protein only: four macros would wrap each row onto
+  // two or three lines. The total and the daily average carry every macro.
+  const showProtein = macros.includes("protein")
+  const grams = (value: number) => (showProtein ? ` · ${n(value)} g` : "")
+
   if (days <= 7) {
     for (const date of dateRange) {
       const day = dailyTotals[date]
       const dayName = getDayOfWeek(date).slice(0, 3)
       if (day && day.calories > 0) {
         const bar = createMiniBar(day.calories, dailyGoal || avg.calories * 1.2)
-        message += `${dayName}: ${bar} ${n(day.calories)} cal · ${n(day.protein)} g\n`
+        message += `${dayName}: ${bar} ${n(day.calories)} cal${grams(day.protein)}\n`
       } else {
         message += `${dayName}: ░░░░░ —\n`
       }
@@ -79,22 +85,22 @@ export function buildStatsMessage(opts: {
     const weeks = splitIntoWeeks(dateRange, dailyTotals)
     weeks.forEach((week, i) => {
       message +=
-        `Week ${i + 1}: ${formatTotals(week, DEFAULT_MACROS)} ` +
-        `(avg ${n(Math.round(week.calories / 7))} cal · ${n(Math.round(week.protein / 7))} g/day)\n`
+        `Week ${i + 1}: ${formatTotals(week, showProtein ? ["protein"] : [])} ` +
+        `(avg ${n(Math.round(week.calories / 7))} cal${grams(Math.round(week.protein / 7))}/day)\n`
     })
   }
 
   message += "\n"
-  message += `📈 Total: ${formatTotals(total, DEFAULT_MACROS)}\n`
-  message += `📊 Daily avg: ${formatTotals(avg, DEFAULT_MACROS)}\n`
+  message += `📈 Total: ${formatTotals(total, macros)}\n`
+  message += `📊 Daily avg: ${formatTotals(avg, macros)}\n`
   message += `📅 Days tracked: ${daysWithData}/${days}`
-  if (dailyGoal || proteinGoal) message += "\n"
+  if (dailyGoal || (showProtein && proteinGoal)) message += "\n"
 
   if (dailyGoal) {
     const under = loggedDays.filter((d) => d.calories <= dailyGoal).length
     message += `\n🎯 Under calorie goal: ${under}/${daysWithData} days (${Math.round((under / daysWithData) * 100)}%)`
   }
-  if (proteinGoal) {
+  if (showProtein && proteinGoal) {
     const met = loggedDays.filter((d) => d.protein >= proteinGoal).length
     message += `\n💪 Protein goal met: ${met}/${daysWithData} days (${Math.round((met / daysWithData) * 100)}%)`
   }
@@ -123,6 +129,7 @@ async function sendStatsMessage(
     dailyTotals: foodLogsRepo.getDailyTotals(userId, dateRange[0], dateRange[dateRange.length - 1]),
     dailyGoal: user?.daily_goal,
     proteinGoal: user?.daily_protein_goal,
+    macros: user?.tracked_macros ?? DEFAULT_MACROS,
   })
 
   // Add note for group chats

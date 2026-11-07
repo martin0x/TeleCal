@@ -4,13 +4,14 @@ import { FoodLogsRepository, FoodItem, DayTotals } from "../../db/repositories/f
 import { UsersRepository } from "../../db/repositories/users"
 import { getTodayInTimezone, formatDateForDisplay, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { formatItemLine, formatGoalProgress } from "../../utils/format"
-import { DEFAULT_MACROS } from "../../macros"
+import { MACROS, DEFAULT_MACROS, type MacroKey } from "../../macros"
 import { config } from "../../config"
 import { smartReply } from "../utils/smart-reply"
 
 /**
- * The /today body: numbered item lines, then a calorie block and a protein
- * block of the same shape. Pure, so the layout is testable without a bot.
+ * The /today body: numbered item lines, the calorie block, the protein block
+ * when protein is tracked, then one line per other tracked macro. Pure, so the
+ * layout is testable without a bot.
  */
 export function buildTodayMessage(opts: {
   date: string
@@ -18,15 +19,24 @@ export function buildTodayMessage(opts: {
   totals: DayTotals
   dailyGoal: number | null | undefined
   proteinGoal: number | null | undefined
+  macros: readonly MacroKey[]
 }): string {
+  const { macros } = opts
   let message = `📅 ${formatDateForDisplay(opts.date)}\n\n`
   opts.items.forEach((item, i) => {
-    message += `${i + 1}. ${formatItemLine(item, DEFAULT_MACROS)}\n`
+    message += `${i + 1}. ${formatItemLine(item, macros)}\n`
   })
   message += "\n"
   message += formatGoalProgress({ emoji: "📊", label: "Calories", current: opts.totals.calories, goal: opts.dailyGoal, unit: "cal" })
-  message += "\n\n"
-  message += formatGoalProgress({ emoji: "💪", label: "Protein", current: opts.totals.protein, goal: opts.proteinGoal, unit: "g" })
+  if (macros.includes("protein")) {
+    message += "\n\n"
+    message += formatGoalProgress({ emoji: "💪", label: "Protein", current: opts.totals.protein, goal: opts.proteinGoal, unit: "g" })
+  }
+  const others = MACROS.filter((m) => m.key !== "protein" && macros.includes(m.key))
+  if (others.length > 0) {
+    message += "\n\n"
+    message += others.map((m) => formatGoalProgress({ label: m.name, current: opts.totals[m.key], goal: null, unit: "g" })).join("\n")
+  }
   return message
 }
 
@@ -57,6 +67,7 @@ export function createTodayCommand(
         totals: foodLogsRepo.getTotals(userId, today),
         dailyGoal: user?.daily_goal,
         proteinGoal: user?.daily_protein_goal,
+        macros: user?.tracked_macros ?? DEFAULT_MACROS,
       })
     }
 

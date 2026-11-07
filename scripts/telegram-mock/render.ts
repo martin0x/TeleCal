@@ -132,7 +132,7 @@ const todayScreen = chatPage([
   { from: "me", body: plain("/today"), time: "12:47" },
   {
     from: "bot",
-    body: plain(buildTodayMessage({ date: TODAY, items: allToday as never, totals: sumTotals(allToday), dailyGoal: GOALS.daily_goal, proteinGoal: GOALS.daily_protein_goal })),
+    body: plain(buildTodayMessage({ date: TODAY, items: allToday as never, totals: sumTotals(allToday), dailyGoal: GOALS.daily_goal, proteinGoal: GOALS.daily_protein_goal, macros: DEFAULT_MACROS })),
     time: "12:47",
     keyboard: [["📈 View Charts"]], // the label in src/bot/commands/today.ts
   },

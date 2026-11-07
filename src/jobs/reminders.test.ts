@@ -11,7 +11,7 @@ import { zeroTotals } from "../macros"
 
 describe("formatReminderMessage", () => {
   test("shows both goals with percentages", () => {
-    expect(formatReminderMessage("maria", true, { ...zeroTotals(), calories: 1450, protein: 82 }, 2000, 120, true)).toBe(
+    expect(formatReminderMessage("maria", true, { ...zeroTotals(), calories: 1450, protein: 82 }, 2000, 120, true, ["protein"])).toBe(
       "@maria Daily check-in 🍽️\n\n" +
         "Current: 1,450 / 2,000 cal (73%)\n" +
         "Protein: 82 / 120 g (68%)\n\n" +
@@ -20,7 +20,7 @@ describe("formatReminderMessage", () => {
   })
 
   test("shows a plain protein line without a protein goal", () => {
-    expect(formatReminderMessage(null, false, { ...zeroTotals(), calories: 2100, protein: 95 }, 2000, null, true)).toBe(
+    expect(formatReminderMessage(null, false, { ...zeroTotals(), calories: 2100, protein: 95 }, 2000, null, true, ["protein"])).toBe(
       "Daily check-in 🍽️\n\n" +
         "Current: 2,100 / 2,000 cal (105%)\n" +
         "Protein: 95 g\n\n" +
@@ -29,14 +29,43 @@ describe("formatReminderMessage", () => {
   })
 
   test("shows both totals without any goal", () => {
-    expect(formatReminderMessage(null, false, { ...zeroTotals(), calories: 900, protein: 40 }, null, null, true)).toBe(
+    expect(formatReminderMessage(null, false, { ...zeroTotals(), calories: 900, protein: 40 }, null, null, true, ["protein"])).toBe(
       "Daily check-in 🍽️\n\nToday's total: 900 cal\nProtein: 40 g"
     )
   })
 
   test("omits the protein line when nothing is logged", () => {
-    expect(formatReminderMessage(null, false, { ...zeroTotals(), calories: 0, protein: 0 }, 2000, 120, false)).toBe(
+    expect(formatReminderMessage(null, false, { ...zeroTotals(), calories: 0, protein: 0 }, 2000, 120, false, ["protein"])).toBe(
       "Haven't seen any logs today! 🍽️\nCurrent: 0 cal | Goal: 2,000 cal\n\nUse /log to track what you've eaten."
+    )
+  })
+
+  test("adds a line per extra macro after protein", () => {
+    expect(
+      formatReminderMessage("maria", true, { calories: 1450, protein: 82, fat: 38, fiber: 18, added_sugar: 22 }, 2000, 120, true, [
+        "protein",
+        "fat",
+        "added_sugar",
+      ])
+    ).toBe(
+      "@maria Daily check-in 🍽️\n\n" +
+        "Current: 1,450 / 2,000 cal (73%)\n" +
+        "Protein: 82 / 120 g (68%)\n" +
+        "Fat: 38 g\n" +
+        "Added sugar: 22 g\n\n" +
+        "550 cal remaining — keep it up!"
+    )
+  })
+
+  test("with protein off and no calorie goal, calories and the extra macros", () => {
+    expect(
+      formatReminderMessage(null, false, { calories: 900, protein: 40, fat: 30, fiber: 9, added_sugar: 5 }, null, 120, true, ["fiber"])
+    ).toBe("Daily check-in 🍽️\n\nToday's total: 900 cal\nFiber: 9 g")
+  })
+
+  test("with no macros, calories only", () => {
+    expect(formatReminderMessage(null, false, { ...zeroTotals(), calories: 900, protein: 40 }, 2000, null, true, [])).toBe(
+      "Daily check-in 🍽️\n\nCurrent: 900 / 2,000 cal (45%)\n\n1,100 cal remaining — keep it up!"
     )
   })
 })
