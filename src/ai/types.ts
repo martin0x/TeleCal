@@ -1,5 +1,5 @@
 // src/ai/types.ts
-import type { MacroColumn } from "../macros"
+import type { MacroColumn, MacroValues } from "../macros"
 
 /** One estimated item. Macro columns are whole grams; null when the model gave nothing usable (the backfill fills it later). */
 export type FoodEstimate = {
@@ -18,8 +18,8 @@ export interface EstimationResult {
 export interface AIProvider {
   name: string
   estimate(foodDescription: string, context?: string): Promise<ProviderResult>
-  /** Protein for many descriptions in one call; the caller chunks. */
-  estimateProtein(descriptions: string[]): Promise<ProteinBatchResult>
+  /** Every macro for many descriptions in one call; the caller chunks. */
+  estimateMacros(descriptions: string[]): Promise<MacroBatchResult>
 }
 
 export interface CachedEstimation {
@@ -55,9 +55,9 @@ export interface ProviderResult {
   trace?: AITrace
 }
 
-export interface ProteinBatchResult {
-  /** Aligned with the input array. null where the model gave nothing usable. */
-  protein: (number | null)[]
+export interface MacroBatchResult {
+  /** Aligned with the input array; a value is null where the model gave nothing usable. */
+  values: MacroValues[]
   usage: TokenUsage
   trace?: AITrace
 }

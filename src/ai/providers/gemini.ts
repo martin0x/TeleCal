@@ -1,9 +1,9 @@
 // src/ai/providers/gemini.ts
 import { GoogleGenerativeAI } from "@google/generative-ai"
-import { AIProvider, ProviderResult, ProteinBatchResult, TokenUsage } from "../types"
+import { AIProvider, ProviderResult, MacroBatchResult, TokenUsage } from "../types"
 import { config } from "../../config"
-import { ESTIMATE_JSON_PROMPT, PROTEIN_BATCH_PROMPT, formatProteinBatchInput } from "../prompt"
-import { normalizeItems, stripFences, alignProteinBatch, parseReply, traceOf } from "../parse"
+import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT, formatBatchInput } from "../prompt"
+import { normalizeItems, stripFences, alignMacroBatch, parseReply, traceOf } from "../parse"
 
 const MODEL = "gemini-3.5-flash-lite"
 
@@ -76,12 +76,12 @@ export class GeminiProvider implements AIProvider {
     }
   }
 
-  async estimateProtein(descriptions: string[]): Promise<ProteinBatchResult> {
-    const userMessage = formatProteinBatchInput(descriptions)
-    const { text, usage } = await this.generate(PROTEIN_BATCH_PROMPT, userMessage)
-    const trace = traceOf(PROTEIN_BATCH_PROMPT, userMessage, text)
+  async estimateMacros(descriptions: string[]): Promise<MacroBatchResult> {
+    const userMessage = formatBatchInput(descriptions)
+    const { text, usage } = await this.generate(MACRO_BATCH_PROMPT, userMessage)
+    const trace = traceOf(MACRO_BATCH_PROMPT, userMessage, text)
     return {
-      protein: alignProteinBatch(parseReply(stripFences(text), usage, trace), descriptions.length),
+      values: alignMacroBatch(parseReply(stripFences(text), usage, trace), descriptions.length),
       usage,
       trace,
     }

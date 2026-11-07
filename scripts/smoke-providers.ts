@@ -2,8 +2,8 @@
 // Development tool: makes one real API call per provider to verify the
 // configured model id and parameters are accepted. Not part of the app.
 //
-//   bun run scripts/smoke-providers.ts <openai|anthropic|gemini>            # estimate()
-//   bun run scripts/smoke-providers.ts <openai|anthropic|gemini> --protein  # estimateProtein()
+//   bun run scripts/smoke-providers.ts <openai|anthropic|gemini>           # estimate()
+//   bun run scripts/smoke-providers.ts <openai|anthropic|gemini> --macros  # estimateMacros()
 //
 // With POSTHOG_API_KEY and POSTHOG_ID_SECRET set, the call is also sent to
 // PostHog as $ai_generation (tagged environment=development unless
@@ -14,11 +14,12 @@ import { CacheRepository } from "../src/db/repositories/cache"
 import { UsageRepository } from "../src/db/repositories/usage"
 import { createAnalytics } from "../src/analytics"
 import { config } from "../src/config"
+import { MACROS } from "../src/macros"
 
 const provider = process.argv[2]
-const mode = process.argv[3] === "--protein" ? "protein" : "estimate"
+const mode = process.argv[3] === "--macros" ? "macros" : "estimate"
 if (!provider) {
-  console.error("Usage: bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--protein]")
+  console.error("Usage: bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--macros]")
   process.exit(1)
 }
 
@@ -39,13 +40,15 @@ if (!service.hasProvider(provider)) {
 }
 
 try {
-  if (mode === "protein") {
+  if (mode === "macros") {
     const descriptions = ["two scrambled eggs", "a slice of toast", "black coffee"]
-    const protein = await service.estimateProtein(descriptions, provider, { telegramId: 0, chatId: null })
-    console.log(`✓ ${provider} responded to estimateProtein`)
-    descriptions.forEach((d, i) => console.log(`  ${d}: ${protein[i] ?? "?"} g`))
-    if (protein.some((p) => p === null)) {
-      console.error("✗ At least one description came back without protein.")
+    const values = await service.estimateMacros(descriptions, provider, { telegramId: 0, chatId: null })
+    console.log(`✓ ${provider} responded to estimateMacros`)
+    descriptions.forEach((d, i) =>
+      console.log(`  ${d}: ${MACROS.map((m) => `${values[i][m.column] ?? "?"} g ${m.totalLabel}`).join(", ")}`)
+    )
+    if (values.some((row) => MACROS.some((m) => row[m.column] === null))) {
+      console.error("✗ At least one description came back with a macro missing.")
       await finish(1)
     }
     await finish(0)
@@ -62,9 +65,9 @@ try {
     console.error("✗ Empty items with no clarification request — the model replied, but not usefully.")
     await finish(1)
   }
-  const missing = result.items.filter((item) => item.protein_g === null).length
+  const missing = result.items.filter((item) => MACROS.some((m) => item[m.column] === null)).length
   if (missing > 0) {
-    console.error(`✗ ${missing} item(s) came back without protein_g.`)
+    console.error(`✗ ${missing} item(s) came back with a macro missing.`)
     await finish(1)
   }
   await finish(0)

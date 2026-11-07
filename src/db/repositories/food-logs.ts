@@ -24,6 +24,8 @@ type FoodItemRow = { id: number; description: string; calories: number; emoji: s
 const MACRO_COLUMNS = MACROS.map((m) => m.column)
 /** `COALESCE(SUM(fi.protein_g), 0) AS protein, …`, built from registry constants, never from input. */
 const MACRO_SUMS = MACROS.map((m) => `COALESCE(SUM(fi.${m.column}), 0) AS ${m.key}`).join(", ")
+/** True when any macro on the row is still unknown. */
+const ANY_MACRO_MISSING = MACROS.map((m) => `${m.column} IS NULL`).join(" OR ")
 
 export interface FoodLog {
   id: number
@@ -196,29 +198,35 @@ export class FoodLogsRepository {
     return (stmt.get(itemId, telegramId) as (FoodItem & { log_id: number }) | null) ?? null
   }
 
-  // --- Protein backfill -----------------------------------------------------
+  // --- Macro backfill -------------------------------------------------------
 
-  /** Distinct descriptions of items whose protein is still unknown. */
-  listDescriptionsMissingProtein(): string[] {
+  /** Distinct descriptions of items with any macro still unknown. */
+  listDescriptionsMissingMacros(): string[] {
     const rows = this.db
-      .prepare("SELECT DISTINCT description FROM food_items WHERE protein_g IS NULL ORDER BY description")
+      .prepare(`SELECT DISTINCT description FROM food_items WHERE ${ANY_MACRO_MISSING} ORDER BY description`)
       .all() as { description: string }[]
     return rows.map((r) => r.description)
   }
 
-  countItemsMissingProtein(): number {
-    const row = this.db.prepare("SELECT COUNT(*) as n FROM food_items WHERE protein_g IS NULL").get() as { n: number }
+  countItemsMissingMacros(): number {
+    const row = this.db.prepare(`SELECT COUNT(*) as n FROM food_items WHERE ${ANY_MACRO_MISSING}`).get() as { n: number }
     return row.n
   }
 
   /**
-   * Fills every still-null row with this exact description. Exact match on
-   * purpose: it is the string the model was asked about. Returns rows changed.
+   * Fills the still-null cells of every row with this exact description. Exact
+   * match on purpose: it is the string the model was asked about. A value
+   * already there (from the original estimate or an /edit) is never
+   * overwritten. Returns the rows that gained at least one value.
    */
-  setProteinForDescription(description: string, proteinG: number): number {
+  fillMissingMacros(description: string, values: Partial<Record<MacroColumn, number>>): number {
+    const given = MACROS.filter((m) => typeof values[m.column] === "number")
+    if (given.length === 0) return 0
+    const set = given.map((m) => `${m.column} = COALESCE(${m.column}, ?)`).join(", ")
+    const gap = given.map((m) => `${m.column} IS NULL`).join(" OR ")
     const result = this.db
-      .prepare("UPDATE food_items SET protein_g = ? WHERE protein_g IS NULL AND description = ?")
-      .run(proteinG, description)
+      .prepare(`UPDATE food_items SET ${set} WHERE description = ? AND (${gap})`)
+      .run(...given.map((m) => values[m.column] as number), description)
     return result.changes
   }
 }

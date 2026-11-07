@@ -1,9 +1,9 @@
 // src/ai/providers/anthropic.ts
 import Anthropic from "@anthropic-ai/sdk"
-import { AIProvider, ProviderResult, ProteinBatchResult, TokenUsage } from "../types"
+import { AIProvider, ProviderResult, MacroBatchResult, TokenUsage } from "../types"
 import { config } from "../../config"
-import { ESTIMATE_JSON_PROMPT, PROTEIN_BATCH_PROMPT, formatProteinBatchInput } from "../prompt"
-import { normalizeItems, stripFences, alignProteinBatch, parseReply, traceOf } from "../parse"
+import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT, formatBatchInput } from "../prompt"
+import { normalizeItems, stripFences, alignMacroBatch, parseReply, traceOf } from "../parse"
 
 const MODEL = "claude-haiku-4-5-20251001"
 
@@ -78,20 +78,20 @@ export class AnthropicProvider implements AIProvider {
     }
   }
 
-  async estimateProtein(descriptions: string[]): Promise<ProteinBatchResult> {
-    const userMessage = formatProteinBatchInput(descriptions)
+  async estimateMacros(descriptions: string[]): Promise<MacroBatchResult> {
+    const userMessage = formatBatchInput(descriptions)
     const response = await this.client.messages.create({
       model: MODEL,
       max_tokens: 2048,
-      system: PROTEIN_BATCH_PROMPT,
+      system: MACRO_BATCH_PROMPT,
       messages: [{ role: "user", content: userMessage }],
     })
 
     const text = firstText(response)
     const usage = usageFrom(response)
-    const trace = traceOf(PROTEIN_BATCH_PROMPT, userMessage, text)
+    const trace = traceOf(MACRO_BATCH_PROMPT, userMessage, text)
     return {
-      protein: alignProteinBatch(parseReply(stripFences(text), usage, trace), descriptions.length),
+      values: alignMacroBatch(parseReply(stripFences(text), usage, trace), descriptions.length),
       usage,
       trace,
     }

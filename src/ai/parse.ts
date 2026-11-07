@@ -2,7 +2,7 @@
 // Model output is untrusted: a field can be missing, a string, or NaN. These
 // helpers turn whatever came back into the shapes the rest of the app trusts.
 import { ProviderParseError, type AITrace, type FoodEstimate, type TokenUsage } from "./types"
-import { MACROS, MAX_GRAMS, type MacroValues } from "../macros"
+import { MACROS, MAX_GRAMS, emptyMacroValues, type MacroValues } from "../macros"
 
 /** JSON.parse that turns a SyntaxError into a ProviderParseError carrying the call's usage and trace. */
 export function parseReply(text: string, usage: TokenUsage, trace: AITrace): unknown {
@@ -48,18 +48,20 @@ export function stripFences(text: string): string {
 }
 
 /**
- * Maps a batch reply `{items:[{index, protein_g}]}` back onto the inputs by
+ * Maps a batch reply `{items:[{index, protein_g, …}]}` back onto the inputs by
  * 1-based index. Anything missing, malformed or out of range stays null, which
  * the backfill reports as unresolved.
  */
-export function alignProteinBatch(reply: unknown, count: number): (number | null)[] {
-  const out: (number | null)[] = new Array(count).fill(null)
+export function alignMacroBatch(reply: unknown, count: number): MacroValues[] {
+  const out = Array.from({ length: count }, emptyMacroValues)
   const items = (reply as { items?: unknown } | null)?.items
   if (!Array.isArray(items)) return out
   for (const entry of items) {
-    const index = (entry as { index?: unknown } | null)?.index
+    if (typeof entry !== "object" || entry === null) continue
+    const raw = entry as Record<string, unknown>
+    const index = raw.index
     if (typeof index !== "number" || !Number.isInteger(index) || index < 1 || index > count) continue
-    out[index - 1] = coerceGrams((entry as { protein_g?: unknown }).protein_g)
+    out[index - 1] = Object.fromEntries(MACROS.map((m) => [m.column, coerceGrams(raw[m.column])])) as MacroValues
   }
   return out
 }

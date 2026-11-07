@@ -1,20 +1,22 @@
-// src/jobs/backfill-protein.ts
-// Fills protein_g for items logged before protein tracking existed. Sends many
+// src/jobs/backfill-macros.ts
+// Fills every macro still unknown on food items: rows logged before a macro
+// existed, and the odd estimate where the model left one out. Sends many
 // descriptions per AI call so the system prompt is paid for once per chunk,
 // which is where the cost is; a provider batch API would save a similar
-// amount at the price of async job tracking (see the spec's Decisions table).
+// amount at the price of async job tracking (see the protein spec's Decisions).
 import type { FoodLogsRepository } from "../db/repositories/food-logs"
 import type { AIService } from "../ai/service"
 import type { Analytics } from "../analytics"
+import { MACROS, type MacroColumn, type MacroValues } from "../macros"
 
 export interface BackfillReport {
-  /** Distinct descriptions that were missing protein when the run started. */
+  /** Distinct descriptions with a macro missing when the run started. */
   descriptions: number
   /** Chunks attempted, including ones that threw. */
   calls: number
-  /** food_items rows updated. */
+  /** food_items rows that gained at least one value. */
   itemsFilled: number
-  /** Descriptions still without protein after the run. */
+  /** Descriptions in a failed chunk, or whose reply still lacked a value. */
   unresolved: number
 }
 
@@ -28,8 +30,8 @@ export interface BackfillOptions {
 }
 
 export interface BackfillDeps {
-  foodLogsRepo: Pick<FoodLogsRepository, "listDescriptionsMissingProtein" | "setProteinForDescription">
-  aiService: Pick<AIService, "estimateProtein">
+  foodLogsRepo: Pick<FoodLogsRepository, "listDescriptionsMissingMacros" | "fillMissingMacros">
+  aiService: Pick<AIService, "estimateMacros">
   analytics?: Analytics
 }
 
@@ -48,12 +50,22 @@ export function chunk<T>(items: T[], size: number): T[][] {
   return out
 }
 
+/** The values a reply row actually has. */
+function knownValues(row: MacroValues | undefined): Partial<Record<MacroColumn, number>> {
+  const known: Partial<Record<MacroColumn, number>> = {}
+  for (const m of MACROS) {
+    const grams = row?.[m.column]
+    if (typeof grams === "number") known[m.column] = grams
+  }
+  return known
+}
+
 /**
- * Only null rows are ever written, so running this twice is safe and a
+ * Only null cells are ever written, so running this twice is safe and a
  * partial failure is retried simply by running it again.
  */
-export async function runProteinBackfill(deps: BackfillDeps, opts: BackfillOptions): Promise<BackfillReport> {
-  const descriptions = deps.foodLogsRepo.listDescriptionsMissingProtein()
+export async function runMacroBackfill(deps: BackfillDeps, opts: BackfillOptions): Promise<BackfillReport> {
+  const descriptions = deps.foodLogsRepo.listDescriptionsMissingMacros()
   const chunks = chunk(descriptions, opts.chunkSize ?? DEFAULT_CHUNK_SIZE)
   const pauseMs = opts.pauseMs ?? DEFAULT_PAUSE_MS
   const report: BackfillReport = { descriptions: descriptions.length, calls: 0, itemsFilled: 0, unresolved: 0 }
@@ -62,9 +74,9 @@ export async function runProteinBackfill(deps: BackfillDeps, opts: BackfillOptio
     const batch = chunks[i]
     report.calls++
 
-    let protein: (number | null)[]
+    let values: MacroValues[]
     try {
-      protein = await deps.aiService.estimateProtein(batch, opts.providerName, {
+      values = await deps.aiService.estimateMacros(batch, opts.providerName, {
         telegramId: opts.telegramId,
         chatId: opts.chatId,
       })
@@ -76,12 +88,9 @@ export async function runProteinBackfill(deps: BackfillDeps, opts: BackfillOptio
     }
 
     batch.forEach((description, j) => {
-      const grams = protein[j]
-      if (grams === null || grams === undefined) {
-        report.unresolved++
-        return
-      }
-      report.itemsFilled += deps.foodLogsRepo.setProteinForDescription(description, grams)
+      const known = knownValues(values[j])
+      report.itemsFilled += deps.foodLogsRepo.fillMissingMacros(description, known)
+      if (Object.keys(known).length < MACROS.length) report.unresolved++
     })
 
     if (pauseMs > 0 && i < chunks.length - 1) {

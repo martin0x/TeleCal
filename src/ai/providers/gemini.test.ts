@@ -2,7 +2,8 @@
 import { describe, test, expect } from "bun:test"
 import { GeminiProvider } from "./gemini"
 import { ProviderParseError } from "../types"
-import { ESTIMATE_JSON_PROMPT, PROTEIN_BATCH_PROMPT } from "../prompt"
+import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT } from "../prompt"
+import { emptyMacroValues } from "../../macros"
 
 const VALID_REPLY = JSON.stringify({
   items: [{ description: "Scrambled eggs", calories: 180, emoji: "🍳" }],
@@ -89,7 +90,7 @@ describe("GeminiProvider", () => {
   })
 })
 
-describe("GeminiProvider.estimateProtein", () => {
+describe("GeminiProvider.estimateMacros", () => {
   test("sends the batch prompt and aligns the reply", async () => {
     const seen: { opts: any; input?: string } = { opts: null }
     const client = {
@@ -108,11 +109,11 @@ describe("GeminiProvider.estimateProtein", () => {
         }
       },
     } as any
-    const result = await new GeminiProvider(client).estimateProtein(["Chicken adobo", "Rice"])
+    const result = await new GeminiProvider(client).estimateMacros(["Chicken adobo", "Rice"])
 
     expect(seen.opts.systemInstruction).toContain("numbered list")
     expect(seen.input).toBe("1. Chicken adobo\n2. Rice")
-    expect(result.protein).toEqual([38, 4])
+    expect(result.values).toEqual([{ ...emptyMacroValues(), protein_g: 38 }, { ...emptyMacroValues(), protein_g: 4 }])
     expect(result.usage).toMatchObject({ inputTokens: 80, outputTokens: 20 })
   })
 })
@@ -138,11 +139,11 @@ describe("GeminiProvider trace", () => {
     expect(error.trace.input[1].content).toContain("two eggs")
   })
 
-  test("the protein batch returns its prompt and raw reply too", async () => {
+  test("the macro batch returns its prompt and raw reply too", async () => {
     const reply = JSON.stringify({ items: [{ index: 1, protein_g: 4 }] })
-    const result = await new GeminiProvider(fakeClient(reply)).estimateProtein(["Rice"])
+    const result = await new GeminiProvider(fakeClient(reply)).estimateMacros(["Rice"])
 
-    expect(result.trace?.input[0]).toEqual({ role: "system", content: PROTEIN_BATCH_PROMPT })
+    expect(result.trace?.input[0]).toEqual({ role: "system", content: MACRO_BATCH_PROMPT })
     expect(result.trace?.input[1].content).toContain("Rice")
     expect(result.trace?.output).toBe(reply)
   })

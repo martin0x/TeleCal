@@ -8,7 +8,7 @@ import { formatUsd, formatTokens } from "../../utils/format"
 import { FoodLogsRepository } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
 import { AIService } from "../../ai/service"
-import { runProteinBackfill, DEFAULT_CHUNK_SIZE } from "../../jobs/backfill-protein"
+import { runMacroBackfill, DEFAULT_CHUNK_SIZE } from "../../jobs/backfill-macros"
 import { AccessRequestsRepository } from "../../db/repositories/access-requests"
 import { sendPendingRequests } from "../access"
 import { hashTelegramId } from "../../analytics"
@@ -84,16 +84,16 @@ export interface AdminDeps {
 
 // grammY's polling handles updates sequentially, so an admin command that
 // awaits a long-running job would stall every other user's update for the
-// duration. This guard makes a second /admin backfill-protein a no-op while
+// duration. This guard makes a second /admin backfill-macros a no-op while
 // one is already in flight, rather than running two overlapping backfills.
 let backfillRunning = false
 
 /**
- * /admin backfill-protein. Separated from the command so it can be tested
+ * /admin backfill-macros. Separated from the command so it can be tested
  * without the admin gate, which reads config.adminUsers from the environment.
  * Usage rows are attributed to the admin who ran it.
  */
-export async function backfillProtein(
+export async function backfillMacros(
   deps: Pick<AdminDeps, "foodLogsRepo" | "usersRepo" | "aiService" | "analytics">,
   adminId: number,
   chatId: number | null,
@@ -105,9 +105,9 @@ export async function backfillProtein(
   }
   backfillRunning = true
   try {
-    const descriptions = deps.foodLogsRepo.listDescriptionsMissingProtein()
+    const descriptions = deps.foodLogsRepo.listDescriptionsMissingMacros()
     if (descriptions.length === 0) {
-      await reply("Nothing to backfill — every item has protein.")
+      await reply("Nothing to backfill — every item has all its macros.")
       return
     }
     if (deps.aiService.getAvailableProviders().length === 0) {
@@ -115,14 +115,14 @@ export async function backfillProtein(
       return
     }
 
-    const items = deps.foodLogsRepo.countItemsMissingProtein()
+    const items = deps.foodLogsRepo.countItemsMissingMacros()
     const calls = Math.ceil(descriptions.length / DEFAULT_CHUNK_SIZE)
-    await reply(`Backfilling protein for ${items} items across ${descriptions.length} descriptions (${calls} AI calls)…`)
+    await reply(`Backfilling macros for ${items} items across ${descriptions.length} descriptions (${calls} AI calls)…`)
 
     // AIService falls back to the first configured provider if this one is not available.
     const providerName = deps.usersRepo.findById(adminId)?.ai_provider ?? "gemini"
     try {
-      const report = await runProteinBackfill(
+      const report = await runMacroBackfill(
         { foodLogsRepo: deps.foodLogsRepo, aiService: deps.aiService, analytics: deps.analytics },
         { providerName, telegramId: adminId, chatId }
       )
@@ -136,7 +136,7 @@ export async function backfillProtein(
       console.error("[backfill] failed:", error)
       deps.analytics?.captureException(error, adminId, { source: "backfill" })
       await reply(
-        `Backfill failed: ${error instanceof Error ? error.message : String(error)}. Nothing was lost — run /admin backfill-protein again to retry.`
+        `Backfill failed: ${error instanceof Error ? error.message : String(error)}. Nothing was lost — run /admin backfill-macros again to retry.`
       )
     }
   } finally {
@@ -262,7 +262,7 @@ export function createAdminCommand(
           "/admin list\n" +
           "/admin requests\n" +
           "/admin usage [7d|30d|all]\n" +
-          "/admin backfill-protein\n" +
+          "/admin backfill-macros\n" +
           "/admin posthog-id <user_id>\n" +
           "/admin announce-privacy [confirm]"
       )
@@ -311,10 +311,10 @@ export function createAdminCommand(
         break
       }
 
-      case "backfill-protein": {
+      case "backfill-macros": {
         // Runs in the background: grammY handles updates sequentially, and a full
         // backfill can take a minute. ctx.reply still works after the handler returns.
-        void backfillProtein(deps, userId, ctx.chat?.id ?? null, (text) => smartReply(ctx, text)).catch((error) => {
+        void backfillMacros(deps, userId, ctx.chat?.id ?? null, (text) => smartReply(ctx, text)).catch((error) => {
           console.error("[backfill] unhandled:", error)
           deps.analytics?.captureException(error, userId, { source: "backfill" })
         })
@@ -335,7 +335,7 @@ export function createAdminCommand(
           adminIds: config.adminUsers,
           send: (telegramId: number, text: string) => ctx.api.sendMessage(telegramId, text),
         }
-        // In the background, like backfill-protein: a rate-limit wait would stall every update.
+        // In the background, like backfill-macros: a rate-limit wait would stall every update.
         void announcePrivacy(announceDeps, args[1], config.web.baseUrl, (text) => smartReply(ctx, text)).catch((error) => {
           console.error("[announce] unhandled:", error)
           deps.analytics?.captureException(error, userId, { source: "announce" })

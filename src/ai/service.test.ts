@@ -6,6 +6,7 @@ import { calculateCost } from "./pricing"
 import type { CacheRepository } from "../db/repositories/cache"
 import type { UsageRepository, UsageEntry } from "../db/repositories/usage"
 import { FakeAnalytics } from "../analytics/test-helpers"
+import { emptyMacroValues, type MacroValues } from "../macros"
 
 const ESTIMATE: EstimationResult = {
   items: [{ description: "Chicken adobo", calories: 420, protein_g: 38, emoji: "🍗" }],
@@ -37,7 +38,7 @@ function fakeProvider(result: ProviderResult | Error): AIProvider {
       if (result instanceof Error) throw result
       return result
     },
-    estimateProtein: async () => {
+    estimateMacros: async () => {
       throw new Error("not used in this test")
     },
   }
@@ -214,32 +215,33 @@ describe("isCurrentShape", () => {
   })
 })
 
-describe("estimateProtein", () => {
-  function batchProvider(protein: (number | null)[]): AIProvider {
+describe("estimateMacros", () => {
+  function batchProvider(values: MacroValues[]): AIProvider {
     return {
       name: "openai",
       estimate: async () => {
         throw new Error("not used")
       },
-      estimateProtein: async () => ({ protein, usage: OK_RESULT.usage }),
+      estimateMacros: async () => ({ values, usage: OK_RESULT.usage }),
     }
   }
 
-  test("returns the aligned protein array and records one backfill row", async () => {
-    service = build(batchProvider([38, null]))
+  test("returns the aligned rows and records one backfill row", async () => {
+    const rows = [{ ...emptyMacroValues(), protein_g: 38 }, emptyMacroValues()]
+    service = build(batchProvider(rows))
 
-    const result = await service.estimateProtein(["Chicken adobo", "Mystery"], "openai", { telegramId: 7, chatId: null })
+    const result = await service.estimateMacros(["Chicken adobo", "Mystery"], "openai", { telegramId: 7, chatId: null })
 
-    expect(result).toEqual([38, null])
+    expect(result).toEqual(rows)
     expect(usage.rows).toHaveLength(1)
     expect(usage.rows[0]).toMatchObject({ telegramId: 7, chatId: null, callType: "backfill", status: "ok" })
   })
 
   test("never touches the cache", async () => {
     cache.set("chicken adobo", ESTIMATE)
-    service = build(batchProvider([1]))
+    service = build(batchProvider([{ ...emptyMacroValues(), protein_g: 1 }]))
 
-    await service.estimateProtein(["Chicken adobo"], "openai", { telegramId: 7, chatId: null })
+    await service.estimateMacros(["Chicken adobo"], "openai", { telegramId: 7, chatId: null })
 
     expect(cache.store.size).toBe(1)
     expect(usage.rows).toHaveLength(1)
@@ -251,13 +253,13 @@ describe("estimateProtein", () => {
       estimate: async () => {
         throw new Error("not used")
       },
-      estimateProtein: async () => {
+      estimateMacros: async () => {
         throw new SyntaxError("Unexpected token")
       },
     }
     service = build(broken)
 
-    await expect(service.estimateProtein(["x"], "openai", { telegramId: 7, chatId: null })).rejects.toThrow()
+    await expect(service.estimateMacros(["x"], "openai", { telegramId: 7, chatId: null })).rejects.toThrow()
     expect(usage.rows[0]).toMatchObject({ callType: "backfill", status: "parse_error" })
   })
 })
@@ -282,19 +284,19 @@ describe("error reporting", () => {
     expect(analytics.exceptions[0].properties).toMatchObject({ status: "parse_error" })
   })
 
-  test("a failed protein batch is reported with call type backfill", async () => {
+  test("a failed macro batch is reported with call type backfill", async () => {
     const error = new Error("timeout")
     service = build({
       name: "openai",
       estimate: async () => {
         throw new Error("not used")
       },
-      estimateProtein: async () => {
+      estimateMacros: async () => {
         throw error
       },
     })
 
-    await expect(service.estimateProtein(["x"], "openai", { telegramId: 7, chatId: null })).rejects.toThrow()
+    await expect(service.estimateMacros(["x"], "openai", { telegramId: 7, chatId: null })).rejects.toThrow()
 
     expect(analytics.exceptions).toEqual([
       { error, telegramId: 7, properties: { source: "ai", provider: "openai", call_type: "backfill", status: "request_failed" } },
@@ -405,16 +407,16 @@ describe("$ai_generation", () => {
     expect(generations()).toEqual([])
   })
 
-  test("a protein batch sends one generation with call type backfill", async () => {
+  test("a macro batch sends one generation with call type backfill", async () => {
     service = build({
       name: "openai",
       estimate: async () => {
         throw new Error("not used")
       },
-      estimateProtein: async () => ({ protein: [4], usage: OK_RESULT.usage, trace: TRACE }),
+      estimateMacros: async () => ({ values: [{ ...emptyMacroValues(), protein_g: 4 }], usage: OK_RESULT.usage, trace: TRACE }),
     })
 
-    await service.estimateProtein(["Rice"], "openai", { telegramId: 7, chatId: null })
+    await service.estimateMacros(["Rice"], "openai", { telegramId: 7, chatId: null })
 
     expect(generations()).toHaveLength(1)
     expect(generations()[0].properties).toMatchObject({ call_type: "backfill", $ai_input: TRACE.input })

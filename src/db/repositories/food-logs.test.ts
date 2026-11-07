@@ -109,18 +109,21 @@ describe("FoodLogsRepository", () => {
   })
 
   describe("backfill queries", () => {
-    test("lists distinct descriptions missing protein, in order", () => {
+    /** Every macro known, so the item has no gap. */
+    const complete = Object.fromEntries(MACROS.map((m) => [m.column, 12]))
+
+    test("lists distinct descriptions with any macro missing, in order", () => {
       repo.create(1, 100, "2026-09-25", [
         { description: "Ramen", calories: 520 },
         { description: "Apple", calories: 95 },
         { description: "Ramen", calories: 540 },
-        { description: "Eggs", calories: 180, protein_g: 12 },
+        { description: "Eggs", calories: 180, ...complete },
       ])
-      expect(repo.listDescriptionsMissingProtein()).toEqual(["Apple", "Ramen"])
-      expect(repo.countItemsMissingProtein()).toBe(3)
+      expect(repo.listDescriptionsMissingMacros()).toEqual(["Apple", "Ramen"])
+      expect(repo.countItemsMissingMacros()).toBe(3)
     })
 
-    test("setProteinForDescription fills only null rows with that exact description", () => {
+    test("fillMissingMacros fills only null cells of rows with that exact description", () => {
       repo.create(1, 100, "2026-09-25", [
         { description: "Ramen", calories: 520 },
         { description: "Ramen", calories: 540 },
@@ -128,11 +131,15 @@ describe("FoodLogsRepository", () => {
         { description: "Ramen", calories: 600, protein_g: 30 },
       ])
 
-      expect(repo.setProteinForDescription("Ramen", 22)).toBe(2)
+      expect(repo.fillMissingMacros("Ramen", { protein_g: 22 })).toBe(2)
 
       const items = repo.getItemsByDate(1, "2026-09-25")
       expect(items.map((i) => i.protein_g)).toEqual([22, 22, null, 30])
-      expect(repo.listDescriptionsMissingProtein()).toEqual(["ramen"])
+    })
+
+    test("fillMissingMacros with no values changes nothing", () => {
+      repo.create(1, 100, "2026-09-25", [{ description: "Ramen", calories: 520 }])
+      expect(repo.fillMissingMacros("Ramen", {})).toBe(0)
     })
   })
 })

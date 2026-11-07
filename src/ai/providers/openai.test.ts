@@ -3,7 +3,8 @@ import { describe, test, expect } from "bun:test"
 import OpenAI from "openai"
 import { OpenAIProvider } from "./openai"
 import { ProviderParseError } from "../types"
-import { PROTEIN_BATCH_PROMPT } from "../prompt"
+import { MACRO_BATCH_PROMPT } from "../prompt"
+import { emptyMacroValues } from "../../macros"
 
 /** Captures the arguments a Responses call was made with, and returns a canned reply. */
 function fakeClient(outputText: string) {
@@ -114,25 +115,25 @@ describe("OpenAIProvider", () => {
   })
 })
 
-describe("OpenAIProvider.estimateProtein", () => {
+describe("OpenAIProvider.estimateMacros", () => {
   const BATCH_REPLY = JSON.stringify({ items: [{ index: 1, protein_g: 38 }, { index: 2, protein_g: 4 }] })
 
   test("numbers the descriptions, uses a strict schema, and aligns the reply", async () => {
     const { client, calls } = fakeClient(BATCH_REPLY)
-    const result = await new OpenAIProvider(client).estimateProtein(["Chicken adobo", "Rice"])
+    const result = await new OpenAIProvider(client).estimateMacros(["Chicken adobo", "Rice"])
 
     expect(calls[0].input).toBe("1. Chicken adobo\n2. Rice")
     expect(calls[0].store).toBe(false)
     expect(calls[0].text.format.strict).toBe(true)
-    expect(calls[0].text.format.name).toBe("protein_batch")
-    expect(result.protein).toEqual([38, 4])
+    expect(calls[0].text.format.name).toBe("macro_batch")
+    expect(result.values).toEqual([{ ...emptyMacroValues(), protein_g: 38 }, { ...emptyMacroValues(), protein_g: 4 }])
     expect(result.usage.inputTokens).toBe(120)
   })
 
   test("leaves unanswered indices null", async () => {
     const { client } = fakeClient(JSON.stringify({ items: [{ index: 2, protein_g: 4 }] }))
-    const result = await new OpenAIProvider(client).estimateProtein(["Mystery", "Rice"])
-    expect(result.protein).toEqual([null, 4])
+    const result = await new OpenAIProvider(client).estimateMacros(["Mystery", "Rice"])
+    expect(result.values).toEqual([emptyMacroValues(), { ...emptyMacroValues(), protein_g: 4 }])
   })
 })
 
@@ -175,11 +176,11 @@ describe("OpenAIProvider trace", () => {
     expect(error.trace.input[1].content).toContain("two eggs")
   })
 
-  test("the protein batch returns its prompt and raw reply too", async () => {
+  test("the macro batch returns its prompt and raw reply too", async () => {
     const reply = JSON.stringify({ items: [{ index: 1, protein_g: 4 }] })
-    const result = await new OpenAIProvider(fakeClient(reply).client).estimateProtein(["Rice"])
+    const result = await new OpenAIProvider(fakeClient(reply).client).estimateMacros(["Rice"])
 
-    expect(result.trace?.input[0]).toEqual({ role: "system", content: PROTEIN_BATCH_PROMPT })
+    expect(result.trace?.input[0]).toEqual({ role: "system", content: MACRO_BATCH_PROMPT })
     expect(result.trace?.input[1].content).toContain("Rice")
     expect(result.trace?.output).toBe(reply)
   })

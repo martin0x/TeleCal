@@ -1,6 +1,6 @@
 // src/ai/parse.test.ts
 import { describe, test, expect } from "bun:test"
-import { coerceGrams, normalizeItems, stripFences, alignProteinBatch } from "./parse"
+import { coerceGrams, normalizeItems, stripFences, alignMacroBatch } from "./parse"
 import { MACROS, emptyMacroValues, type MacroValues } from "../macros"
 
 describe("coerceGrams", () => {
@@ -75,19 +75,22 @@ describe("stripFences", () => {
   })
 })
 
-describe("alignProteinBatch", () => {
-  test("maps entries back onto inputs by 1-based index", () => {
+describe("alignMacroBatch", () => {
+  const v = (partial: Partial<MacroValues>): MacroValues => ({ ...emptyMacroValues(), ...partial })
+
+  test("maps entries back onto inputs by 1-based index, coercing every column", () => {
     const reply = { items: [{ index: 2, protein_g: 4 }, { index: 1, protein_g: 28.2 }] }
-    expect(alignProteinBatch(reply, 2)).toEqual([28, 4])
+    expect(alignMacroBatch(reply, 2)).toEqual([v({ protein_g: 28 }), v({ protein_g: 4 })])
   })
 
-  test("leaves missing, duplicate-free gaps and out-of-range indices as null", () => {
+  test("leaves missing and out-of-range indices empty", () => {
     const reply = { items: [{ index: 1, protein_g: 10 }, { index: 5, protein_g: 99 }, { index: "2", protein_g: 3 }] }
-    expect(alignProteinBatch(reply, 3)).toEqual([10, null, null])
+    expect(alignMacroBatch(reply, 3)).toEqual([v({ protein_g: 10 }), emptyMacroValues(), emptyMacroValues()])
   })
 
-  test("returns all nulls for garbage", () => {
-    expect(alignProteinBatch(null, 2)).toEqual([null, null])
-    expect(alignProteinBatch({ items: "x" }, 2)).toEqual([null, null])
+  test("returns empty rows for garbage", () => {
+    expect(alignMacroBatch(null, 2)).toEqual([emptyMacroValues(), emptyMacroValues()])
+    expect(alignMacroBatch({ items: "x" }, 2)).toEqual([emptyMacroValues(), emptyMacroValues()])
+    expect(alignMacroBatch({ items: [null, 7] }, 1)).toEqual([emptyMacroValues()])
   })
 })

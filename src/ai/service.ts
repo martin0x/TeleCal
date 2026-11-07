@@ -1,6 +1,6 @@
 // src/ai/service.ts
 import { randomUUID } from "node:crypto"
-import { AIProvider, EstimationResult, ProteinBatchResult, ProviderParseError, type AITrace } from "./types"
+import { AIProvider, EstimationResult, MacroBatchResult, ProviderParseError, type AITrace } from "./types"
 import { OpenAIProvider } from "./providers/openai"
 import { AnthropicProvider } from "./providers/anthropic"
 import { GeminiProvider } from "./providers/gemini"
@@ -10,7 +10,7 @@ import { calculateCost } from "./pricing"
 import type { CallType, UsageStatus, TokenUsage } from "./types"
 import { config } from "../config"
 import { noopAnalytics, type Analytics } from "../analytics"
-import { MACROS } from "../macros"
+import { MACROS, type MacroValues } from "../macros"
 
 export interface EstimateOptions {
   telegramId: number
@@ -19,7 +19,7 @@ export interface EstimateOptions {
   context?: string
 }
 
-export interface ProteinOptions {
+export interface BatchOptions {
   telegramId: number
   chatId: number | null
 }
@@ -73,21 +73,17 @@ export class AIService {
   }
 
   /**
-   * Protein for many descriptions in one billed call. No cache: the backfill
-   * is the only caller and it only asks about rows that have no protein yet.
+   * Every macro for many descriptions in one billed call. No cache: the
+   * backfill is the only caller and it only asks about rows with gaps.
    */
-  async estimateProtein(
-    descriptions: string[],
-    providerName: string,
-    opts: ProteinOptions
-  ): Promise<(number | null)[]> {
+  async estimateMacros(descriptions: string[], providerName: string, opts: BatchOptions): Promise<MacroValues[]> {
     const provider = this.resolveProvider(providerName)
     const recordOpts: EstimateOptions = { ...opts, callType: "backfill" }
 
-    let result: ProteinBatchResult
+    let result: MacroBatchResult
     const started = performance.now()
     try {
-      result = await provider.estimateProtein(descriptions)
+      result = await provider.estimateMacros(descriptions)
     } catch (error) {
       this.recordFailure(error, provider.name, recordOpts, performance.now() - started)
       throw error
@@ -97,7 +93,7 @@ export class AIService {
       trace: result.trace,
       latencyMs: performance.now() - started,
     })
-    return result.protein
+    return result.values
   }
 
   private resolveProvider(providerName: string): AIProvider {

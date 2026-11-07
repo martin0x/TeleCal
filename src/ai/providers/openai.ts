@@ -1,9 +1,9 @@
 // src/ai/providers/openai.ts
 import OpenAI from "openai"
-import { AIProvider, ProviderResult, ProteinBatchResult, TokenUsage } from "../types"
+import { AIProvider, ProviderResult, MacroBatchResult, TokenUsage } from "../types"
 import { config } from "../../config"
-import { MACRO_RULES, PROTEIN_BATCH_PROMPT, formatProteinBatchInput } from "../prompt"
-import { normalizeItems, alignProteinBatch, parseReply, traceOf } from "../parse"
+import { MACRO_RULES, MACRO_BATCH_PROMPT, formatBatchInput } from "../prompt"
+import { normalizeItems, alignMacroBatch, parseReply, traceOf } from "../parse"
 import { MACROS } from "../../macros"
 
 const INSTRUCTIONS = `You are a nutrition expert that estimates calories and protein in food.
@@ -54,7 +54,7 @@ const ESTIMATE_SCHEMA = {
   additionalProperties: false,
 } as const
 
-const PROTEIN_BATCH_SCHEMA = {
+const MACRO_BATCH_SCHEMA = {
   type: "object",
   properties: {
     items: {
@@ -63,9 +63,9 @@ const PROTEIN_BATCH_SCHEMA = {
         type: "object",
         properties: {
           index: { type: "integer" },
-          protein_g: { type: "number" },
+          ...MACRO_PROPERTIES,
         },
-        required: ["index", "protein_g"],
+        required: ["index", ...MACRO_COLUMNS],
         additionalProperties: false,
       },
     },
@@ -157,19 +157,19 @@ export class OpenAIProvider implements AIProvider {
     }
   }
 
-  async estimateProtein(descriptions: string[]): Promise<ProteinBatchResult> {
-    const userMessage = formatProteinBatchInput(descriptions)
+  async estimateMacros(descriptions: string[]): Promise<MacroBatchResult> {
+    const userMessage = formatBatchInput(descriptions)
     const response = await this.client.responses.create({
       model: MODEL,
-      instructions: PROTEIN_BATCH_PROMPT,
+      instructions: MACRO_BATCH_PROMPT,
       input: userMessage,
       reasoning: { effort: "none" },
       store: false,
       text: {
         format: {
           type: "json_schema",
-          name: "protein_batch",
-          schema: PROTEIN_BATCH_SCHEMA,
+          name: "macro_batch",
+          schema: MACRO_BATCH_SCHEMA,
           strict: true,
         },
       },
@@ -181,9 +181,9 @@ export class OpenAIProvider implements AIProvider {
     }
 
     const usage = usageFrom(response)
-    const trace = traceOf(PROTEIN_BATCH_PROMPT, userMessage, content)
+    const trace = traceOf(MACRO_BATCH_PROMPT, userMessage, content)
     return {
-      protein: alignProteinBatch(parseReply(content, usage, trace), descriptions.length),
+      values: alignMacroBatch(parseReply(content, usage, trace), descriptions.length),
       usage,
       trace,
     }
