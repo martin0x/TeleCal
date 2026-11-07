@@ -1,12 +1,12 @@
 // src/ai/types.ts
+import type { MacroColumn } from "../macros"
 
-export interface FoodEstimate {
+/** One estimated item. Macro columns are whole grams; null when the model gave nothing usable (the backfill fills it later). */
+export type FoodEstimate = {
   description: string
   calories: number
-  /** Whole grams. null when the model gave nothing usable; the backfill fills it later. */
-  protein_g: number | null
   emoji?: string
-}
+} & Record<MacroColumn, number | null>
 
 export interface EstimationResult {
   items: FoodEstimate[]

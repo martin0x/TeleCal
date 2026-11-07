@@ -10,6 +10,7 @@ import { calculateCost } from "./pricing"
 import type { CallType, UsageStatus, TokenUsage } from "./types"
 import { config } from "../config"
 import { noopAnalytics, type Analytics } from "../analytics"
+import { MACROS } from "../macros"
 
 export interface EstimateOptions {
   telegramId: number
@@ -24,12 +25,15 @@ export interface ProteinOptions {
 }
 
 /**
- * Cached results written before protein tracking have no protein_g. Treating
- * them as misses lets the cache heal itself one description at a time instead
- * of needing a wipe or a version key.
+ * A cached result counts only if every item has a number for every macro.
+ * Entries written before a macro existed are misses, so the cache heals
+ * itself one description at a time instead of needing a wipe or a version key.
  */
 export function isCurrentShape(result: EstimationResult): boolean {
-  return result.items.every((item) => typeof item.protein_g === "number" && Number.isFinite(item.protein_g))
+  return (
+    Array.isArray(result.items) &&
+    result.items.every((item) => MACROS.every((m) => typeof item[m.column] === "number" && Number.isFinite(item[m.column])))
+  )
 }
 
 export class AIService {
@@ -129,7 +133,7 @@ export class AIService {
     })
 
     const estimate = result.estimate
-    // A result with unknown protein is not worth keeping: the next ask should
+    // A result with an unknown macro is not worth keeping: the next ask should
     // get another chance at a complete answer.
     if (!estimate.needsClarification && !opts.context && config.features.caching && isCurrentShape(estimate)) {
       this.cache.set(normalizedFood, estimate)

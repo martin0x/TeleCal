@@ -1,6 +1,6 @@
 // src/ai/service.test.ts
 import { describe, test, expect, beforeEach, spyOn } from "bun:test"
-import { AIService } from "./service"
+import { AIService, isCurrentShape } from "./service"
 import { ProviderParseError, type AIProvider, type ProviderResult, type EstimationResult } from "./types"
 import { calculateCost } from "./pricing"
 import type { CacheRepository } from "../db/repositories/cache"
@@ -200,6 +200,17 @@ describe("protein-aware cache", () => {
     await service.estimate("mystery", "openai", OPTS)
 
     expect(cache.store.size).toBe(0)
+  })
+})
+
+describe("isCurrentShape", () => {
+  test("is false when items is not an array", () => {
+    expect(isCurrentShape({ items: "x", needsClarification: false, confidence: "high" } as unknown as EstimationResult)).toBe(false)
+  })
+
+  test("needs a number for every macro on every item", () => {
+    expect(isCurrentShape(ESTIMATE)).toBe(true)
+    expect(isCurrentShape({ ...ESTIMATE, items: [{ ...ESTIMATE.items[0], protein_g: null }] })).toBe(false)
   })
 })
 

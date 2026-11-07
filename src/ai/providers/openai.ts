@@ -2,8 +2,9 @@
 import OpenAI from "openai"
 import { AIProvider, ProviderResult, ProteinBatchResult, TokenUsage } from "../types"
 import { config } from "../../config"
-import { PROTEIN_RULE, PROTEIN_BATCH_PROMPT, formatProteinBatchInput } from "../prompt"
+import { MACRO_RULES, PROTEIN_BATCH_PROMPT, formatProteinBatchInput } from "../prompt"
 import { normalizeItems, alignProteinBatch, parseReply, traceOf } from "../parse"
+import { MACROS } from "../../macros"
 
 const INSTRUCTIONS = `You are a nutrition expert that estimates calories and protein in food.
 
@@ -16,7 +17,11 @@ Rules:
   specific question in clarificationQuestion
 - When no clarification is needed, return an empty string for
   clarificationQuestion
-${PROTEIN_RULE}`
+${MACRO_RULES}`
+
+/** `{ protein_g: { type: "number" }, … }` and the column list, for the strict schemas. */
+const MACRO_PROPERTIES = Object.fromEntries(MACROS.map((m) => [m.column, { type: "number" }]))
+const MACRO_COLUMNS = MACROS.map((m) => m.column)
 
 /**
  * Strict Structured Outputs requires every property to appear in `required`
@@ -34,10 +39,10 @@ const ESTIMATE_SCHEMA = {
         properties: {
           description: { type: "string" },
           calories: { type: "number" },
-          protein_g: { type: "number" },
+          ...MACRO_PROPERTIES,
           emoji: { type: "string" },
         },
-        required: ["description", "calories", "protein_g", "emoji"],
+        required: ["description", "calories", ...MACRO_COLUMNS, "emoji"],
         additionalProperties: false,
       },
     },

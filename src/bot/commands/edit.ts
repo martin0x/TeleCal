@@ -6,7 +6,7 @@ import { AIService } from "../../ai/service"
 import { getTodayInTimezone, formatDateForDisplay, DEFAULT_TIMEZONE } from "../../utils/dates"
 import { smartReply } from "../utils/smart-reply"
 import { formatItemLine } from "../../utils/format"
-import { DEFAULT_MACROS } from "../../macros"
+import { DEFAULT_MACROS, macroValuesOf } from "../../macros"
 
 interface EditState {
   targetDate: string
@@ -196,7 +196,7 @@ export function createEditMessageHandler(
           foodLogsRepo.updateItem(item.id!, {
             description: newItem.description,
             calories: newItem.calories,
-            protein_g: newItem.protein_g,
+            ...macroValuesOf(newItem),
             emoji: newItem.emoji,
           })
           editStates.delete(userId)

@@ -1,28 +1,35 @@
 // src/ai/parse.test.ts
 import { describe, test, expect } from "bun:test"
-import { coerceProtein, normalizeItems, stripFences, alignProteinBatch } from "./parse"
+import { coerceGrams, normalizeItems, stripFences, alignProteinBatch } from "./parse"
+import { MACROS, emptyMacroValues, type MacroValues } from "../macros"
 
-describe("coerceProtein", () => {
+describe("coerceGrams", () => {
   test("rounds finite numbers to whole grams and clamps at zero", () => {
-    expect(coerceProtein(14)).toBe(14)
-    expect(coerceProtein(13.6)).toBe(14)
-    expect(coerceProtein(0)).toBe(0)
-    expect(coerceProtein(-3)).toBe(0)
+    expect(coerceGrams(14)).toBe(14)
+    expect(coerceGrams(13.6)).toBe(14)
+    expect(coerceGrams(0)).toBe(0)
+    expect(coerceGrams(-3)).toBe(0)
   })
 
   test("accepts a numeric string", () => {
-    expect(coerceProtein("22")).toBe(22)
-    expect(coerceProtein(" 7.4 ")).toBe(7)
+    expect(coerceGrams("22")).toBe(22)
+    expect(coerceGrams(" 7.4 ")).toBe(7)
   })
 
   test("returns null for anything else", () => {
-    expect(coerceProtein(undefined)).toBeNull()
-    expect(coerceProtein(null)).toBeNull()
-    expect(coerceProtein("lots")).toBeNull()
-    expect(coerceProtein("")).toBeNull()
-    expect(coerceProtein(Number.NaN)).toBeNull()
-    expect(coerceProtein(Number.POSITIVE_INFINITY)).toBeNull()
-    expect(coerceProtein({})).toBeNull()
+    expect(coerceGrams(undefined)).toBeNull()
+    expect(coerceGrams(null)).toBeNull()
+    expect(coerceGrams("lots")).toBeNull()
+    expect(coerceGrams("")).toBeNull()
+    expect(coerceGrams(Number.NaN)).toBeNull()
+    expect(coerceGrams(Number.POSITIVE_INFINITY)).toBeNull()
+    expect(coerceGrams({})).toBeNull()
+  })
+
+  test("drops values above 1000 g, which are garbage rather than food", () => {
+    expect(coerceGrams(1000)).toBe(1000)
+    expect(coerceGrams(1001)).toBeNull()
+    expect(coerceGrams("5000")).toBeNull()
   })
 })
 
@@ -34,8 +41,8 @@ describe("normalizeItems", () => {
         { description: "Rice", calories: 200 },
       ])
     ).toEqual([
-      { description: "Eggs", calories: 180, protein_g: 12, emoji: "🍳" },
-      { description: "Rice", calories: 200, protein_g: null },
+      { ...emptyMacroValues(), description: "Eggs", calories: 180, protein_g: 12, emoji: "🍳" },
+      { ...emptyMacroValues(), description: "Rice", calories: 200 },
     ])
   })
 
@@ -46,7 +53,14 @@ describe("normalizeItems", () => {
 
   test("drops array elements that are not objects", () => {
     expect(normalizeItems([null, "x", 7, { description: "Rice", calories: 200, protein_g: 4 }])).toEqual([
-      { description: "Rice", calories: 200, protein_g: 4 },
+      { ...emptyMacroValues(), description: "Rice", calories: 200, protein_g: 4 },
+    ])
+  })
+
+  test("coerces every registry column", () => {
+    const raw = Object.fromEntries(MACROS.map((m, i) => [m.column, `${i + 1}.4`]))
+    expect(normalizeItems([{ description: "X", calories: 1, ...raw }])).toEqual([
+      { description: "X", calories: 1, ...(Object.fromEntries(MACROS.map((m, i) => [m.column, i + 1])) as MacroValues) },
     ])
   })
 })

@@ -2,9 +2,11 @@
 // Prompt text shared across providers. Anthropic and Gemini ask for JSON in
 // prose and previously carried byte-identical copies of this text in two
 // files; OpenAI's strict schema carries the shape, so it keeps its own shorter
-// instructions and shares only the protein rule.
+// instructions and shares only MACRO_RULES.
+import { MACROS } from "../macros"
 
-export const PROTEIN_RULE = "- protein_g: estimated grams of protein for the item, as a whole number"
+/** One rule line per macro, in registry order. Both estimate prompts end their rules with it. */
+export const MACRO_RULES = MACROS.map((m) => m.rule).join("\n")
 
 export const ESTIMATE_JSON_PROMPT = `You are a nutrition expert that estimates calories and protein in food.
 
@@ -20,7 +22,7 @@ Rules:
 - Include relevant emoji for each food item
 - If multiple items mentioned, break them down separately
 - If quantity/size is unclear, ask for clarification
-${PROTEIN_RULE}
+${MACRO_RULES}
 
 Example input: "chicken sandwich and fries"
 Example output:
