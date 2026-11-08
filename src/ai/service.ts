@@ -11,6 +11,7 @@ import type { CallType, UsageStatus, TokenUsage } from "./types"
 import { config } from "../config"
 import { noopAnalytics, type Analytics } from "../analytics"
 import { MACROS, type MacroValues } from "../macros"
+import { normalizeFoodText } from "../utils/normalize"
 
 export interface EstimateOptions {
   telegramId: number
@@ -60,7 +61,7 @@ export class AIService {
     providerName: string,
     opts: EstimateOptions
   ): Promise<EstimationResult> {
-    const normalizedFood = this.normalizeFood(foodDescription)
+    const normalizedFood = normalizeFoodText(foodDescription)
 
     // Check cache first (only if no context and caching enabled)
     if (!opts.context && config.features.caching) {
@@ -224,14 +225,6 @@ export class AIService {
       call_type: opts.callType,
       status,
     })
-  }
-
-  private normalizeFood(food: string): string {
-    return food
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, " ")
-      .replace(/[^\w\s]/g, "")
   }
 
   getAvailableProviders(): string[] {
