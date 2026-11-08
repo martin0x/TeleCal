@@ -1,7 +1,7 @@
 // src/ai/parse.ts
 // Model output is untrusted: a field can be missing, a string, or NaN. These
 // helpers turn whatever came back into the shapes the rest of the app trusts.
-import { ProviderParseError, type AITrace, type FoodEstimate, type TokenUsage } from "./types"
+import { ProviderParseError, type AITrace, type FoodEstimate, type ParsedFoodsReply, type TokenUsage } from "./types"
 import { MACROS, MAX_GRAMS, emptyMacroValues, type MacroValues } from "../macros"
 
 /** JSON.parse that turns a SyntaxError into a ProviderParseError carrying the call's usage and trace. */
@@ -79,4 +79,24 @@ export function alignMacroBatch(reply: unknown, count: number): MacroValues[] {
     out[index - 1] = Object.fromEntries(MACROS.map((m) => [m.column, coerceGrams(raw[m.column])])) as MacroValues
   }
   return out
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+/** A parse-foods reply in a safe shape: rows stay raw for validateFood; unreadable entries become strings. */
+export function normalizeFoodsReply(reply: unknown): ParsedFoodsReply {
+  const r = isRecord(reply) ? reply : {}
+  const foods = Array.isArray(r.foods) ? r.foods.filter(isRecord) : []
+  const unreadable = Array.isArray(r.unreadable)
+    ? r.unreadable
+        .filter(isRecord)
+        .map((u) => ({
+          text: String(u.text ?? "").trim(),
+          reason: String(u.reason ?? "").trim() || "unreadable",
+        }))
+        .filter((u) => u.text)
+    : []
+  return { foods, unreadable }
 }

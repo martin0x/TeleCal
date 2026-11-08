@@ -1,9 +1,16 @@
 // src/ai/providers/anthropic.ts
 import Anthropic from "@anthropic-ai/sdk"
-import { AIProvider, ProviderResult, MacroBatchResult, TokenUsage } from "../types"
+import { AIProvider, ProviderResult, MacroBatchResult, TokenUsage, type FoodsParseResult } from "../types"
 import { config } from "../../config"
-import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT, formatBatchInput, estimateUserMessage } from "../prompt"
-import { normalizeItems, stripFences, alignMacroBatch, parseReply, traceOf } from "../parse"
+import {
+  ESTIMATE_JSON_PROMPT,
+  MACRO_BATCH_PROMPT,
+  FOODS_PARSE_PROMPT,
+  FOODS_MAX_TOKENS,
+  formatBatchInput,
+  estimateUserMessage,
+} from "../prompt"
+import { normalizeItems, stripFences, alignMacroBatch, parseReply, traceOf, normalizeFoodsReply } from "../parse"
 
 const MODEL = "claude-haiku-4-5-20251001"
 
@@ -93,5 +100,19 @@ export class AnthropicProvider implements AIProvider {
       usage,
       trace,
     }
+  }
+
+  async parseFoods(text: string): Promise<FoodsParseResult> {
+    const response = await this.client.messages.create({
+      model: MODEL,
+      max_tokens: FOODS_MAX_TOKENS,
+      system: FOODS_PARSE_PROMPT,
+      messages: [{ role: "user", content: text }],
+    })
+
+    const output = firstText(response)
+    const usage = usageFrom(response)
+    const trace = traceOf(FOODS_PARSE_PROMPT, text, output)
+    return { reply: normalizeFoodsReply(parseReply(stripFences(output), usage, trace)), usage, trace }
   }
 }

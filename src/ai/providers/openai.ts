@@ -1,9 +1,9 @@
 // src/ai/providers/openai.ts
 import OpenAI from "openai"
-import { AIProvider, ProviderResult, MacroBatchResult, TokenUsage } from "../types"
+import { AIProvider, ProviderResult, MacroBatchResult, TokenUsage, type FoodsParseResult } from "../types"
 import { config } from "../../config"
-import { MACRO_RULES, MACRO_BATCH_PROMPT, formatBatchInput, estimateUserMessage } from "../prompt"
-import { normalizeItems, alignMacroBatch, parseReply, traceOf } from "../parse"
+import { MACRO_RULES, MACRO_BATCH_PROMPT, FOODS_PARSE_PROMPT, FOODS_MAX_TOKENS, formatBatchInput, estimateUserMessage } from "../prompt"
+import { normalizeItems, alignMacroBatch, parseReply, traceOf, normalizeFoodsReply } from "../parse"
 import { MACROS } from "../../macros"
 
 const INSTRUCTIONS = `You are a nutrition expert that estimates calories, protein, fat, fiber and added sugar in food.
@@ -85,6 +85,42 @@ const MACRO_BATCH_SCHEMA = {
   required: ["items"],
   additionalProperties: false,
 } as const
+
+const NULLABLE_NUMBER = { type: ["number", "null"] }
+
+/** Strict: every field required; nullable where a label may leave it out. serving_unit is checked by validateFood. */
+const FOODS_SCHEMA = {
+  type: "object",
+  properties: {
+    foods: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          serving: { type: "string" },
+          serving_amount: NULLABLE_NUMBER,
+          serving_unit: { type: ["string", "null"] },
+          calories: { type: "number" },
+          ...Object.fromEntries(MACROS.map((m) => [m.column, NULLABLE_NUMBER])),
+        },
+        required: ["name", "serving", "serving_amount", "serving_unit", "calories", ...MACRO_COLUMNS],
+        additionalProperties: false,
+      },
+    },
+    unreadable: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { text: { type: "string" }, reason: { type: "string" } },
+        required: ["text", "reason"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["foods", "unreadable"],
+  additionalProperties: false,
+}
 
 const MODEL = "gpt-5.6-luna"
 
@@ -197,5 +233,28 @@ export class OpenAIProvider implements AIProvider {
       usage,
       trace,
     }
+  }
+
+  async parseFoods(text: string): Promise<FoodsParseResult> {
+    const response = await this.client.responses.create({
+      model: MODEL,
+      instructions: FOODS_PARSE_PROMPT,
+      input: text,
+      reasoning: { effort: "none" },
+      store: false,
+      max_output_tokens: FOODS_MAX_TOKENS,
+      text: {
+        format: { type: "json_schema", name: "foods", schema: FOODS_SCHEMA, strict: true },
+      },
+    })
+
+    const content = response.output_text
+    if (!content) {
+      throw new Error("No response from OpenAI")
+    }
+
+    const usage = usageFrom(response)
+    const trace = traceOf(FOODS_PARSE_PROMPT, text, content)
+    return { reply: normalizeFoodsReply(parseReply(content, usage, trace)), usage, trace }
   }
 }

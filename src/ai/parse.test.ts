@@ -1,6 +1,6 @@
 // src/ai/parse.test.ts
 import { describe, test, expect } from "bun:test"
-import { coerceGrams, normalizeItems, stripFences, alignMacroBatch } from "./parse"
+import { coerceGrams, normalizeItems, stripFences, alignMacroBatch, normalizeFoodsReply } from "./parse"
 import { MACROS, emptyMacroValues, type MacroValues } from "../macros"
 
 describe("coerceGrams", () => {
@@ -122,5 +122,27 @@ describe("normalizeItems: saved foods", () => {
     const [item] = normalizeItems([{ description: "Eggs", calories: 180 }])
     expect("saved_food_id" in item).toBe(false)
     expect("servings" in item).toBe(false)
+  })
+})
+
+describe("normalizeFoodsReply", () => {
+  test("keeps object rows raw and turns unreadable entries into strings", () => {
+    expect(
+      normalizeFoodsReply({
+        foods: [{ name: "Oats", calories: 150 }, "junk", null],
+        unreadable: [{ text: "lunch adobo", reason: "no calories" }, { text: "" }, { text: 7 }],
+      })
+    ).toEqual({
+      foods: [{ name: "Oats", calories: 150 }],
+      unreadable: [
+        { text: "lunch adobo", reason: "no calories" },
+        { text: "7", reason: "unreadable" },
+      ],
+    })
+  })
+
+  test("anything else becomes empty lists", () => {
+    expect(normalizeFoodsReply(null)).toEqual({ foods: [], unreadable: [] })
+    expect(normalizeFoodsReply({ foods: "x" })).toEqual({ foods: [], unreadable: [] })
   })
 })

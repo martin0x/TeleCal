@@ -168,3 +168,11 @@ describe("GeminiProvider: saved foods", () => {
     expect(seen.input).toBe(`oats\n\n${SAVED_FOODS_HEADER}\n[1] Quaker Oats`)
   })
 })
+
+describe("GeminiProvider.parseFoods", () => {
+  test("returns the rows", async () => {
+    const reply = JSON.stringify({ foods: [{ name: "Oats", calories: 150 }], unreadable: [] })
+    const result = await new GeminiProvider(fakeClient(reply)).parseFoods("Oats 150 kcal")
+    expect(result.reply.foods).toEqual([{ name: "Oats", calories: 150 }])
+  })
+})

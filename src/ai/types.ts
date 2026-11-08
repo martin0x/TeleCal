@@ -27,6 +27,8 @@ export interface AIProvider {
   estimate(foodDescription: string, context?: string, savedFoods?: string): Promise<ProviderResult>
   /** Every macro for many descriptions in one call; the caller chunks. */
   estimateMacros(descriptions: string[]): Promise<MacroBatchResult>
+  /** A pasted table or typed food → rows, one call. Rows are untrusted; src/library/validate.ts checks them. */
+  parseFoods(text: string): Promise<FoodsParseResult>
 }
 
 export interface CachedEstimation {
@@ -84,6 +86,18 @@ export class ProviderParseError extends SyntaxError {
   }
 }
 
-export type CallType = "estimate" | "clarify" | "edit" | "retry" | "backfill"
+export type CallType = "estimate" | "clarify" | "edit" | "retry" | "backfill" | "import"
 
 export type UsageStatus = "ok" | "parse_error" | "no_usage"
+
+export interface ParsedFoodsReply {
+  /** Rows as the model gave them: untrusted, validated by src/library/validate.ts. */
+  foods: Record<string, unknown>[]
+  unreadable: { text: string; reason: string }[]
+}
+
+export interface FoodsParseResult {
+  reply: ParsedFoodsReply
+  usage: TokenUsage
+  trace?: AITrace
+}

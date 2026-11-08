@@ -7,7 +7,7 @@ import { GeminiProvider } from "./providers/gemini"
 import { CacheRepository } from "../db/repositories/cache"
 import { UsageRepository } from "../db/repositories/usage"
 import { calculateCost } from "./pricing"
-import type { CallType, UsageStatus, TokenUsage } from "./types"
+import type { CallType, UsageStatus, TokenUsage, ParsedFoodsReply } from "./types"
 import { config } from "../config"
 import { noopAnalytics, type Analytics } from "../analytics"
 import { MACROS, type MacroValues } from "../macros"
@@ -102,6 +102,27 @@ export class AIService {
       latencyMs: performance.now() - started,
     })
     return result.values
+  }
+
+  /** A pasted table or typed food → rows, one billed call (call type "import"). No cache. */
+  async parseFoods(text: string, providerName: string, opts: BatchOptions): Promise<ParsedFoodsReply> {
+    const provider = this.resolveProvider(providerName)
+    const recordOpts: EstimateOptions = { ...opts, callType: "import" }
+
+    let result
+    const started = performance.now()
+    try {
+      result = await provider.parseFoods(text)
+    } catch (error) {
+      this.recordFailure(error, provider.name, recordOpts, performance.now() - started)
+      throw error
+    }
+
+    this.recordSafely(provider.name, result.usage, recordOpts, this.statusFor(result.usage), {
+      trace: result.trace,
+      latencyMs: performance.now() - started,
+    })
+    return result.reply
   }
 
   private resolveProvider(providerName: string): AIProvider {

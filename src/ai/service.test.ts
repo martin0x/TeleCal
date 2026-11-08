@@ -486,3 +486,39 @@ describe("$ai_generation", () => {
     expect(generations()[0].properties).toMatchObject({ call_type: "backfill", $ai_input: TRACE.input })
   })
 })
+
+describe("parseFoods", () => {
+  const PARSED = { foods: [{ name: "Oats", calories: 150 }], unreadable: [] }
+
+  function foodsProvider(result: Error | { reply: typeof PARSED; usage: ProviderResult["usage"] }): AIProvider {
+    return {
+      name: "openai",
+      estimate: async () => {
+        throw new Error("not used")
+      },
+      estimateMacros: async () => {
+        throw new Error("not used")
+      },
+      parseFoods: async () => {
+        if (result instanceof Error) throw result
+        return result
+      },
+    }
+  }
+
+  test("returns the reply and records an import call", async () => {
+    service = build(foodsProvider({ reply: PARSED, usage: OK_RESULT.usage }))
+    const reply = await service.parseFoods("Oats 150 kcal", "openai", { telegramId: 42, chatId: 7 })
+
+    expect(reply).toEqual(PARSED)
+    expect(usage.rows).toHaveLength(1)
+    expect(usage.rows[0]).toMatchObject({ callType: "import", status: "ok", telegramId: 42 })
+    expect(analytics.events.find((e) => e.event === "$ai_generation")?.properties).toMatchObject({ $ai_span_name: "import" })
+  })
+
+  test("a failure is reported and rethrown", async () => {
+    service = build(foodsProvider(new Error("down")))
+    await expect(service.parseFoods("x", "openai", { telegramId: 42, chatId: 7 })).rejects.toThrow("down")
+    expect(analytics.exceptions[0].properties).toMatchObject({ source: "ai", call_type: "import" })
+  })
+})

@@ -82,3 +82,22 @@ export function formatSavedFoods(foods: SavedFood[]): string {
       "Otherwise both are null. Still give your own estimate for every other field.",
   ].join("\n")
 }
+
+/** Output limit for parseFoods: a 60-row paste overflows the estimate call's 1024. */
+export const FOODS_MAX_TOKENS = 4096
+
+export const FOODS_PARSE_PROMPT = `You turn pasted nutrition information into structured rows. The text may be a table copied from a document or spreadsheet, a list, or one food typed by hand.
+
+Respond with ONLY a JSON object (no markdown, no explanation) of the form:
+{"foods":[{"name":"Quaker Oats","serving":"1/2 cup (40 g)","serving_amount":40,"serving_unit":"g","calories":150,"protein_g":5,"fat_g":3,"fiber_g":4,"added_sugar_g":null}],"unreadable":[{"text":"lunch adobo","reason":"no calories"}]}
+
+Rules:
+- One entry in foods per food. All values are per serving.
+- If a row gives both per serving and per 100 g values, use per serving. If it gives only per 100 g values, set serving to "100 g", serving_amount to 100 and serving_unit to "g".
+- serving: the serving size as written, e.g. "1 cup (250 ml)". Empty string if none is given.
+- serving_amount and serving_unit: the serving's weight in grams ("g") or volume in millilitres ("ml") when it is written; otherwise null.
+- calories: kcal per serving. Convert kJ by dividing by 4.184.
+- protein_g, fat_g, fiber_g, added_sugar_g: grams per serving as written, decimals allowed; null when not given.
+- added_sugar_g only from an "added sugar" value; total sugars do not count, so leave it null when only total sugars are given.
+- Never estimate a value that is not in the text.
+- A row with no calories goes in unreadable with reason "no calories". Text that is not a food (headings, notes, blank lines) is ignored.`

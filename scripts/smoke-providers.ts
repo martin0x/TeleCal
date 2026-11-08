@@ -4,6 +4,7 @@
 //
 //   bun run scripts/smoke-providers.ts <openai|anthropic|gemini>           # estimate()
 //   bun run scripts/smoke-providers.ts <openai|anthropic|gemini> --macros  # estimateMacros()
+//   bun run scripts/smoke-providers.ts <openai|anthropic|gemini> --foods   # parseFoods()
 //
 // With POSTHOG_API_KEY and POSTHOG_ID_SECRET set, the call is also sent to
 // PostHog as $ai_generation (tagged environment=development unless
@@ -17,9 +18,10 @@ import { config } from "../src/config"
 import { MACROS } from "../src/macros"
 
 const provider = process.argv[2]
-const mode = process.argv[3] === "--macros" ? "macros" : "estimate"
+const flag = process.argv[3]
+const mode = flag === "--macros" ? "macros" : flag === "--foods" ? "foods" : "estimate"
 if (!provider) {
-  console.error("Usage: bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--macros]")
+  console.error("Usage: bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--macros|--foods]")
   process.exit(1)
 }
 
@@ -40,6 +42,22 @@ if (!service.hasProvider(provider)) {
 }
 
 try {
+  if (mode === "foods") {
+    const pasted =
+      "Quaker Oats, 1/2 cup (40 g): 150 kcal, protein 5 g, fat 3 g, fiber 4 g\n" +
+      "Nestle Fresh Milk per 1 cup (250 ml): 160 kcal, 8 g protein, 9 g fat, sugars 12 g\n" +
+      "lunch adobo"
+    const reply = await service.parseFoods(pasted, provider, { telegramId: 0, chatId: null })
+    console.log(`✓ ${provider} responded to parseFoods`)
+    console.log(JSON.stringify(reply, null, 2))
+    console.log("  Check by eye: milk's added_sugar_g should be null (12 g is total sugars).")
+    if (reply.foods.length !== 2) {
+      console.error(`✗ Expected 2 foods, got ${reply.foods.length}.`)
+      await finish(1)
+    }
+    await finish(0)
+  }
+
   if (mode === "macros") {
     const descriptions = ["two scrambled eggs", "a slice of toast", "black coffee"]
     const values = await service.estimateMacros(descriptions, provider, { telegramId: 0, chatId: null })

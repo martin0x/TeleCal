@@ -3,7 +3,7 @@ import { describe, test, expect } from "bun:test"
 import Anthropic from "@anthropic-ai/sdk"
 import { AnthropicProvider } from "./anthropic"
 import { ProviderParseError } from "../types"
-import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT, SAVED_FOODS_HEADER } from "../prompt"
+import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT, SAVED_FOODS_HEADER, FOODS_PARSE_PROMPT } from "../prompt"
 import { MACROS, emptyMacroValues } from "../../macros"
 
 const VALID_REPLY = JSON.stringify({
@@ -167,5 +167,32 @@ describe("AnthropicProvider: saved foods", () => {
     const { client } = capturingClient(reply)
     const result = await new AnthropicProvider(client).estimate("80g oats", undefined, SAVED_FOODS_HEADER)
     expect(result.estimate.items[0]).toMatchObject({ saved_food_id: 1, servings: 2 })
+  })
+})
+
+describe("AnthropicProvider.parseFoods", () => {
+  test("sends the text with the foods prompt and a 4096-token limit, and returns the rows", async () => {
+    const calls: any[] = []
+    const reply = JSON.stringify({ foods: [{ name: "Oats", calories: 150 }], unreadable: [] })
+    const client = {
+      messages: {
+        create: async (params: any) => {
+          calls.push(params)
+          return { model: "claude-haiku-4-5-20251001", content: [{ type: "text", text: reply }], usage: { input_tokens: 50, output_tokens: 20 } }
+        },
+      },
+    } as unknown as Anthropic
+
+    const result = await new AnthropicProvider(client).parseFoods("Oats 150 kcal")
+
+    expect(calls[0].system).toBe(FOODS_PARSE_PROMPT)
+    expect(calls[0].max_tokens).toBe(4096)
+    expect(calls[0].messages[0].content).toBe("Oats 150 kcal")
+    expect(result.reply.foods).toEqual([{ name: "Oats", calories: 150 }])
+    expect(result.usage.inputTokens).toBe(50)
+  })
+
+  test("bad JSON throws ProviderParseError", async () => {
+    await expect(new AnthropicProvider(fakeClient("not json")).parseFoods("x")).rejects.toBeInstanceOf(ProviderParseError)
   })
 })

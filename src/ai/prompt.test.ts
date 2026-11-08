@@ -5,6 +5,7 @@ import {
   ESTIMATE_JSON_PROMPT,
   MACRO_BATCH_PROMPT,
   MACRO_RULES,
+  FOODS_PARSE_PROMPT,
   estimateUserMessage,
   formatSavedFoods,
   SAVED_FOODS_HEADER,
@@ -66,5 +67,14 @@ describe("saved foods", () => {
 
   test("the system prompt does not mention saved foods", () => {
     expect(ESTIMATE_JSON_PROMPT).not.toContain("saved_food_id")
+  })
+})
+
+describe("FOODS_PARSE_PROMPT", () => {
+  test("asks for every macro column, per serving, never invented", () => {
+    for (const m of MACROS) expect(FOODS_PARSE_PROMPT).toContain(`"${m.column}":`)
+    expect(FOODS_PARSE_PROMPT).toContain("per serving")
+    expect(FOODS_PARSE_PROMPT).toContain("Never estimate")
+    expect(FOODS_PARSE_PROMPT).toContain("total sugars")
   })
 })
