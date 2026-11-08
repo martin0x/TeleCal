@@ -345,6 +345,126 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
+
+    /* Foods tab */
+    .tab.hidden,
+    .foods-select.hidden,
+    .foods-delete-bar.hidden,
+    .food-form-error.hidden {
+      display: none;
+    }
+
+    .foods-search {
+      width: 100%;
+      padding: 10px 12px;
+      border: none;
+      border-radius: 10px;
+      background: var(--secondary-bg);
+      color: var(--text-color);
+      font-size: 15px;
+      margin-bottom: 8px;
+    }
+
+    .foods-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .foods-count {
+      font-size: 13px;
+      color: var(--hint-color);
+    }
+
+    .foods-select {
+      border: none;
+      background: none;
+      color: var(--link-color);
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    .food-row {
+      cursor: pointer;
+    }
+
+    .food-check {
+      width: 18px;
+      height: 18px;
+      margin-right: 12px;
+      pointer-events: none;
+    }
+
+    .foods-delete-bar {
+      position: sticky;
+      bottom: 0;
+      padding: 12px 0;
+      background: var(--bg-color);
+    }
+
+    .foods-button {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      background: var(--button-color);
+      color: var(--button-text);
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .foods-button.danger {
+      background: transparent;
+      color: var(--tg-theme-destructive-text-color, #e53935);
+      border: 1px solid currentColor;
+    }
+
+    .foods-button:disabled {
+      opacity: 0.5;
+    }
+
+    .food-form label {
+      display: block;
+      font-size: 13px;
+      color: var(--hint-color);
+      margin-bottom: 12px;
+    }
+
+    .food-form input,
+    .food-form select {
+      display: block;
+      width: 100%;
+      margin-top: 4px;
+      padding: 10px 12px;
+      border: none;
+      border-radius: 10px;
+      background: var(--secondary-bg);
+      color: var(--text-color);
+      font-size: 15px;
+    }
+
+    .food-form-row {
+      display: flex;
+      gap: 12px;
+    }
+
+    .food-form-row label {
+      flex: 1;
+    }
+
+    .food-form-error {
+      color: var(--tg-theme-destructive-text-color, #e53935);
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+
+    .food-form-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
   </style>
 </head>
 <body>
@@ -352,6 +472,7 @@
     <button class="tab active" data-tab="today">Today</button>
     <button class="tab" data-tab="week">Week</button>
     <button class="tab" data-tab="month">Month</button>
+    <button class="tab hidden" data-tab="foods" id="foods-tab">Foods</button>
   </div>
 
   <div id="today-view" class="view active">
@@ -391,6 +512,36 @@
     <div class="food-log" id="month-log"></div>
   </div>
 
+  <div id="foods-view" class="view">
+    <input id="foods-search" class="foods-search" type="search" placeholder="Search foods" autocomplete="off">
+    <div class="foods-toolbar">
+      <span id="foods-count" class="foods-count"></span>
+      <button id="foods-select" class="foods-select hidden" type="button">Select</button>
+    </div>
+    <div id="foods-list" class="food-log"></div>
+    <div id="foods-delete-bar" class="foods-delete-bar hidden">
+      <button id="foods-delete" class="foods-button danger" type="button">Delete 0</button>
+    </div>
+  </div>
+
+  <div id="food-edit-view" class="view">
+    <form id="food-form" class="food-form" novalidate>
+      <label>Name<input name="name" type="text" maxlength="100"></label>
+      <label>Serving<input name="serving" type="text" maxlength="100" placeholder="1/2 cup (40 g)"></label>
+      <div class="food-form-row">
+        <label>Amount<input name="serving_amount" type="number" min="0" step="any" inputmode="decimal"></label>
+        <label>Unit<select name="serving_unit"><option value="">none</option><option value="g">g</option><option value="ml">ml</option></select></label>
+      </div>
+      <label>Calories<input name="calories" type="number" min="0" max="5000" step="1" inputmode="numeric"></label>
+      <div id="food-form-macros"></div>
+      <div id="food-form-error" class="food-form-error hidden"></div>
+      <div class="food-form-actions">
+        <button type="submit" class="foods-button">Save</button>
+        <button type="button" id="food-form-delete" class="foods-button danger">Delete</button>
+      </div>
+    </form>
+  </div>
+
   <script>
     const tg = window.Telegram.WebApp;
     tg.ready();
@@ -409,10 +560,10 @@
     // Every macro /api/user can list in tracked_macros, in the registry's
     // order (src/macros.ts; app-page.test.ts checks each key is here).
     const MACRO_LABELS = {
-      protein: { column: 'protein_g', toggle: 'Protein', item: '', total: 'protein' },
-      fat: { column: 'fat_g', toggle: 'Fat', item: 'fat', total: 'fat' },
-      fiber: { column: 'fiber_g', toggle: 'Fiber', item: 'fiber', total: 'fiber' },
-      added_sugar: { column: 'added_sugar_g', toggle: 'Sugar', item: 'sugar', total: 'added sugar' },
+      protein: { column: 'protein_g', toggle: 'Protein', item: '', total: 'protein', form: 'Protein' },
+      fat: { column: 'fat_g', toggle: 'Fat', item: 'fat', total: 'fat', form: 'Fat' },
+      fiber: { column: 'fiber_g', toggle: 'Fiber', item: 'fiber', total: 'fiber', form: 'Fiber' },
+      added_sugar: { column: 'added_sugar_g', toggle: 'Sugar', item: 'sugar', total: 'added sugar', form: 'Added sugar' },
     };
 
     // The user's macros. A server that predates tracked_macros only knew protein.
@@ -801,19 +952,26 @@
       }
     }
 
-    // Tab switching
+    // Views and tabs. The food edit form is a view with no tab of its own.
+    function showView(name) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById(`${name}-view`).classList.add('active');
+    }
+
+    function showTab(target) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === target));
+      showView(target);
+      if (target !== 'foods') {
+        editingFood = null;
+        tg.BackButton.hide();
+      }
+      loadTabData(target);
+    }
+
     document.querySelectorAll('.tab').forEach(tab => {
       tab.addEventListener('click', () => {
-        const target = tab.dataset.tab;
-
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-
-        tab.classList.add('active');
-        document.getElementById(`${target}-view`).classList.add('active');
-
-        loadTabData(target);
-        track('miniapp_tab_changed', { tab: target });
+        showTab(tab.dataset.tab);
+        track('miniapp_tab_changed', { tab: tab.dataset.tab });
       });
     });
 
@@ -849,6 +1007,240 @@
         createCalendar(monthData, metric);
       }
     }
+
+    // Food library (Foods tab). Names are the user's own text: always
+    // textContent, never innerHTML.
+    let foods = null;
+    let selecting = false;
+    const selectedFoods = new Set();
+    let editingFood = null;
+
+    async function apiSend(method, endpoint, body) {
+      const res = await fetch(endpoint, {
+        method,
+        headers: { 'Authorization': `tg-init-data ${tg.initData}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      let data = null;
+      try { data = await res.json(); } catch (e) { data = null; }
+      return { ok: res.ok, status: res.status, data };
+    }
+
+    // Telegram's own dialogs where the client supports them (Bot API 6.2+), the browser's otherwise.
+    function confirmAction(message) {
+      return new Promise(resolve => {
+        try {
+          tg.showConfirm(message, ok => resolve(Boolean(ok)));
+        } catch (e) {
+          resolve(window.confirm(message));
+        }
+      });
+    }
+
+    function notify(message) {
+      try { tg.showAlert(message); } catch (e) { window.alert(message); }
+    }
+
+    function plural(n) {
+      return n === 1 ? 'food' : 'foods';
+    }
+
+    async function loadFoods() {
+      const data = await api('/api/foods');
+      foods = data.foods;
+      renderFoods();
+    }
+
+    function renderFoods() {
+      const list = document.getElementById('foods-list');
+      const query = document.getElementById('foods-search').value.trim().toLowerCase();
+      const all = foods || [];
+      const selectBtn = document.getElementById('foods-select');
+      document.getElementById('foods-count').textContent = all.length ? `${all.length} saved` : '';
+      selectBtn.classList.toggle('hidden', all.length === 0);
+      selectBtn.textContent = selecting ? 'Done' : 'Select';
+      list.innerHTML = '';
+
+      if (all.length === 0) {
+        list.innerHTML = '<div class="empty-state">No saved foods yet. Use /foods in the chat to add some.</div>';
+        renderDeleteBar();
+        return;
+      }
+
+      const shown = all.filter(food => !query || food.name.toLowerCase().includes(query));
+      if (shown.length === 0) {
+        list.innerHTML = '<div class="empty-state">No foods match.</div>';
+      }
+
+      for (const food of shown) {
+        const row = document.createElement('div');
+        row.className = 'food-item food-row';
+
+        if (selecting) {
+          const box = document.createElement('input');
+          box.type = 'checkbox';
+          box.className = 'food-check';
+          box.checked = selectedFoods.has(food.id);
+          box.tabIndex = -1;
+          row.appendChild(box);
+        }
+
+        const details = document.createElement('div');
+        details.className = 'food-details';
+        const name = document.createElement('div');
+        name.className = 'food-name';
+        name.textContent = food.name;
+        const serving = document.createElement('div');
+        serving.className = 'food-macros';
+        serving.textContent = food.serving;
+        details.appendChild(name);
+        details.appendChild(serving);
+
+        const calories = document.createElement('div');
+        calories.className = 'food-calories';
+        calories.textContent = `${food.calories} cal`;
+
+        row.appendChild(details);
+        row.appendChild(calories);
+        row.addEventListener('click', () => {
+          if (selecting) toggleFoodSelection(food.id);
+          else openFoodForm(food);
+        });
+        list.appendChild(row);
+      }
+      renderDeleteBar();
+    }
+
+    function toggleFoodSelection(id) {
+      if (selectedFoods.has(id)) selectedFoods.delete(id);
+      else selectedFoods.add(id);
+      renderFoods();
+    }
+
+    function renderDeleteBar() {
+      document.getElementById('foods-delete-bar').classList.toggle('hidden', !selecting);
+      const btn = document.getElementById('foods-delete');
+      btn.textContent = `Delete ${selectedFoods.size}`;
+      btn.disabled = selectedFoods.size === 0;
+    }
+
+    document.getElementById('foods-search').addEventListener('input', renderFoods);
+
+    document.getElementById('foods-select').addEventListener('click', () => {
+      selecting = !selecting;
+      selectedFoods.clear();
+      renderFoods();
+    });
+
+    document.getElementById('foods-delete').addEventListener('click', async () => {
+      const ids = Array.from(selectedFoods);
+      if (ids.length === 0) return;
+      const ok = await confirmAction(`Delete ${ids.length} ${plural(ids.length)}?`);
+      if (!ok) return;
+      const res = await apiSend('DELETE', '/api/foods', { ids });
+      if (!res.ok) {
+        notify('Could not delete. Try again.');
+        return;
+      }
+      track('miniapp_foods_deleted', { count: ids.length });
+      selecting = false;
+      selectedFoods.clear();
+      await loadFoods();
+    });
+
+    function valueOrBlank(value) {
+      return value === null || value === undefined ? '' : value;
+    }
+
+    function numberOrNull(value) {
+      const text = String(value).trim();
+      return text === '' ? null : Number(text);
+    }
+
+    function showFormError(message) {
+      const box = document.getElementById('food-form-error');
+      box.textContent = message ? message.charAt(0).toUpperCase() + message.slice(1) : '';
+      box.classList.toggle('hidden', !message);
+    }
+
+    function openFoodForm(food) {
+      editingFood = food;
+      const form = document.getElementById('food-form');
+      form.elements.name.value = food.name;
+      form.elements.serving.value = food.serving;
+      form.elements.serving_amount.value = valueOrBlank(food.serving_amount);
+      form.elements.serving_unit.value = food.serving_unit || '';
+      form.elements.calories.value = food.calories;
+
+      const macros = document.getElementById('food-form-macros');
+      macros.innerHTML = '';
+      for (const key of Object.keys(MACRO_LABELS)) {
+        const label = document.createElement('label');
+        label.textContent = `${MACRO_LABELS[key].form} (g)`;
+        const input = document.createElement('input');
+        input.name = MACRO_LABELS[key].column;
+        input.type = 'number';
+        input.min = '0';
+        input.max = '500';
+        input.step = 'any';
+        input.inputMode = 'decimal';
+        input.placeholder = 'not on label';
+        input.value = valueOrBlank(food[MACRO_LABELS[key].column]);
+        label.appendChild(input);
+        macros.appendChild(label);
+      }
+
+      showFormError('');
+      showView('food-edit');
+      tg.BackButton.show();
+    }
+
+    function closeFoodForm() {
+      editingFood = null;
+      tg.BackButton.hide();
+      showView('foods');
+    }
+
+    tg.BackButton.onClick(closeFoodForm);
+
+    document.getElementById('food-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      if (!editingFood) return;
+      const form = event.target;
+      const body = {
+        name: form.elements.name.value,
+        serving: form.elements.serving.value,
+        serving_amount: numberOrNull(form.elements.serving_amount.value),
+        serving_unit: form.elements.serving_unit.value || null,
+        calories: numberOrNull(form.elements.calories.value)
+      };
+      for (const key of Object.keys(MACRO_LABELS)) {
+        const column = MACRO_LABELS[key].column;
+        body[column] = numberOrNull(form.elements[column].value);
+      }
+      const res = await apiSend('PATCH', `/api/foods/${editingFood.id}`, body);
+      if (!res.ok) {
+        showFormError((res.data && res.data.error) || 'Could not save. Try again.');
+        return;
+      }
+      track('miniapp_food_edited');
+      await loadFoods();
+      closeFoodForm();
+    });
+
+    document.getElementById('food-form-delete').addEventListener('click', async () => {
+      if (!editingFood) return;
+      const ok = await confirmAction(`Delete ${editingFood.name}?`);
+      if (!ok) return;
+      const res = await apiSend('DELETE', '/api/foods', { ids: [editingFood.id] });
+      if (!res.ok) {
+        showFormError('Could not delete. Try again.');
+        return;
+      }
+      track('miniapp_foods_deleted', { count: 1 });
+      await loadFoods();
+      closeFoodForm();
+    });
 
     async function loadTabData(tab) {
       try {
@@ -892,13 +1284,30 @@
             </div>
           `;
         }
+
+        if (tab === 'foods') {
+          await loadFoods();
+        }
       } catch (e) {
         console.error('Failed to load data:', e);
       }
     }
 
-    // Initial load
-    loadTabData('today');
+    // Initial load. ?tab=foods (the bot's "Open my foods" button) opens the
+    // Foods tab, when the server says the library is on.
+    async function init() {
+      try {
+        userData = await getUser();
+      } catch (e) {
+        console.error('Failed to load user:', e);
+      }
+      const libraryOn = Boolean(userData && userData.food_library);
+      document.getElementById('foods-tab').classList.toggle('hidden', !libraryOn);
+      const wanted = new URLSearchParams(window.location.search).get('tab');
+      showTab(wanted === 'foods' && libraryOn ? 'foods' : 'today');
+    }
+
+    init();
   </script>
 </body>
 </html>
