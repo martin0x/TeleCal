@@ -13,10 +13,11 @@ export type PreviewRow = { food: FoodFields; replaces: boolean }
 export type Unreadable = { text: string; reason: string }
 export type Preview = { rows: PreviewRow[]; unreadable: Unreadable[] }
 
-/** Telegram's limit is 4096; leave room for the header and the "…and N more" line. */
+/** Telegram's limit is 4096; leave room for the "…and N more" line and the footer. */
 const MAX_PREVIEW_CHARS = 3800
 const MAX_UNREADABLE_SHOWN = 5
 const MAX_UNREADABLE_TEXT = 40
+const MAX_UNREADABLE_REASON = 40
 
 function finish(foods: FoodFields[], unreadable: Unreadable[], existing: SavedFood[]): Preview {
   // The same name twice in one batch: the later row wins, as saving would.
@@ -65,11 +66,16 @@ export function formatFoodLine(food: FoodFields): string {
   return [food.name, serving, `${food.calories} cal`, ...macros].join(" · ")
 }
 
+function truncateField(field: string, maxLen: number): string {
+  return field.length > maxLen ? `${field.slice(0, maxLen - 1)}…` : field
+}
+
 function unreadableLine(unreadable: Unreadable[]): string {
   if (unreadable.length === 0) return ""
   const shown = unreadable.slice(0, MAX_UNREADABLE_SHOWN).map((u) => {
-    const text = u.text.length > MAX_UNREADABLE_TEXT ? `${u.text.slice(0, MAX_UNREADABLE_TEXT - 1)}…` : u.text
-    return `"${text}" (${u.reason})`
+    const text = truncateField(u.text, MAX_UNREADABLE_TEXT)
+    const reason = truncateField(u.reason, MAX_UNREADABLE_REASON)
+    return `"${text}" (${reason})`
   })
   const more = unreadable.length > MAX_UNREADABLE_SHOWN ? `, and ${unreadable.length - MAX_UNREADABLE_SHOWN} more` : ""
   return `\nCouldn't read: ${shown.join(", ")}${more}`

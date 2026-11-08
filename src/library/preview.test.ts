@@ -79,4 +79,17 @@ describe("formatFoodLine / formatPreview", () => {
     const shown = text.split("\n").filter((line) => /^\d+\. /.test(line)).length
     expect(text).toEndWith(`…and ${120 - shown} more`)
   })
+
+  test("caps long reasons so previews always fit one message", () => {
+    const foods = Array.from({ length: 120 }, (_, i) => ({ ...OATS_ROW, name: `Very long food name number ${i} with extra words` }))
+    const longReason = "x".repeat(2000)
+    const unreadable = Array.from({ length: 5 }, (_, i) => ({ text: `Item ${i}`, reason: longReason }))
+    const text = formatPreview("Found items:", importPreview({ foods, unreadable }, []))
+    expect(text.length).toBeLessThanOrEqual(4096)
+    const reasonMatches = text.match(/\([^)]+\)/g) || []
+    for (const match of reasonMatches) {
+      const reason = match.slice(1, -1)
+      expect(reason.length).toBeLessThanOrEqual(40)
+    }
+  })
 })
