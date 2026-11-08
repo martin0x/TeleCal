@@ -10,6 +10,12 @@ tied to release tags.
 
 ### Added
 
+- **Saved foods** (behind `FEATURE_LOCAL_FOOD_DB`). Each user keeps a library of
+  foods with their nutrition label values per serving: paste a table into
+  `/foods`, type one with `/foods add`, or tap "Save to my foods" on a logged
+  meal. Every save shows a preview first. Logging uses the label values (and
+  makes no AI call when the whole meal is saved foods); the Mini App's new
+  Foods tab searches, edits and deletes them. (#32)
 - **Fat, fiber and added sugar.** Every estimate now includes them beside
   protein, and `/settings` → Macros switches each one on or off per user
   (protein on and the rest off by default, so nobody's replies change until

@@ -7,6 +7,7 @@ export const HELP_TEXT =
   "Track your calories and protein with AI-powered estimation. Switch on fat, fiber and added sugar in /settings → Macros.\n\n" +
   "Commands:\n" +
   "/log - Log what you ate, e.g. /log 2 eggs and toast\n" +
+  (config.features.localFoodDb ? "/foods - Save foods with their label values, used when you log\n" : "") +
   "/today - See today's calories and protein\n" +
   "/week - See past 7 days\n" +
   "/month - See past 30 days\n" +

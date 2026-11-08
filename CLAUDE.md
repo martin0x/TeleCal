@@ -13,7 +13,7 @@ bun run dev      # Start with hot reload
 bun run start    # Production start
 bun test         # Run all tests
 bun test src/ai  # Run tests in specific directory
-bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--macros]   # one live API call to verify a provider; --macros exercises the batch call; with POSTHOG_* set, also sends the $ai_generation
+bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--macros|--foods]   # one live API call to verify a provider; --macros exercises the batch call, --foods the table parser; with POSTHOG_* set, also sends the $ai_generation
 bun run scripts/smoke-posthog.ts   # sends one test exception to PostHog; needs POSTHOG_API_KEY and POSTHOG_ID_SECRET
 bun run scripts/telegram-mock/render.ts && bash scripts/build-landing-assets.sh   # re-render the landing page's Telegram screenshots from the bot's real formatters (macOS, Chrome)
 ```
@@ -34,19 +34,22 @@ bun run scripts/telegram-mock/render.ts && bash scripts/build-landing-assets.sh 
 
 **Bot Layer** (`src/bot/`):
 - `index.ts` - Bot setup, middleware chain, command registration
-- `commands/` - Command handlers (log, today, week, month, edit, delete, settings, pending, admin)
+- `commands/` - Command handlers (log, today, week, month, edit, delete, settings, pending, admin, foods)
 - `utils/smart-reply.ts` - Send every reply through `smartReply`/`smartEdit`: in groups they quote the user's message, or name the user when there is nothing to quote
 - `conversations/log-flow.ts` - State machine for `/log` flow (awaiting_input → clarifying → confirming)
 - `middleware/allowlist.ts` - Gate: allowlisted users pass; strangers get an invite prompt and can file an access request (`access.ts` handles admin Approve/Decline)
 
 **Macros** (`src/macros.ts`): the registry of tracked macros (protein, fat, fiber, added sugar), with each one's column, labels, `/edit` words and prompt rule. Prompts, parsing, the cache check, repository SQL, formatters, the backfill, `/settings` and the API loop over it; a few places still name each macro by hand (listed below). Calories are not in it. Each user's choice is `users.tracked_macros`; formatters take that list (`DEFAULT_MACROS` is protein only).
 
-Adding a macro: its registry entry, then the column in `src/db/schema.sql` and `COLUMN_MIGRATIONS`, `src/ai/prompt.ts` (opening line, shape line, batch instruction, examples), the first line of OpenAI's `INSTRUCTIONS` (`src/ai/providers/openai.ts`), `MACRO_LABELS` in `src/web/views/app.html`, "all four" in `MACROS_SCREEN_TEXT` (`src/bot/commands/settings.ts`), and `HELP_TEXT` (`src/bot/help.ts`).
+Adding a macro: its registry entry, then the column in `src/db/schema.sql` and `COLUMN_MIGRATIONS`, `src/ai/prompt.ts` (opening line, shape line, batch instruction, examples), the first line of OpenAI's `INSTRUCTIONS` (`src/ai/providers/openai.ts`), `MACRO_LABELS` in `src/web/views/app.html`, "all four" in `MACROS_SCREEN_TEXT` (`src/bot/commands/settings.ts`), `HELP_TEXT` (`src/bot/help.ts`), the column in `food_library` (`src/db/schema.sql`, `REAL`), `FOODS_PARSE_PROMPT` (`src/ai/prompt.ts`), and `form` in `MACRO_LABELS`.
+
+**Food library** (`src/library/`, behind `FEATURE_LOCAL_FOOD_DB`): each user's saved foods, label values per serving (`food_library`). `MealEstimator` (`estimator.ts`) is the one entry point for meal estimates (`LogFlow`, the retry job): a meal that `match.ts` matches entirely in code makes no AI call; otherwise up to 15 saved foods go into the AI's user message (never the system prompt) and code applies their label values to the items the AI ties to them. The shared cache is skipped whenever saved foods are involved. Nothing is saved without a preview and a Save tap: `validate.ts` gates every row, `preview.ts` builds the preview. `/foods` (`src/bot/commands/foods.ts`) adds foods by paste, `/foods add`, or "Save to my foods" on a logged meal; the Mini App Foods tab lists, edits and deletes them through `/api/foods`. Spec: `docs/superpowers/specs/2026-11-08-food-library-design.md`.
 
 **AI Service** (`src/ai/`):
 - `service.ts` - Provider abstraction with caching layer
 - `providers/` - OpenAI, Anthropic, Gemini implementations with shared `AIProvider` interface
 - Caching uses `estimation_cache` table keyed by normalized food description; an entry counts only if every macro is a number
+- `parseFoods` turns a pasted table into rows (call type `import`, no cache)
 
 **Database** (`src/db/`):
 - Uses `bun:sqlite` (built-in SQLite)
@@ -58,7 +61,7 @@ Adding a macro: its registry entry, then the column in `src/db/schema.sql` and `
 - Landing page at `/` (`views/landing.html`, `{{BOT_USERNAME}}`/`{{BASE_URL}}`/`{{ANALYTICS}}` filled at startup); images in `public/` served at `/assets/*`
 - `analytics-snippet.ts` - PostHog for the web pages (cookieless, automatic capture off); `{{ANALYTICS}}` is empty without a key. Request access links carry `data-cta` for click tracking. `scrubEvent` (before_send) cuts the URL fragment, where Telegram puts initData, and person properties from every event
 - Mini App at `/app` (`views/app.html`, `{{ANALYTICS}}` filled at startup); `config.web.miniAppUrl` points the View Charts buttons there. PostHog loads only once `/api/user` returns `analytics_id` (the hashed ID, `null` without a key), then identifies and sends `$pageview`, `miniapp_tab_changed`, `miniapp_metric_changed`, `miniapp_day_opened`
-- `api.ts` - JSON for the Mini App; changes must be additive, since Telegram caches `app.html`
+- `api.ts` - JSON for the Mini App; changes must be additive, since Telegram caches `app.html`. `/api/foods` (GET, PATCH, DELETE) are the only routes that change data; same-origin only
 - `auth.ts` - Telegram initData validation for secure auth
 
 **Analytics** (`src/analytics/`):
@@ -90,7 +93,7 @@ All config via environment variables (see `.env.example`):
 - `TELEGRAM_BOT_TOKEN` - Required
 - `ADMIN_USERS` - Comma-separated Telegram IDs for admin access
 - AI provider keys (at least one required): `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`
-- Feature flags: `FEATURE_CACHING`, `FEATURE_LOCAL_FOOD_DB`
+- Feature flags: `FEATURE_CACHING`, `FEATURE_LOCAL_FOOD_DB` (food library)
 - PostHog (optional): `POSTHOG_API_KEY`, `POSTHOG_HOST`, `POSTHOG_ID_SECRET` (required with a key), `POSTHOG_ENVIRONMENT`
 
 ### Database Tables
@@ -98,7 +101,8 @@ All config via environment variables (see `.env.example`):
 - `allowed_users` - Access control allowlist
 - `access_requests` - Requests from non-allowlisted users (pending → approved | declined)
 - `users` - User preferences (ai_provider, daily_goal, daily_protein_goal, tracked_macros, reminder_time, analytics_content)
-- `food_logs` / `food_items` - Log sessions and individual items (`calories`, nullable `protein_g`, `fat_g`, `fiber_g`, `added_sugar_g`)
+- `food_logs` / `food_items` - Log sessions and individual items (`calories`, nullable `protein_g`, `fat_g`, `fiber_g`, `added_sugar_g`); `food_items` has a nullable `saved_food_id`
+- `food_library` - Saved foods per user, label values per serving
 - `conversation_state` - Active `/log` conversations
 - `pending_entries` - Failed AI calls awaiting retry
 - `estimation_cache` - Cached AI responses

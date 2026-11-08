@@ -14,6 +14,7 @@ Describe what you ate in natural language, and TeleCal estimates calories, prote
 - **Daily reminders** - Optional notifications to log meals
 - **Estimation caching** - Faster responses for repeated foods
 - **Access control** - Allowlist, plus in-bot access requests that admins approve with one tap
+- **Saved foods.** Paste your own table of nutrition label values (or save a logged meal), and logging uses those exact values, with no AI call when a meal is all saved foods. Behind `FEATURE_LOCAL_FOOD_DB`.
 
 ## Requirements
 
@@ -78,6 +79,7 @@ bun run start
 |---------|-------------|
 | `/start` | Welcome message and command list |
 | `/log` | Start logging food |
+| `/foods` | Save foods with their label values (paste a table, or /foods add) |
 | `/today` | View today's calories and macros |
 | `/week` | View past 7 days |
 | `/month` | View past 30 days |
@@ -141,6 +143,8 @@ ID, and delete the person. Deleting a person also deletes their events.
 3. AI estimates calories and macros and may ask clarifying questions
 4. Tap **✅ Log** to save it, or **✏️ Change** to describe it again (typing "yes" / "no" also works)
 5. Tap **✖️ Cancel**, or send "cancel" at any point, to exit
+
+With saved foods, a meal made only of them is logged straight from their labels.
 
 ## Landing page assets
 
