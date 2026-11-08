@@ -12,14 +12,19 @@ export type FoodItem = {
   description: string
   calories: number
   emoji?: string
+  /** The saved food this item came from; null or missing = not from the library. */
+  saved_food_id?: number | null
 } & Partial<Record<MacroColumn, number | null>>
 
 export type DayTotals = Totals
 
-type FoodItemRow = { id: number; description: string; calories: number; emoji: string | null } & Record<
-  MacroColumn,
-  number | null
->
+type FoodItemRow = {
+  id: number
+  description: string
+  calories: number
+  emoji: string | null
+  saved_food_id: number | null
+} & Record<MacroColumn, number | null>
 
 const MACRO_COLUMNS = MACROS.map((m) => m.column)
 /** `COALESCE(SUM(fi.protein_g), 0) AS protein, …`, built from registry constants, never from input. */
@@ -59,8 +64,8 @@ export class FoodLogsRepository {
     }
 
     const itemStmt = this.db.prepare(`
-      INSERT INTO food_items (log_id, description, calories, ${MACRO_COLUMNS.join(", ")}, emoji)
-      VALUES (?, ?, ?, ${MACRO_COLUMNS.map(() => "?").join(", ")}, ?)
+      INSERT INTO food_items (log_id, description, calories, ${MACRO_COLUMNS.join(", ")}, emoji, saved_food_id)
+      VALUES (?, ?, ?, ${MACRO_COLUMNS.map(() => "?").join(", ")}, ?, ?)
       RETURNING *
     `)
 
@@ -70,7 +75,8 @@ export class FoodLogsRepository {
         item.description,
         item.calories,
         ...MACRO_COLUMNS.map((column) => item[column] ?? null),
-        item.emoji ?? null
+        item.emoji ?? null,
+        item.saved_food_id ?? null
       ) as FoodItemRow
       return { ...row, emoji: row.emoji ?? undefined }
     })
@@ -103,6 +109,14 @@ export class FoodLogsRepository {
         items: items.map((i) => ({ ...i, emoji: i.emoji ?? undefined })),
       }
     })
+  }
+
+  /** A log's items, or null when the log does not exist or is not this user's. */
+  getItemsByLog(telegramId: number, logId: number): FoodItem[] | null {
+    const log = this.db.prepare("SELECT id FROM food_logs WHERE id = ? AND telegram_id = ?").get(logId, telegramId)
+    if (!log) return null
+    const rows = this.db.prepare("SELECT * FROM food_items WHERE log_id = ? ORDER BY id").all(logId) as FoodItemRow[]
+    return rows.map((row) => ({ ...row, emoji: row.emoji ?? undefined }))
   }
 
   getTotals(telegramId: number, targetDate: string): DayTotals {

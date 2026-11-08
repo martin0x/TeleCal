@@ -170,4 +170,19 @@ describe("FoodLogsRepository", () => {
       expect(repo.fillMissingMacros("Ramen", {})).toBe(0)
     })
   })
+
+  test("stores saved_food_id with an item; null when not given", () => {
+    const log = repo.create(123, 1, "2026-01-31", [
+      { description: "Quaker Oats ×2", calories: 300, protein_g: 10, saved_food_id: 7 },
+      { description: "Banana", calories: 105 },
+    ])
+    expect(log.items.map((i) => i.saved_food_id)).toEqual([7, null])
+  })
+
+  test("getItemsByLog returns a log's items to its owner only", () => {
+    const log = repo.create(123, 1, "2026-01-31", [{ description: "Banana", calories: 105 }])
+    expect(repo.getItemsByLog(123, log.id)?.map((i) => i.description)).toEqual(["Banana"])
+    expect(repo.getItemsByLog(1, log.id)).toBeNull()
+    expect(repo.getItemsByLog(123, 424242)).toBeNull()
+  })
 })

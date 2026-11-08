@@ -65,7 +65,30 @@ CREATE TABLE IF NOT EXISTS food_items (
   fiber_g INTEGER,              -- whole grams; null = not yet estimated
   added_sugar_g INTEGER,        -- whole grams; null = not yet estimated
   emoji TEXT,
+  -- The saved food this item came from (food_library.id); null = not from the library.
+  -- No foreign key: values are copied at log time, so a deleted food leaves a harmless dangling id.
+  saved_food_id INTEGER,
   FOREIGN KEY (log_id) REFERENCES food_logs(id) ON DELETE CASCADE
+);
+
+-- A user's saved foods: label values per serving (/foods, Mini App Foods tab)
+CREATE TABLE IF NOT EXISTS food_library (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  telegram_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  normalized_name TEXT NOT NULL,   -- normalizeFoodName(name); matching and duplicates
+  serving TEXT NOT NULL,           -- the label's wording, e.g. '1/2 cup (40 g)'
+  serving_amount REAL,             -- 40; null when the label gives no amount
+  serving_unit TEXT,               -- 'g' | 'ml'; null exactly when serving_amount is
+  calories INTEGER NOT NULL,       -- per serving
+  protein_g REAL,                  -- per serving; null = not on the label
+  fat_g REAL,
+  fiber_g REAL,
+  added_sugar_g REAL,
+  source TEXT NOT NULL,            -- import | single | log
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  UNIQUE (telegram_id, normalized_name)
 );
 
 -- Active conversations for /log flow

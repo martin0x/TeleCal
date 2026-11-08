@@ -1,7 +1,7 @@
 // src/db/migrations.test.ts
 import { describe, test, expect } from "bun:test"
 import { Database } from "bun:sqlite"
-import { runMigrations, hasColumn } from "./migrations"
+import { runMigrations, hasColumn, COLUMN_MIGRATIONS } from "./migrations"
 
 /** users, food_logs and food_items exactly as they were before protein tracking. */
 function preProteinDb(): Database {
@@ -99,5 +99,18 @@ describe("runMigrations", () => {
     runMigrations(db, undefined, () => {})
 
     expect(db.prepare("SELECT tracked_macros FROM users").get()).toEqual({ tracked_macros: "protein" })
+  })
+})
+
+describe("saved_food_id", () => {
+  test("is added to an existing food_items", () => {
+    const db = new Database(":memory:")
+    db.run("CREATE TABLE food_items (id INTEGER PRIMARY KEY, log_id INTEGER, description TEXT, calories INTEGER)")
+    runMigrations(
+      db,
+      COLUMN_MIGRATIONS.filter((m) => m.table === "food_items"),
+      () => {}
+    )
+    expect(hasColumn(db, "food_items", "saved_food_id")).toBe(true)
   })
 })
