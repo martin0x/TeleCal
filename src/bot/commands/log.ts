@@ -5,7 +5,7 @@ import { ConversationsRepository } from "../../db/repositories/conversations"
 import { UsersRepository } from "../../db/repositories/users"
 import type { MacroKey, Totals } from "../../macros"
 import { getTodayInTimezone, getYesterdayInTimezone, formatDate, DEFAULT_TIMEZONE } from "../../utils/dates"
-import { encodeLogCallback, parseLogCallback, LogAction } from "../utils/callback-data"
+import { encodeLogCallback, encodeFoodsCallback, parseLogCallback, LogAction } from "../utils/callback-data"
 import { stripKeyboard, answerCallback } from "../utils/keyboard"
 import { smartReply, smartEdit } from "../utils/smart-reply"
 
@@ -188,10 +188,16 @@ export function buildLogConfirmKeyboard(
     .text("✖️ Cancel", data("cxl"))
 }
 
+/** On a "Logged" message when the food library is on. */
+export function saveToFoodsKeyboard(ownerId: number, logId: number): InlineKeyboard {
+  return new InlineKeyboard().text("Save to my foods", encodeFoodsCallback({ action: "log", ownerId, logId }))
+}
+
 async function replyWithResult(ctx: Context, ownerId: number, result: LogFlowResult): Promise<void> {
   const options: NonNullable<Parameters<Context["reply"]>[1]> = {}
   if (result.parseMode) options.parse_mode = result.parseMode
   if (result.confirm) options.reply_markup = buildLogConfirmKeyboard(ownerId, result.confirm)
+  if (result.saveOffer) options.reply_markup = saveToFoodsKeyboard(ownerId, result.saveOffer.logId)
   await smartReply(ctx, result.message, options)
 }
 
@@ -226,11 +232,15 @@ export function createLogCallbackHandler(logFlow: LogFlow) {
 
     // Answer before editing so the client's spinner stops even if the edit fails.
     await answerCallback(ctx, outcome.toast)
+    const options = {
+      parse_mode: "HTML" as const,
+      ...(outcome.saveOffer ? { reply_markup: saveToFoodsKeyboard(presserId, outcome.saveOffer.logId) } : {}),
+    }
     try {
-      await smartEdit(ctx, outcome.edit, { parse_mode: "HTML" })
+      await smartEdit(ctx, outcome.edit, options)
     } catch (error) {
       console.error("Failed to edit log confirmation:", error)
-      await smartReply(ctx, outcome.edit, { parse_mode: "HTML" })
+      await smartReply(ctx, outcome.edit, options)
     }
 
     if (outcome.followUp) {

@@ -5,8 +5,9 @@ import type { LogFlow, ConfirmationOutcome } from "../conversations/log-flow"
 import type { ConversationsRepository } from "../../db/repositories/conversations"
 import type { UsersRepository } from "../../db/repositories/users"
 import { getTodayInTimezone, getYesterdayInTimezone } from "../../utils/dates"
-import { buildLogConfirmKeyboard, createLogCallbackHandler, createLogCommand, parseLogArgs } from "./log"
+import { buildLogConfirmKeyboard, createLogCallbackHandler, createLogCommand, parseLogArgs, saveToFoodsKeyboard } from "./log"
 import { zeroTotals } from "../../macros"
+import { encodeLogCallback, encodeFoodsCallback } from "../utils/callback-data"
 
 function fakeCallbackCtx(data: string, fromId = 42) {
   return {
@@ -212,5 +213,27 @@ describe("createLogCallbackHandler", () => {
     expect(ctx.editMessageText).toHaveBeenCalledWith("EDIT", { parse_mode: "HTML" })
     expect(errorSpy).toHaveBeenCalledTimes(1)
     errorSpy.mockRestore()
+  })
+})
+
+describe("Save to my foods", () => {
+  test("the Log button's edit carries the button when the outcome offers it", async () => {
+    const { ctx } = await press(
+      encodeLogCallback({ action: "ok", ownerId: 42, token: "0123abcd" }),
+      { ...LOGGED, saveOffer: { logId: 77 } }
+    )
+    const options = ctx.editMessageText.mock.calls[0][1] as any
+    expect(options.reply_markup.inline_keyboard).toEqual([
+      [{ text: "Save to my foods", callback_data: encodeFoodsCallback({ action: "log", ownerId: 42, logId: 77 }) }],
+    ])
+  })
+
+  test("without an offer the edit has no keyboard", async () => {
+    const { ctx } = await press(encodeLogCallback({ action: "ok", ownerId: 42, token: "0123abcd" }), LOGGED)
+    expect(ctx.editMessageText.mock.calls[0][1]).toEqual({ parse_mode: "HTML" })
+  })
+
+  test("saveToFoodsKeyboard", () => {
+    expect(saveToFoodsKeyboard(42, 77).inline_keyboard[0][0]).toMatchObject({ text: "Save to my foods" })
   })
 })

@@ -10,7 +10,7 @@ import type { FoodLogsRepository } from "../../db/repositories/food-logs"
 import type { UsersRepository } from "../../db/repositories/users"
 import type { Analytics } from "../../analytics"
 import type { FoodSource } from "../../library/types"
-import { formatPreview, importPreview, type Preview } from "../../library/preview"
+import { formatPreview, importPreview, logPreview, type Preview } from "../../library/preview"
 import { shortHash } from "../../utils/format"
 import { encodeFoodsCallback, parseFoodsCallback } from "../utils/callback-data"
 import { answerCallback, stripKeyboard } from "../utils/keyboard"
@@ -258,8 +258,23 @@ export function createFoodsCallbackHandler(deps: FoodsDeps) {
       case "save":
         return save(ctx, deps, presserId, parsed.token)
       case "log":
-        // Save from a log: Task 10.
-        return expired(ctx)
+        return offerLog(ctx, deps, presserId, parsed.logId)
     }
   }
+}
+
+async function offerLog(ctx: Context, deps: FoodsDeps, userId: number, logId: number): Promise<void> {
+  const items = deps.foodLogs.getItemsByLog(userId, logId)
+  if (!items) {
+    await answerCallback(ctx, "That entry is no longer there.")
+    await stripKeyboard(ctx)
+    return
+  }
+  const preview = logPreview(items, deps.library.listByUser(userId))
+  if (preview.rows.length === 0) {
+    await answerCallback(ctx, preview.unreadable.length > 0 ? "Couldn't read those items." : "These are already in your foods.")
+    return
+  }
+  await answerCallback(ctx)
+  await showPreview(ctx, userId, "log", preview)
 }

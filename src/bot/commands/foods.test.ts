@@ -231,3 +231,45 @@ test("parseFoodsCallback reads what the preview sends", async () => {
   const preview = await run("/foods add x")
   expect(parseFoodsCallback(saveData(preview))).toMatchObject({ action: "save", ownerId: OWNER })
 })
+
+describe("save from a log", () => {
+  function logged(items: Parameters<FoodLogsRepository["create"]>[3], owner = OWNER) {
+    return foodLogs.create(owner, 555, "2026-11-08", items)
+  }
+
+  test("previews the log's items with toggles, leaving out items from saved foods; Save stores only the ones on", async () => {
+    const log = logged([
+      { description: "Chicken adobo (1 cup)", calories: 350, protein_g: 30, emoji: "🍗" },
+      { description: "Garlic rice (1 cup)", calories: 300, protein_g: 5, emoji: "🍚" },
+      { description: "Quaker Oats ×2", calories: 300, protein_g: 10, saved_food_id: 1 },
+    ])
+    const ctx = await press(encodeFoodsCallback({ action: "log", ownerId: OWNER, logId: log.id }))
+
+    expect(ctx.reply.mock.calls[0][0]).toStartWith("Save to your foods? Values are per serving, as logged.\n1. Chicken adobo (1 cup)")
+    expect(ctx.reply.mock.calls[0][0]).not.toContain("Quaker Oats")
+    expect(buttons(ctx).map((b) => b.text)).toEqual(["1 ✓", "2 ✓", "Save 2", "Cancel"])
+
+    const toggle = buttons(ctx).find((b) => b.text === "2 ✓")!.data!
+    const toggled = await press(toggle)
+    const markup = (toggled.editMessageReplyMarkup.mock.calls[0][0] as any).reply_markup.inline_keyboard.flat()
+    expect(markup.map((b: any) => b.text)).toEqual(["1 ✓", "2", "Save 1", "Cancel"])
+
+    await press(saveData(ctx))
+    const saved = library.listByUser(OWNER)
+    expect(saved.map((f) => [f.name, f.serving, f.source])).toEqual([["Chicken adobo (1 cup)", "as logged", "log"]])
+  })
+
+  test("a log made only of saved foods: says so", async () => {
+    const log = logged([{ description: "Quaker Oats ×2", calories: 300, saved_food_id: 1 }])
+    const ctx = await press(encodeFoodsCallback({ action: "log", ownerId: OWNER, logId: log.id }))
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith("These are already in your foods.")
+    expect(ctx.reply).not.toHaveBeenCalled()
+  })
+
+  test("someone else's log shows nothing", async () => {
+    const log = logged([{ description: "Banana", calories: 105 }], OTHER)
+    const ctx = await press(encodeFoodsCallback({ action: "log", ownerId: OWNER, logId: log.id }))
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith("That entry is no longer there.")
+    expect(ctx.reply).not.toHaveBeenCalled()
+  })
+})
