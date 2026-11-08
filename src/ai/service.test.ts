@@ -41,6 +41,9 @@ function fakeProvider(result: ProviderResult | Error): AIProvider {
     estimateMacros: async () => {
       throw new Error("not used in this test")
     },
+    parseFoods: async () => {
+      throw new Error("not used in this test")
+    },
   }
 }
 
@@ -106,7 +109,7 @@ describe("usage recording", () => {
 
     const result = await service.estimate("chicken adobo", "openai", OPTS)
 
-    expect(result).toEqual(ESTIMATE)
+    expect(result).toEqual({ ...ESTIMATE, cached: true })
     expect(usage.rows).toHaveLength(0)
   })
 
@@ -212,6 +215,56 @@ describe("macro-aware cache", () => {
 
     expect(usage.rows).toHaveLength(1)
     expect(cache.store.get("chicken adobo")).toEqual(ESTIMATE)
+  })
+})
+
+describe("saved foods", () => {
+  const OATS = {
+    id: 1,
+    telegram_id: 42,
+    source: "import" as const,
+    name: "Quaker Oats",
+    serving: "1/2 cup (40 g)",
+    serving_amount: 40,
+    serving_unit: "g" as const,
+    calories: 150,
+    protein_g: 5,
+    fat_g: 3,
+    fiber_g: 4,
+    added_sugar_g: null,
+  }
+
+  test("go to the provider in the third argument, and the shared cache is neither read nor written", async () => {
+    cache.set("oats", ESTIMATE)
+    const seen: unknown[][] = []
+    const provider: AIProvider = {
+      name: "openai",
+      estimate: async (...args: unknown[]) => {
+        seen.push(args)
+        return OK_RESULT
+      },
+      estimateMacros: async () => {
+        throw new Error("not used")
+      },
+      parseFoods: async () => {
+        throw new Error("not used")
+      },
+    }
+    service = build(provider)
+
+    const result = await service.estimate("oats", "openai", { ...OPTS, savedFoods: [OATS] })
+
+    expect(result.cached).toBeUndefined()
+    expect(seen).toHaveLength(1)
+    expect(String(seen[0][2])).toContain("[1] Quaker Oats")
+    expect([...cache.store.keys()]).toEqual(["oats"])
+    expect(cache.store.get("oats")).toEqual(ESTIMATE)
+  })
+
+  test("an empty list behaves as no saved foods", async () => {
+    service = build(fakeProvider(OK_RESULT))
+    await service.estimate("chicken adobo", "openai", { ...OPTS, savedFoods: [] })
+    expect(cache.store.has("chicken adobo")).toBe(true)
   })
 })
 

@@ -2,7 +2,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { AIProvider, ProviderResult, MacroBatchResult, TokenUsage } from "../types"
 import { config } from "../../config"
-import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT, formatBatchInput } from "../prompt"
+import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT, formatBatchInput, estimateUserMessage } from "../prompt"
 import { normalizeItems, stripFences, alignMacroBatch, parseReply, traceOf } from "../parse"
 
 const MODEL = "gemini-3.5-flash-lite"
@@ -50,10 +50,8 @@ export class GeminiProvider implements AIProvider {
     }
   }
 
-  async estimate(foodDescription: string, context?: string): Promise<ProviderResult> {
-    const userMessage = context
-      ? `Context from previous conversation: ${context}\n\nFood to estimate: ${foodDescription}`
-      : foodDescription
+  async estimate(foodDescription: string, context?: string, savedFoods?: string): Promise<ProviderResult> {
+    const userMessage = estimateUserMessage(foodDescription, context, savedFoods)
 
     const { text, usage } = await this.generate(ESTIMATE_JSON_PROMPT, userMessage)
     const trace = traceOf(ESTIMATE_JSON_PROMPT, userMessage, text)

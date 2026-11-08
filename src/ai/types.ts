@@ -6,6 +6,10 @@ export type FoodEstimate = {
   description: string
   calories: number
   emoji?: string
+  /** The saved food this item is (code-only match, or the AI picked it from the saved foods it was shown). */
+  saved_food_id?: number | null
+  /** Provider output only: how many servings of saved_food_id. MealEstimator consumes it; it is never stored. */
+  servings?: number | null
 } & Record<MacroColumn, number | null>
 
 export interface EstimationResult {
@@ -13,11 +17,14 @@ export interface EstimationResult {
   needsClarification: boolean
   clarificationQuestion?: string
   confidence: "high" | "medium" | "low"
+  /** Set by AIService when the answer came from estimation_cache (nothing billed). */
+  cached?: true
 }
 
 export interface AIProvider {
   name: string
-  estimate(foodDescription: string, context?: string): Promise<ProviderResult>
+  /** savedFoods: formatSavedFoods output, appended to the user message. */
+  estimate(foodDescription: string, context?: string, savedFoods?: string): Promise<ProviderResult>
   /** Every macro for many descriptions in one call; the caller chunks. */
   estimateMacros(descriptions: string[]): Promise<MacroBatchResult>
 }

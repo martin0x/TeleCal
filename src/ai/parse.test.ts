@@ -105,3 +105,22 @@ describe("alignMacroBatch", () => {
     expect(alignMacroBatch(reply, 1)).toEqual([{ protein_g: 14, fat_g: 10, fiber_g: 0, added_sugar_g: null }])
   })
 })
+
+describe("normalizeItems: saved foods", () => {
+  test("keeps saved_food_id and servings when the model sent them, coercing bad values to null", () => {
+    const [a, b, c] = normalizeItems([
+      { description: "Oats", calories: 300, saved_food_id: 12, servings: 2 },
+      { description: "Banana", calories: 105, saved_food_id: null, servings: null },
+      { description: "Rice", calories: 200, saved_food_id: "7", servings: -1 },
+    ])
+    expect([a.saved_food_id, a.servings]).toEqual([12, 2])
+    expect([b.saved_food_id, b.servings]).toEqual([null, null])
+    expect([c.saved_food_id, c.servings]).toEqual([7, null])
+  })
+
+  test("adds neither field when the model did not send them", () => {
+    const [item] = normalizeItems([{ description: "Eggs", calories: 180 }])
+    expect("saved_food_id" in item).toBe(false)
+    expect("servings" in item).toBe(false)
+  })
+})

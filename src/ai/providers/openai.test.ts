@@ -3,7 +3,7 @@ import { describe, test, expect } from "bun:test"
 import OpenAI from "openai"
 import { OpenAIProvider } from "./openai"
 import { ProviderParseError } from "../types"
-import { MACRO_BATCH_PROMPT } from "../prompt"
+import { MACRO_BATCH_PROMPT, SAVED_FOODS_HEADER } from "../prompt"
 import { MACROS, emptyMacroValues } from "../../macros"
 
 /** Captures the arguments a Responses call was made with, and returns a canned reply. */
@@ -199,5 +199,26 @@ describe("OpenAIProvider trace", () => {
     expect(result.trace?.input[0]).toEqual({ role: "system", content: MACRO_BATCH_PROMPT })
     expect(result.trace?.input[1].content).toContain("Rice")
     expect(result.trace?.output).toBe(reply)
+  })
+})
+
+describe("OpenAIProvider: saved foods", () => {
+  test("uses the plain schema without saved foods", async () => {
+    const { client, calls } = fakeClient(VALID_REPLY)
+    await new OpenAIProvider(client).estimate("oats")
+    const item = calls[0].text.format.schema.properties.items.items
+    expect(item.required).not.toContain("saved_food_id")
+    expect(calls[0].input).toBe("oats")
+  })
+
+  test("with saved foods: the block in the input, and a schema with nullable saved_food_id and servings", async () => {
+    const { client, calls } = fakeClient(VALID_REPLY)
+    await new OpenAIProvider(client).estimate("oats", undefined, `${SAVED_FOODS_HEADER}\n[1] Quaker Oats`)
+    const item = calls[0].text.format.schema.properties.items.items
+    expect(item.required).toEqual(expect.arrayContaining(["saved_food_id", "servings"]))
+    expect(item.properties.saved_food_id).toEqual({ type: ["integer", "null"] })
+    expect(item.properties.servings).toEqual({ type: ["number", "null"] })
+    expect(calls[0].input).toBe(`oats\n\n${SAVED_FOODS_HEADER}\n[1] Quaker Oats`)
+    expect(calls[0].text.format.strict).toBe(true)
   })
 })

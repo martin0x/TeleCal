@@ -27,6 +27,18 @@ export function coerceGrams(value: unknown): number | null {
   return grams > MAX_GRAMS ? null : grams
 }
 
+/** A positive whole number (a saved food's id), from a number or digit string; else null. */
+function coerceId(value: unknown): number | null {
+  const num = typeof value === "string" && /^\d+$/.test(value.trim()) ? Number(value) : value
+  return typeof num === "number" && Number.isSafeInteger(num) && num > 0 ? num : null
+}
+
+/** A positive finite number of servings; else null. */
+function coerceServings(value: unknown): number | null {
+  const num = typeof value === "string" && value.trim() !== "" ? Number(value) : value
+  return typeof num === "number" && Number.isFinite(num) && num > 0 ? num : null
+}
+
 /** Items from a parsed estimate, every macro column coerced. Non-arrays become []. */
 export function normalizeItems(items: unknown): FoodEstimate[] {
   if (!Array.isArray(items)) return []
@@ -35,6 +47,9 @@ export function normalizeItems(items: unknown): FoodEstimate[] {
     .map((raw) => ({
       ...(raw as unknown as FoodEstimate),
       ...(Object.fromEntries(MACROS.map((m) => [m.column, coerceGrams(raw[m.column])])) as MacroValues),
+      // Only when the model sent them (saved foods were in the message), so other items keep today's shape.
+      ...("saved_food_id" in raw ? { saved_food_id: coerceId(raw.saved_food_id) } : {}),
+      ...("servings" in raw ? { servings: coerceServings(raw.servings) } : {}),
     }))
 }
 

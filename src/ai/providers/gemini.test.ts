@@ -2,7 +2,7 @@
 import { describe, test, expect } from "bun:test"
 import { GeminiProvider } from "./gemini"
 import { ProviderParseError } from "../types"
-import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT } from "../prompt"
+import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT, SAVED_FOODS_HEADER } from "../prompt"
 import { MACROS, emptyMacroValues } from "../../macros"
 
 const VALID_REPLY = JSON.stringify({
@@ -146,5 +146,25 @@ describe("GeminiProvider trace", () => {
     expect(result.trace?.input[0]).toEqual({ role: "system", content: MACRO_BATCH_PROMPT })
     expect(result.trace?.input[1].content).toContain("Rice")
     expect(result.trace?.output).toBe(reply)
+  })
+})
+
+describe("GeminiProvider: saved foods", () => {
+  test("puts saved foods in the user message and leaves the system prompt alone", async () => {
+    const seen: { system?: string; input?: string } = {}
+    const client = {
+      getGenerativeModel: (opts: any) => {
+        seen.system = opts.systemInstruction
+        return {
+          generateContent: async (input: string) => {
+            seen.input = input
+            return { response: { text: () => VALID_REPLY, usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 } } }
+          },
+        }
+      },
+    } as any
+    await new GeminiProvider(client).estimate("oats", undefined, `${SAVED_FOODS_HEADER}\n[1] Quaker Oats`)
+    expect(seen.system).toBe(ESTIMATE_JSON_PROMPT)
+    expect(seen.input).toBe(`oats\n\n${SAVED_FOODS_HEADER}\n[1] Quaker Oats`)
   })
 })

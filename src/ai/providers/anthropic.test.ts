@@ -3,7 +3,7 @@ import { describe, test, expect } from "bun:test"
 import Anthropic from "@anthropic-ai/sdk"
 import { AnthropicProvider } from "./anthropic"
 import { ProviderParseError } from "../types"
-import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT } from "../prompt"
+import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT, SAVED_FOODS_HEADER } from "../prompt"
 import { MACROS, emptyMacroValues } from "../../macros"
 
 const VALID_REPLY = JSON.stringify({
@@ -134,5 +134,38 @@ describe("AnthropicProvider trace", () => {
     expect(result.trace?.input[0]).toEqual({ role: "system", content: MACRO_BATCH_PROMPT })
     expect(result.trace?.input[1].content).toContain("Rice")
     expect(result.trace?.output).toBe(reply)
+  })
+})
+
+describe("AnthropicProvider: saved foods", () => {
+  function capturingClient(text: string) {
+    const calls: any[] = []
+    const client = {
+      messages: {
+        create: async (params: any) => {
+          calls.push(params)
+          return { model: "claude-haiku-4-5-20251001", content: [{ type: "text", text }], usage: { input_tokens: 1, output_tokens: 1 } }
+        },
+      },
+    } as unknown as Anthropic
+    return { client, calls }
+  }
+
+  test("puts saved foods in the user message and leaves the system prompt alone", async () => {
+    const { client, calls } = capturingClient(VALID_REPLY)
+    await new AnthropicProvider(client).estimate("oats", undefined, `${SAVED_FOODS_HEADER}\n[1] Quaker Oats`)
+    expect(calls[0].system).toBe(ESTIMATE_JSON_PROMPT)
+    expect(calls[0].messages[0].content).toBe(`oats\n\n${SAVED_FOODS_HEADER}\n[1] Quaker Oats`)
+  })
+
+  test("keeps the saved_food_id and servings the model returns", async () => {
+    const reply = JSON.stringify({
+      items: [{ description: "Oats", calories: 300, saved_food_id: 1, servings: 2, emoji: "🥣" }],
+      needsClarification: false,
+      confidence: "high",
+    })
+    const { client } = capturingClient(reply)
+    const result = await new AnthropicProvider(client).estimate("80g oats", undefined, SAVED_FOODS_HEADER)
+    expect(result.estimate.items[0]).toMatchObject({ saved_food_id: 1, servings: 2 })
   })
 })

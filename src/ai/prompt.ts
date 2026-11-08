@@ -5,6 +5,7 @@
 // joins MACRO_RULES by itself, but the shape lines and worked examples below
 // are prose and are updated by hand (prompt.test.ts fails until they are).
 import { MACROS } from "../macros"
+import type { SavedFood } from "../library/types"
 
 /** One rule line per macro, in registry order. Both estimate prompts end their rules with it. */
 export const MACRO_RULES = MACROS.map((m) => m.rule).join("\n")
@@ -44,4 +45,40 @@ ${MACRO_RULES}
 /** "1. Chicken adobo\n2. Rice" — newlines inside a description are collapsed so lines stay lines. */
 export function formatBatchInput(descriptions: string[]): string {
   return descriptions.map((d, i) => `${i + 1}. ${d.replace(/\s+/g, " ").trim()}`).join("\n")
+}
+
+/** The user message for an estimate: the food, with clarification context before it and saved foods after. */
+export function estimateUserMessage(foodDescription: string, context?: string, savedFoods?: string): string {
+  const base = context
+    ? `Context from previous conversation: ${context}\n\nFood to estimate: ${foodDescription}`
+    : foodDescription
+  return savedFoods ? `${base}\n\n${savedFoods}` : base
+}
+
+export const SAVED_FOODS_HEADER = "Saved foods (the user's own label values, per serving):"
+
+function labelValue(value: number | null, name: string): string {
+  return value === null ? `${name} not on label` : `${name} ${value} g`
+}
+
+/**
+ * The saved-foods block. It goes in the user message, never the system
+ * prompt, so the system prompt stays identical across users (provider prompt
+ * caching) and calls without saved foods stay byte-identical. It carries its
+ * own instructions for the two extra fields.
+ */
+export function formatSavedFoods(foods: SavedFood[]): string {
+  const lines = foods.map(
+    (f) =>
+      `[${f.id}] ${f.name}, serving ${f.serving}: ${f.calories} kcal, ` +
+      MACROS.map((m) => labelValue(f[m.column], m.totalLabel)).join(", ")
+  )
+  return [
+    SAVED_FOODS_HEADER,
+    ...lines,
+    "",
+    "Add two fields to every item. If the item is one of these saved foods: saved_food_id is its number in brackets, " +
+      "and servings is how many servings were eaten (convert the amount eaten using the serving size; 1 when no amount is given). " +
+      "Otherwise both are null. Still give your own estimate for every other field.",
+  ].join("\n")
 }

@@ -12,12 +12,16 @@ import { config } from "../config"
 import { noopAnalytics, type Analytics } from "../analytics"
 import { MACROS, type MacroValues } from "../macros"
 import { normalizeFoodText } from "../utils/normalize"
+import { formatSavedFoods } from "./prompt"
+import type { SavedFood } from "../library/types"
 
 export interface EstimateOptions {
   telegramId: number
   chatId: number | null
   callType: CallType
   context?: string
+  /** The user's saved foods relevant to this message. Non-empty: shown to the AI, and the shared cache is skipped. */
+  savedFoods?: SavedFood[]
 }
 
 export interface BatchOptions {
@@ -62,15 +66,18 @@ export class AIService {
     opts: EstimateOptions
   ): Promise<EstimationResult> {
     const normalizedFood = normalizeFoodText(foodDescription)
+    const savedFoods = opts.savedFoods && opts.savedFoods.length > 0 ? formatSavedFoods(opts.savedFoods) : undefined
+    // The shared cache holds generic answers. With this user's labels involved,
+    // a hit would ignore them and a write would leak them to other users.
+    const useCache = !opts.context && !savedFoods && config.features.caching
 
-    // Check cache first (only if no context and caching enabled)
-    if (!opts.context && config.features.caching) {
+    if (useCache) {
       const cached = this.cache.get(normalizedFood)
-      if (cached && isCurrentShape(cached)) return cached // nothing billed, nothing recorded
+      if (cached && isCurrentShape(cached)) return { ...cached, cached: true } // nothing billed, nothing recorded
     }
 
     const provider = this.resolveProvider(providerName)
-    return this.estimateWithProvider(provider, foodDescription, normalizedFood, opts)
+    return this.estimateWithProvider(provider, foodDescription, normalizedFood, opts, { savedFoods, useCache })
   }
 
   /**
@@ -113,12 +120,13 @@ export class AIService {
     provider: AIProvider,
     foodDescription: string,
     normalizedFood: string,
-    opts: EstimateOptions
+    opts: EstimateOptions,
+    call: { savedFoods?: string; useCache: boolean }
   ): Promise<EstimationResult> {
     let result
     const started = performance.now()
     try {
-      result = await provider.estimate(foodDescription, opts.context)
+      result = await provider.estimate(foodDescription, opts.context, call.savedFoods)
     } catch (error) {
       this.recordFailure(error, provider.name, opts, performance.now() - started)
       throw error
@@ -132,7 +140,7 @@ export class AIService {
     const estimate = result.estimate
     // A result with an unknown macro is not worth keeping: the next ask should
     // get another chance at a complete answer.
-    if (!estimate.needsClarification && !opts.context && config.features.caching && isCurrentShape(estimate)) {
+    if (!estimate.needsClarification && call.useCache && isCurrentShape(estimate)) {
       this.cache.set(normalizedFood, estimate)
     }
 

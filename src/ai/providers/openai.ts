@@ -2,7 +2,7 @@
 import OpenAI from "openai"
 import { AIProvider, ProviderResult, MacroBatchResult, TokenUsage } from "../types"
 import { config } from "../../config"
-import { MACRO_RULES, MACRO_BATCH_PROMPT, formatBatchInput } from "../prompt"
+import { MACRO_RULES, MACRO_BATCH_PROMPT, formatBatchInput, estimateUserMessage } from "../prompt"
 import { normalizeItems, alignMacroBatch, parseReply, traceOf } from "../parse"
 import { MACROS } from "../../macros"
 
@@ -23,36 +23,48 @@ ${MACRO_RULES}`
 const MACRO_PROPERTIES = Object.fromEntries(MACROS.map((m) => [m.column, { type: "number" }]))
 const MACRO_COLUMNS = MACROS.map((m) => m.column)
 
+const ESTIMATE_ITEM_PROPERTIES = {
+  description: { type: "string" },
+  calories: { type: "number" },
+  ...MACRO_PROPERTIES,
+  emoji: { type: "string" },
+}
+const ESTIMATE_ITEM_REQUIRED = ["description", "calories", ...MACRO_COLUMNS, "emoji"]
+
+function estimateSchema(itemProperties: Record<string, unknown>, itemRequired: string[]) {
+  return {
+    type: "object",
+    properties: {
+      items: {
+        type: "array",
+        items: { type: "object", properties: itemProperties, required: itemRequired, additionalProperties: false },
+      },
+      needsClarification: { type: "boolean" },
+      clarificationQuestion: { type: "string" },
+      confidence: { type: "string", enum: ["high", "medium", "low"] },
+    },
+    required: ["items", "needsClarification", "clarificationQuestion", "confidence"],
+    additionalProperties: false,
+  }
+}
+
 /**
  * Strict Structured Outputs requires every property to appear in `required`
  * and `additionalProperties: false` on every object. Fields that are
  * conceptually optional (clarificationQuestion, emoji) are therefore required
  * here and filled with an empty string when not applicable — see INSTRUCTIONS.
  */
-const ESTIMATE_SCHEMA = {
-  type: "object",
-  properties: {
-    items: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          description: { type: "string" },
-          calories: { type: "number" },
-          ...MACRO_PROPERTIES,
-          emoji: { type: "string" },
-        },
-        required: ["description", "calories", ...MACRO_COLUMNS, "emoji"],
-        additionalProperties: false,
-      },
-    },
-    needsClarification: { type: "boolean" },
-    clarificationQuestion: { type: "string" },
-    confidence: { type: "string", enum: ["high", "medium", "low"] },
+const ESTIMATE_SCHEMA = estimateSchema(ESTIMATE_ITEM_PROPERTIES, ESTIMATE_ITEM_REQUIRED)
+
+/** With saved foods in the message: the same, plus saved_food_id and servings, nullable so strict mode allows null. */
+const ESTIMATE_WITH_SAVED_SCHEMA = estimateSchema(
+  {
+    ...ESTIMATE_ITEM_PROPERTIES,
+    saved_food_id: { type: ["integer", "null"] },
+    servings: { type: ["number", "null"] },
   },
-  required: ["items", "needsClarification", "clarificationQuestion", "confidence"],
-  additionalProperties: false,
-} as const
+  [...ESTIMATE_ITEM_REQUIRED, "saved_food_id", "servings"]
+)
 
 const MACRO_BATCH_SCHEMA = {
   type: "object",
@@ -106,10 +118,8 @@ export class OpenAIProvider implements AIProvider {
     this.client = client ?? new OpenAI({ apiKey: config.ai.openaiApiKey })
   }
 
-  async estimate(foodDescription: string, context?: string): Promise<ProviderResult> {
-    const userMessage = context
-      ? `Context from previous conversation: ${context}\n\nFood to estimate: ${foodDescription}`
-      : foodDescription
+  async estimate(foodDescription: string, context?: string, savedFoods?: string): Promise<ProviderResult> {
+    const userMessage = estimateUserMessage(foodDescription, context, savedFoods)
 
     const response = await this.client.responses.create({
       model: MODEL,
@@ -123,7 +133,7 @@ export class OpenAIProvider implements AIProvider {
         format: {
           type: "json_schema",
           name: "calorie_estimate",
-          schema: ESTIMATE_SCHEMA,
+          schema: savedFoods ? ESTIMATE_WITH_SAVED_SCHEMA : ESTIMATE_SCHEMA,
           strict: true,
         },
       },
