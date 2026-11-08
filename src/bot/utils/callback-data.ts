@@ -1,5 +1,5 @@
 // src/bot/utils/callback-data.ts
-// Payload formats for the /log and /delete confirmation buttons. Every button
+// Payload formats for the /log, /delete and /foods buttons. Every button
 // carries the id of the user it was sent to: in a group chat anyone can press
 // any keyboard, and ctx.from is the presser, not the owner. Telegram caps
 // callback data at 64 bytes.
@@ -73,6 +73,58 @@ export function parseDeleteCallback(data: string): DeleteCallback | null {
     }
     case "cxl":
       return parts.length === 3 ? { action: "cxl", ownerId } : null
+    default:
+      return null
+  }
+}
+
+export type FoodsCallback =
+  | { action: "add"; ownerId: number }
+  | { action: "save"; ownerId: number; token: string }
+  | { action: "cxl"; ownerId: number; token: string }
+  | { action: "tog"; ownerId: number; index: number; token: string }
+  | { action: "log"; ownerId: number; logId: number }
+
+export function encodeFoodsCallback(cb: FoodsCallback): string {
+  switch (cb.action) {
+    case "add":
+      return `foods:add:${cb.ownerId}`
+    case "save":
+      return `foods:save:${cb.ownerId}:${cb.token}`
+    case "cxl":
+      return `foods:cxl:${cb.ownerId}:${cb.token}`
+    case "tog":
+      return `foods:tog:${cb.ownerId}:${cb.index}:${cb.token}`
+    case "log":
+      return `foods:log:${cb.ownerId}:${cb.logId}`
+  }
+}
+
+export function parseFoodsCallback(data: string): FoodsCallback | null {
+  const parts = data.split(":")
+  if (parts[0] !== "foods") return null
+
+  const ownerId = parseId(parts[2])
+  if (ownerId === null) return null
+
+  switch (parts[1]) {
+    case "add":
+      return parts.length === 3 ? { action: "add", ownerId } : null
+    case "save":
+    case "cxl": {
+      if (parts.length !== 4 || !TOKEN.test(parts[3])) return null
+      return { action: parts[1] as "save" | "cxl", ownerId, token: parts[3] }
+    }
+    case "tog": {
+      if (parts.length !== 5 || !TOKEN.test(parts[4])) return null
+      const index = parseId(parts[3])
+      return index === null ? null : { action: "tog", ownerId, index, token: parts[4] }
+    }
+    case "log": {
+      if (parts.length !== 4) return null
+      const logId = parseId(parts[3])
+      return logId === null ? null : { action: "log", ownerId, logId }
+    }
     default:
       return null
   }

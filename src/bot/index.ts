@@ -23,6 +23,14 @@ import { createEditCommand, createEditMessageHandler, hasEditState } from "./com
 import { createSettingsCommand, createSettingsCallbackHandler, createSettingsMessageHandler, hasPendingSettings } from "./commands/settings"
 import { createPendingCommand, createPendingCallbackHandler } from "./commands/pending"
 import { createUsageCommand } from "./commands/usage"
+import {
+  createFoodsCommand,
+  createFoodsMessageHandler,
+  createFoodsCallbackHandler,
+  isAwaitingFoodsPaste,
+  stopAwaitingPaste,
+  type FoodsDeps,
+} from "./commands/foods"
 import { LogFlow } from "./conversations/log-flow"
 import { AIService } from "../ai/service"
 import { FoodLibraryRepository } from "../db/repositories/food-library"
@@ -57,6 +65,16 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
     foodLibrary: foodLibraryEnabled,
   })
 
+  const foodsDeps: FoodsDeps = {
+    enabled: foodLibraryEnabled,
+    library: foodLibraryRepo,
+    foodLogs: foodLogsRepo,
+    ai: aiService,
+    users: usersRepo,
+    analytics,
+    miniAppUrl: config.web.miniAppUrl,
+  }
+
   const accessRequestsRepo = new AccessRequestsRepository(db)
   const announcementsRepo = new AnnouncementsRepository(db)
   bot.use(
@@ -76,6 +94,12 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
     return next()
   })
 
+  // Any command stops /foods waiting for a paste, so the next message isn't taken as one.
+  bot.use(async (ctx, next) => {
+    if (ctx.from && ctx.message?.text?.startsWith("/")) stopAwaitingPaste(ctx.from.id)
+    return next()
+  })
+
   bot.command("start", async (ctx) => {
     await smartReply(ctx, HELP_TEXT)
   })
@@ -92,6 +116,7 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
   bot.command("edit", createEditCommand(foodLogsRepo, usersRepo))
   bot.command("settings", createSettingsCommand(usersRepo, aiService))
   bot.command("pending", createPendingCommand(pendingRepo))
+  bot.command("foods", createFoodsCommand(foodsDeps))
 
   // Handle callback queries for inline keyboards
   bot.on("callback_query:data", async (ctx, next) => {
@@ -111,6 +136,9 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
     if (data?.startsWith("access:")) {
       return createAccessDecisionHandler({ accessRequestsRepo, allowedUsersRepo, adminIds: config.adminUsers, analytics })(ctx)
     }
+    if (data?.startsWith("foods:")) {
+      return createFoodsCallbackHandler(foodsDeps)(ctx)
+    }
     return next()
   })
 
@@ -119,13 +147,14 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
   const deleteMessageHandler = createDeleteMessageHandler(foodLogsRepo, usersRepo)
   const editMessageHandler = createEditMessageHandler(foodLogsRepo, usersRepo, aiService)
   const settingsMessageHandler = createSettingsMessageHandler(usersRepo)
+  const foodsMessageHandler = createFoodsMessageHandler(foodsDeps)
 
   // Handle text messages - route to appropriate handler based on active state
   bot.on("message:text", async (ctx) => {
     const userId = ctx.from?.id
     if (!userId) return
 
-    // Priority order: settings > delete > edit > log conversation
+    // Priority order: settings > delete > edit > foods paste > log conversation
     if (hasPendingSettings(userId)) {
       return settingsMessageHandler(ctx)
     }
@@ -134,6 +163,9 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
     }
     if (hasEditState(userId)) {
       return editMessageHandler(ctx)
+    }
+    if (isAwaitingFoodsPaste(userId)) {
+      return foodsMessageHandler(ctx)
     }
     // Default to log conversation handler
     return logMessageHandler(ctx)

@@ -5,6 +5,8 @@ import {
   parseLogCallback,
   encodeDeleteCallback,
   parseDeleteCallback,
+  encodeFoodsCallback,
+  parseFoodsCallback,
   LogCallback,
   DeleteCallback,
 } from "./callback-data"
@@ -88,4 +90,26 @@ describe("delete callback data", () => {
     const data = encodeDeleteCallback({ action: "all", ownerId: BIG_ID, date: "2026-09-25", token: "abcd1234" })
     expect(Buffer.byteLength(data)).toBeLessThanOrEqual(64)
   })
+})
+
+describe("foods callbacks", () => {
+  test.each([
+    { action: "add" as const, ownerId: 42 },
+    { action: "save" as const, ownerId: 42, token: "0123abcd" },
+    { action: "cxl" as const, ownerId: 42, token: "0123abcd" },
+    { action: "tog" as const, ownerId: 42, index: 3, token: "0123abcd" },
+    { action: "log" as const, ownerId: 42, logId: 9001 },
+  ])("round-trips %p within 64 bytes", (cb) => {
+    const data = encodeFoodsCallback(cb)
+    expect(data.startsWith("foods:")).toBe(true)
+    expect(Buffer.byteLength(data)).toBeLessThanOrEqual(64)
+    expect(parseFoodsCallback(data)).toEqual(cb)
+  })
+
+  test.each(["foods:save:42", "foods:save:42:XYZ", "foods:tog:42:x:0123abcd", "foods:log:abc:1", "foods:zap:42", "log:ok:42:0123abcd"])(
+    "rejects %p",
+    (data) => {
+      expect(parseFoodsCallback(data)).toBeNull()
+    }
+  )
 })
