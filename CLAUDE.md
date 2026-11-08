@@ -60,7 +60,7 @@ Adding a macro: its registry entry, then the column in `src/db/schema.sql` and `
 **Web Server** (`src/web/`):
 - Landing page at `/` (`views/landing.html`, `{{BOT_USERNAME}}`/`{{BASE_URL}}`/`{{ANALYTICS}}` filled at startup); images in `public/` served at `/assets/*`
 - `analytics-snippet.ts` - PostHog for the web pages (cookieless, automatic capture off); `{{ANALYTICS}}` is empty without a key. Request access links carry `data-cta` for click tracking. `scrubEvent` (before_send) cuts the URL fragment, where Telegram puts initData, and person properties from every event
-- Mini App at `/app` (`views/app.html`, `{{ANALYTICS}}` filled at startup); `config.web.miniAppUrl` points the View Charts buttons there. PostHog loads only once `/api/user` returns `analytics_id` (the hashed ID, `null` without a key), then identifies and sends `$pageview`, `miniapp_tab_changed`, `miniapp_metric_changed`, `miniapp_day_opened`
+- Mini App at `/app` (`views/app.html`, `{{ANALYTICS}}` filled at startup); `config.web.miniAppUrl` points the View Charts buttons there. PostHog loads only once `/api/user` returns `analytics_id` (the hashed ID, `null` without a key), then identifies and sends `$pageview`, `miniapp_tab_changed`, `miniapp_metric_changed`, `miniapp_day_opened`, `miniapp_food_edited`, `miniapp_foods_deleted` (with `{ count }`)
 - `api.ts` - JSON for the Mini App; changes must be additive, since Telegram caches `app.html`. `/api/foods` (GET, PATCH, DELETE) are the only routes that change data; same-origin only
 - `auth.ts` - Telegram initData validation for secure auth
 
