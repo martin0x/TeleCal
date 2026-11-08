@@ -24,8 +24,8 @@ type FoodItemRow = { id: number; description: string; calories: number; emoji: s
 const MACRO_COLUMNS = MACROS.map((m) => m.column)
 /** `COALESCE(SUM(fi.protein_g), 0) AS protein, …`, built from registry constants, never from input. */
 const MACRO_SUMS = MACROS.map((m) => `COALESCE(SUM(fi.${m.column}), 0) AS ${m.key}`).join(", ")
-/** True when any macro on the row is still unknown. */
-const ANY_MACRO_MISSING = MACROS.map((m) => `${m.column} IS NULL`).join(" OR ")
+/** True when any macro on the row is still unknown. In parentheses, so it stays one condition beside an AND. */
+const ANY_MACRO_MISSING = `(${MACROS.map((m) => `${m.column} IS NULL`).join(" OR ")})`
 
 export interface FoodLog {
   id: number

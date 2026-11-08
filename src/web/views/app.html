@@ -174,15 +174,20 @@
       margin-bottom: 12px;
     }
 
+    /* min-width: 0 lets the buttons shrink on a narrow screen instead of widening the page */
     .segmented button {
       flex: 1;
-      padding: 6px 12px;
+      min-width: 0;
+      padding: 6px 4px;
       border: none;
       border-radius: 6px;
       background: transparent;
       color: var(--hint-color);
       font-size: 13px;
       font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       cursor: pointer;
     }
 
@@ -369,7 +374,7 @@
   </div>
 
   <div id="week-view" class="view">
-    <div class="segmented" data-view="week"></div>
+    <div class="segmented hidden" data-view="week"></div>
     <div class="chart-container">
       <canvas id="week-chart"></canvas>
     </div>
@@ -378,7 +383,7 @@
 
   <div id="month-view" class="view">
     <div class="section-title">30-Day Trend</div>
-    <div class="segmented" data-view="month"></div>
+    <div class="segmented hidden" data-view="month"></div>
     <div class="chart-container">
       <canvas id="month-chart"></canvas>
     </div>

@@ -93,7 +93,7 @@ bun run start
 Food descriptions are sent to whichever AI provider the user has selected in
 `/settings` (OpenAI, Anthropic, or Google) to estimate calories and macros.
 
-The one-off `/admin backfill-macros` command sends the descriptions of items with a macro still missing (logged before that macro existed, or skipped by the model) to the **admin's** selected provider, not each user's.
+The one-off `/admin backfill-macros` command sends the descriptions of items with a macro still missing (logged before that macro existed, or skipped by the model) to the **admin's** selected provider, not each user's. Its PostHog events carry token counts, cost and latency but no meal text, whatever each user's Meal Text Sharing setting.
 
 TeleCal disables server-side retention where the provider offers the option —
 OpenAI calls are made with `store: false`, so requests are not kept in the

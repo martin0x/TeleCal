@@ -14,7 +14,7 @@ import { AnnouncementsRepository } from "../db/repositories/announcements"
 import { createAllowlistMiddleware } from "./middleware/allowlist"
 import { createAccessDecisionHandler, createAdminNotifier } from "./access"
 import { HELP_TEXT } from "./help"
-import { createAdminCommand } from "./commands/admin"
+import { createAdminCommand, createBackfillDeps } from "./commands/admin"
 import { createTodayCommand } from "./commands/today"
 import { createWeekCommand, createMonthCommand } from "./commands/stats"
 import { createLogCommand, createLogMessageHandler, createLogCallbackHandler } from "./commands/log"
@@ -73,7 +73,9 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
     await smartReply(ctx, HELP_TEXT)
   })
 
-  bot.command("admin", createAdminCommand(allowedUsersRepo, usageRepo, { foodLogsRepo, usersRepo, aiService, announcementsRepo, analytics }, accessRequestsRepo))
+  // The backfill gets its own AIService, which sends PostHog no meal text: see createBackfillDeps.
+  const backfillDeps = createBackfillDeps(new CacheRepository(db), usageRepo, analytics)
+  bot.command("admin", createAdminCommand(allowedUsersRepo, usageRepo, { foodLogsRepo, usersRepo, announcementsRepo, analytics, ...backfillDeps }, accessRequestsRepo))
   bot.command("usage", createUsageCommand(usageRepo))
   bot.command("today", createTodayCommand(foodLogsRepo, usersRepo))
   bot.command("week", createWeekCommand(foodLogsRepo, usersRepo))

@@ -39,7 +39,9 @@ bun run scripts/telegram-mock/render.ts && bash scripts/build-landing-assets.sh 
 - `conversations/log-flow.ts` - State machine for `/log` flow (awaiting_input → clarifying → confirming)
 - `middleware/allowlist.ts` - Gate: allowlisted users pass; strangers get an invite prompt and can file an access request (`access.ts` handles admin Approve/Decline)
 
-**Macros** (`src/macros.ts`): the registry of tracked macros (protein, fat, fiber, added sugar), with each one's column, labels, `/edit` words and prompt rule. Prompts, parsing, the cache check, repository SQL, formatters, the backfill, `/settings` and the API loop over it; nothing else names a macro. Calories are not in it. Each user's choice is `users.tracked_macros`; formatters take that list (`DEFAULT_MACROS` is protein only).
+**Macros** (`src/macros.ts`): the registry of tracked macros (protein, fat, fiber, added sugar), with each one's column, labels, `/edit` words and prompt rule. Prompts, parsing, the cache check, repository SQL, formatters, the backfill, `/settings` and the API loop over it; a few places still name each macro by hand (listed below). Calories are not in it. Each user's choice is `users.tracked_macros`; formatters take that list (`DEFAULT_MACROS` is protein only).
+
+Adding a macro: its registry entry, then the column in `src/db/schema.sql` and `COLUMN_MIGRATIONS`, `src/ai/prompt.ts` (opening line, shape line, batch instruction, examples), the first line of OpenAI's `INSTRUCTIONS` (`src/ai/providers/openai.ts`), `MACRO_LABELS` in `src/web/views/app.html`, "all four" in `MACROS_SCREEN_TEXT` (`src/bot/commands/settings.ts`), and `HELP_TEXT` (`src/bot/help.ts`).
 
 **AI Service** (`src/ai/`):
 - `service.ts` - Provider abstraction with caching layer

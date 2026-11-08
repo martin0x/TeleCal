@@ -15,9 +15,9 @@ tied to release tags.
   (protein on and the rest off by default, so nobody's replies change until
   they choose). Switched-on macros appear on item lines and totals, in
   `/today`, in the `/week` and `/month` totals, in reminders and in the Mini
-  App (a line under the protein bar, a second line per item, and a toggle per
-  macro on the Week and Month charts). `/edit` sets any of them by name
-  (`3g sugar`, `24g fat`); a bare `18g` still sets protein.
+  App (a line under the protein bar, a second line per item, and a button per
+  macro on the Week and Month charts' metric switch). `/edit` sets any of them
+  by name (`3g sugar`, `24g fat`); a bare `18g` still sets protein.
   `/admin backfill-protein` is now `/admin backfill-macros`, which fills every
   missing macro on older items without overwriting values already there.
   `/api/user` gains `tracked_macros`; days gain `macros` and per-item

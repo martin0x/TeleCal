@@ -7,11 +7,13 @@ import { UsageRepository, type UserUsageRow, type ModelUsageRow } from "../../db
 import { formatUsd, formatTokens } from "../../utils/format"
 import { FoodLogsRepository } from "../../db/repositories/food-logs"
 import { UsersRepository } from "../../db/repositories/users"
+import { CacheRepository } from "../../db/repositories/cache"
 import { AIService } from "../../ai/service"
 import { runMacroBackfill, DEFAULT_CHUNK_SIZE } from "../../jobs/backfill-macros"
 import { AccessRequestsRepository } from "../../db/repositories/access-requests"
 import { sendPendingRequests } from "../access"
 import { hashTelegramId } from "../../analytics"
+import { withContentPreference } from "../../analytics/content-preference"
 import { AnnouncementsRepository } from "../../db/repositories/announcements"
 import { sendAnnouncement, type AnnounceDeps } from "../../jobs/announce"
 import type { Analytics } from "../../analytics"
@@ -77,9 +79,29 @@ export function formatAdminUsage(
 export interface AdminDeps {
   foodLogsRepo: FoodLogsRepository
   usersRepo: UsersRepository
+  /** Only the backfill uses it. Build it and `backfillAnalytics` with createBackfillDeps. */
   aiService: AIService
   announcementsRepo: AnnouncementsRepository
   analytics?: Analytics
+  /** Everything the backfill reports goes through this, never `analytics`. */
+  backfillAnalytics?: Analytics
+}
+
+/**
+ * The AI service and analytics /admin backfill-macros runs with. One batch
+ * holds many users' descriptions but is attributed to the admin, so no one
+ * user's Meal Text Sharing setting can cover it: nothing the backfill sends
+ * PostHog carries meal text, though tokens, cost and latency still go. The
+ * service and the job share one wrapper, so an error both of them catch is
+ * reported once.
+ */
+export function createBackfillDeps(
+  cache: CacheRepository,
+  usage: UsageRepository,
+  analytics: Analytics
+): { aiService: AIService; backfillAnalytics: Analytics } {
+  const backfillAnalytics = withContentPreference(analytics, () => false)
+  return { aiService: new AIService(cache, usage, backfillAnalytics), backfillAnalytics }
 }
 
 // grammY's polling handles updates sequentially, so an admin command that
@@ -94,7 +116,7 @@ let backfillRunning = false
  * Usage rows are attributed to the admin who ran it.
  */
 export async function backfillMacros(
-  deps: Pick<AdminDeps, "foodLogsRepo" | "usersRepo" | "aiService" | "analytics">,
+  deps: Pick<AdminDeps, "foodLogsRepo" | "usersRepo" | "aiService" | "backfillAnalytics">,
   adminId: number,
   chatId: number | null,
   reply: (text: string) => Promise<void>
@@ -123,7 +145,7 @@ export async function backfillMacros(
     const providerName = deps.usersRepo.findById(adminId)?.ai_provider ?? "gemini"
     try {
       const report = await runMacroBackfill(
-        { foodLogsRepo: deps.foodLogsRepo, aiService: deps.aiService, analytics: deps.analytics },
+        { foodLogsRepo: deps.foodLogsRepo, aiService: deps.aiService, analytics: deps.backfillAnalytics },
         { providerName, telegramId: adminId, chatId }
       )
 
@@ -134,7 +156,7 @@ export async function backfillMacros(
       await reply(done)
     } catch (error) {
       console.error("[backfill] failed:", error)
-      deps.analytics?.captureException(error, adminId, { source: "backfill" })
+      deps.backfillAnalytics?.captureException(error, adminId, { source: "backfill" })
       await reply(
         `Backfill failed: ${error instanceof Error ? error.message : String(error)}. Nothing was lost — run /admin backfill-macros again to retry.`
       )
@@ -316,7 +338,7 @@ export function createAdminCommand(
         // backfill can take a minute. ctx.reply still works after the handler returns.
         void backfillMacros(deps, userId, ctx.chat?.id ?? null, (text) => smartReply(ctx, text)).catch((error) => {
           console.error("[backfill] unhandled:", error)
-          deps.analytics?.captureException(error, userId, { source: "backfill" })
+          deps.backfillAnalytics?.captureException(error, userId, { source: "backfill" })
         })
         break
       }
