@@ -84,6 +84,38 @@ describe("matchMeal: code-only path", () => {
   test("an empty library matches nothing", () => {
     expect(matchMeal("oats", [])).toBeNull()
   })
+
+  test.each([
+    ["½ oats", [[1, 0.5]]],
+    ["¼ oats", [[1, 0.25]]],
+    ["¾ oats", [[1, 0.75]]],
+    ["oats, ½ milk", [[1, 1], [2, 0.5]]],
+  ] as const)("a unicode fraction is a quantity: %p", (text, expected) => {
+    expect(match(text)).toEqual(expected as unknown as number[][])
+  })
+
+  test("1½ reads as 1 1/2, never 11/2, and goes to the AI", () => {
+    expect(matchMeal("1½ oats", LIBRARY)).toBeNull()
+  })
+
+  test("½ before a food saved as exactly that word is half a serving, not one", () => {
+    expect(match("½ oats", [food({ id: 8, name: "Oats" })])).toEqual([[8, 0.5]])
+  })
+
+  test("a meal that splits matches as a whole only by exact name, so its parts aren't swallowed by one food", () => {
+    const bar = food({ id: 9, name: "Oats and Milk Bar" })
+    // "oats" and "milk" each name two saved foods: ambiguous, so the AI decides.
+    expect(matchMeal("oats and milk", [bar, OATS, MILK])).toBeNull()
+    const plain = [bar, food({ id: 10, name: "Oats" }), food({ id: 11, name: "Milk" })]
+    expect(match("oats and milk", plain)).toEqual([[10, 1], [11, 1]])
+    expect(match("oats and milk bar", plain)).toEqual([[9, 1]])
+  })
+
+  test("a whole-message exact name can carry a quantity", () => {
+    expect(match("2 mac and cheese")).toEqual([[4, 2]])
+    expect(match("mac and cheese x2")).toEqual([[4, 2]])
+    expect(match("mac and cheese")).toEqual([[4, 1]])
+  })
 })
 
 describe("parseQuantity / splitMeal", () => {

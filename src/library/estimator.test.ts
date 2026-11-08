@@ -26,7 +26,7 @@ const OPTS = { telegramId: 42, chatId: 7, callType: "estimate" as const }
 
 function build(opts: { enabled?: boolean; foods?: SavedFood[]; reply?: EstimationResult; listThrows?: boolean } = {}) {
   const analytics = new FakeAnalytics()
-  const ai = { estimate: mock(async () => opts.reply ?? BANANA_REPLY) }
+  const ai = { estimate: mock(async (..._args: unknown[]) => opts.reply ?? BANANA_REPLY) }
   const library = {
     listByUser: mock(() => {
       if (opts.listThrows) throw new Error("db gone")
@@ -122,6 +122,40 @@ describe("MealEstimator", () => {
       "openai",
       expect.objectContaining({ context: 'Original input: "oats"', savedFoods: [OATS] })
     )
+  })
+
+  test("LogFlow's context labels don't pick saved foods", async () => {
+    const pringles: SavedFood = { ...OATS, id: 2, name: "Pringles Original" }
+    const { estimator, ai } = build({ foods: [OATS, pringles] })
+    const opts = { ...OPTS, callType: "clarify" as const, context: 'Original input: "banana"' }
+    await estimator.estimate("banana", "openai", opts)
+    expect(ai.estimate).toHaveBeenCalledWith("banana", "openai", opts)
+  })
+
+  test("a failed call with saved foods is reported and retried once as a plain estimate", async () => {
+    const { estimator, ai, analytics } = build()
+    const failure = new Error("schema rejected")
+    ai.estimate.mockImplementationOnce(async () => {
+      throw failure
+    })
+    const result = await estimator.estimate("80g oats and a banana", "openai", OPTS)
+
+    expect(ai.estimate).toHaveBeenCalledTimes(2)
+    expect(ai.estimate.mock.calls[0]).toEqual(["80g oats and a banana", "openai", { ...OPTS, savedFoods: [OATS] }])
+    expect(ai.estimate.mock.calls[1]).toEqual(["80g oats and a banana", "openai", OPTS])
+    expect(result.source).toBe("ai")
+    expect(result.items).toEqual([BANANA])
+    expect(analytics.exceptions).toHaveLength(1)
+    expect(analytics.exceptions[0]).toMatchObject({ error: failure, telegramId: 42, properties: { source: "library" } })
+  })
+
+  test("when the plain retry fails too, the error reaches the caller", async () => {
+    const { estimator, ai } = build()
+    ai.estimate.mockImplementation(async () => {
+      throw new Error("AI down")
+    })
+    await expect(estimator.estimate("80g oats and a banana", "openai", OPTS)).rejects.toThrow("AI down")
+    expect(ai.estimate).toHaveBeenCalledTimes(2)
   })
 
   test("no relevant saved food: a plain AI call; a cache hit reports source cache", async () => {

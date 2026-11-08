@@ -27,6 +27,13 @@ export interface MealEstimatorDeps {
 type Found = { matched: MatchedItem[] | null; candidates: SavedFood[] }
 const NOTHING_FOUND: Found = { matched: null, candidates: [] }
 
+/**
+ * The labels LogFlow.buildContextString (src/bot/conversations/log-flow.ts)
+ * puts in a clarification's context. Their words would pick saved foods such
+ * as "Pringles Original", so they are dropped before choosing candidates.
+ */
+const CONTEXT_LABELS = /\b(?:Original input|Most recent input|Previous clarifications):/g
+
 function libraryResult(matched: MatchedItem[]): EstimationResult {
   return {
     items: matched.map((m) => scaleFood(m.food, m.servings)),
@@ -69,7 +76,17 @@ export class MealEstimator {
       return this.finish(opts.telegramId, result, result.cached ? "cache" : "ai")
     }
 
-    const result = await this.deps.ai.estimate(text, provider, { ...opts, savedFoods: found.candidates })
+    let result: EstimationResult
+    try {
+      result = await this.deps.ai.estimate(text, provider, { ...opts, savedFoods: found.candidates })
+    } catch (error) {
+      // The saved-foods call alone may be what failed (its schema, its longer
+      // prompt): report it and try once as a plain estimate. If that fails
+      // too, the error reaches LogFlow, whose pending queue handles outages.
+      this.analytics.captureException(error, opts.telegramId, { source: "library" })
+      const plain = await this.deps.ai.estimate(text, provider, opts)
+      return this.finish(opts.telegramId, plain, plain.cached ? "cache" : "ai")
+    }
     const items = applyLabels(result.items, found.candidates)
     return this.finish(opts.telegramId, { ...result, items }, items.some((i) => i.saved_food_id) ? "mixed" : "ai")
   }
@@ -82,7 +99,8 @@ export class MealEstimator {
       const matched = opts.context ? null : matchMeal(text, foods)
       if (matched) return { matched, candidates: [] }
       // With context, the original message and earlier replies count too.
-      return { matched: null, candidates: candidatesFor(`${text} ${opts.context ?? ""}`, foods) }
+      const context = (opts.context ?? "").replace(CONTEXT_LABELS, " ")
+      return { matched: null, candidates: candidatesFor(`${text} ${context}`, foods) }
     } catch (error) {
       this.analytics.captureException(error, opts.telegramId, { source: "library" })
       return NOTHING_FOUND

@@ -25,6 +25,13 @@ const TRAILING_AMOUNT = new RegExp(`^(.+?)\\s+${NUMBER}\\s*${UNIT}$`)
 const TRAILING_COUNT = new RegExp(`^(.+?)\\s+[x×]\\s*${NUMBER}$`)
 const TRAILING_COUNT_X = new RegExp(`^(.+?)\\s+${NUMBER}\\s*[x×]$`)
 
+/**
+ * Unicode fractions as spaced ASCII: normalizing would strip them, turning
+ * "½ oats" into one serving. The spaces make "1½" read "1 1/2", never "11/2".
+ */
+const FRACTIONS: Record<string, string> = { "½": " 1/2 ", "⅓": " 1/3 ", "⅔": " 2/3 ", "¼": " 1/4 ", "¾": " 3/4 ", "⅛": " 1/8 " }
+const FRACTION_CHARS = /[½⅓⅔¼¾⅛]/g
+
 /** Short and quantity words that say nothing about which food is meant. */
 const IGNORED_WORDS = new Set(["and", "with", "the", "gram", "grams", "cup", "cups", "serving", "servings", "piece", "pieces", "pcs"])
 
@@ -105,29 +112,43 @@ export function splitMeal(text: string): string[] {
     .filter(Boolean)
 }
 
-function matchPart(part: string, foods: SavedFood[]): MatchedItem | null {
+/** One food and its servings; `find` picks the food from the text left after the quantity. */
+function matchOne(
+  text: string,
+  foods: SavedFood[],
+  find: (rest: string, foods: SavedFood[]) => SavedFood | null
+): MatchedItem | null {
   // A name that starts like a quantity ("Half Moon Cake") wins as a whole.
-  const exact = exactFood(part, foods)
+  const exact = exactFood(text, foods)
   if (exact) return { food: exact, servings: 1 }
-  const parsed = parseQuantity(part)
+  const parsed = parseQuantity(text)
   if (!parsed) return null
-  const food = findFood(parsed.rest, foods)
+  const food = find(parsed.rest, foods)
   if (!food) return null
   const count = servingsFor(food, parsed.quantity)
   return count === null ? null : { food, servings: count }
 }
 
+function matchPart(part: string, foods: SavedFood[]): MatchedItem | null {
+  return matchOne(part, foods, findFood)
+}
+
 /**
  * Every part of the meal as a saved food and a number of servings, or null if
- * any part can't be matched and scaled in code. The whole text is tried as one
- * food first, so a saved "Mac and cheese" is not split in two.
+ * any part can't be matched and scaled in code. A meal that splits is tried as
+ * one food first, by exact name only, so a saved "Mac and cheese" is not split
+ * in two, and "oats and milk" is never swallowed by a saved "Oats and Milk Bar".
  */
 export function matchMeal(text: string, foods: SavedFood[]): MatchedItem[] | null {
   if (foods.length === 0) return null
-  const whole = matchPart(text, foods)
+  const ascii = text.replace(FRACTION_CHARS, (c) => FRACTIONS[c])
+  const parts = splitMeal(ascii)
+  if (parts.length < 2) {
+    const one = matchPart(ascii, foods)
+    return one ? [one] : null
+  }
+  const whole = matchOne(ascii, foods, exactFood)
   if (whole) return [whole]
-  const parts = splitMeal(text)
-  if (parts.length < 2) return null
   const items: MatchedItem[] = []
   for (const part of parts) {
     const item = matchPart(part, foods)
