@@ -260,4 +260,24 @@ describe("/api/foods", () => {
     expect((await call("GET", "/api/foods/1")).status).toBe(405)
     expect((await call("GET", "/api/foods", undefined, false)).status).toBe(401)
   })
+
+  test("with the library off, every /api/foods path is a 404, whatever the method", async () => {
+    const db = createTestDb()
+    const users = new UsersRepository(db)
+    users.upsert(42, "maria")
+    foodsHandle = createFetchHandler({
+      usersRepo: users,
+      foodLogsRepo: new FoodLogsRepository(db),
+      foodLibraryRepo: new FoodLibraryRepository(db),
+      foodLibraryEnabled: false,
+      botUsername: "TeleCalTestBot",
+      baseUrl: "https://telecal.example",
+    })
+    expect((await call("POST", "/api/foods", {})).status).toBe(404)
+    expect((await call("PUT", "/api/foods", {})).status).toBe(404)
+    expect((await call("GET", "/api/foods")).status).toBe(404)
+    expect((await call("DELETE", "/api/foods", { ids: [1] })).status).toBe(404)
+    expect((await call("PATCH", "/api/foods/1", { calories: 1 })).status).toBe(404)
+    expect((await call("GET", "/api/foods/1")).status).toBe(404)
+  })
 })

@@ -59,4 +59,11 @@ describe("Foods tab", () => {
     expect(script).toContain("status: 0")
     expect(script).toContain("Could not load your foods.")
   })
+
+  test("says the session expired when a foods request gets a 401", () => {
+    expect(script).toContain("Your session expired. Close and reopen the app.")
+    expect(script).toContain("status === 401")
+    // api() hands its status on, so loadFoods can tell a 401 apart.
+    expect(script).toMatch(/err\.status = res\.status;\s*throw err;/)
+  })
 })

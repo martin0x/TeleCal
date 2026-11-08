@@ -623,7 +623,11 @@
       const res = await fetch(endpoint, {
         headers: { 'Authorization': `tg-init-data ${tg.initData}` }
       });
-      if (!res.ok) throw new Error('API error');
+      if (!res.ok) {
+        const err = new Error('API error');
+        err.status = res.status;
+        throw err;
+      }
       return res.json();
     }
 
@@ -1055,6 +1059,14 @@
       try { tg.showAlert(message); } catch (e) { window.alert(message); }
     }
 
+    // initData is fixed when the app opens, and the server accepts it for a
+    // few minutes only; after that every request is a 401 until a reopen.
+    const SESSION_EXPIRED = 'Your session expired. Close and reopen the app.';
+
+    function failureMessage(status, fallback) {
+      return status === 401 ? SESSION_EXPIRED : fallback;
+    }
+
     function plural(n) {
       return n === 1 ? 'food' : 'foods';
     }
@@ -1064,7 +1076,12 @@
       try {
         data = await api('/api/foods');
       } catch (e) {
-        document.getElementById('foods-list').innerHTML = '<div class="empty-state">Could not load your foods. Try again.</div>';
+        const list = document.getElementById('foods-list');
+        const box = document.createElement('div');
+        box.className = 'empty-state';
+        box.textContent = failureMessage(e && e.status, 'Could not load your foods. Try again.');
+        list.innerHTML = '';
+        list.appendChild(box);
         return;
       }
       foods = data.foods;
@@ -1159,7 +1176,7 @@
       if (!ok) return;
       const res = await apiSend('DELETE', '/api/foods', { ids });
       if (!res.ok) {
-        notify('Could not delete. Try again.');
+        notify(failureMessage(res.status, 'Could not delete. Try again.'));
         return;
       }
       track('miniapp_foods_deleted', { count: ids.length });
@@ -1240,7 +1257,7 @@
       }
       const res = await apiSend('PATCH', `/api/foods/${editingFood.id}`, body);
       if (!res.ok) {
-        showFormError((res.data && res.data.error) || 'Could not save. Try again.');
+        showFormError(failureMessage(res.status, (res.data && res.data.error) || 'Could not save. Try again.'));
         return;
       }
       track('miniapp_food_edited');
@@ -1254,7 +1271,7 @@
       if (!ok) return;
       const res = await apiSend('DELETE', '/api/foods', { ids: [editingFood.id] });
       if (!res.ok) {
-        showFormError('Could not delete. Try again.');
+        showFormError(failureMessage(res.status, 'Could not delete. Try again.'));
         return;
       }
       track('miniapp_foods_deleted', { count: 1 });

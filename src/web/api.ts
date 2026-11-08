@@ -60,6 +60,9 @@ export function createApiHandlers(deps: ApiDeps) {
   const library = deps.foodLibraryEnabled && deps.foodLibrary ? deps.foodLibrary : null
 
   return {
+    /** Whether /api/foods is served; when false, every /api/foods path is a 404. */
+    foodsEnabled: library !== null,
+
     getUser(telegramId: number) {
       const user = usersRepo.findById(telegramId)
       return {

@@ -170,6 +170,10 @@ async function handleApiRoute(
   api: ReturnType<typeof createApiHandlers>
 ): Promise<Response> {
   // The Foods tab: the only routes that change data. Same-origin only (no CORS preflight is answered).
+  // With the library off, every /api/foods path is a 404, whatever the method.
+  if ((path === "/api/foods" || path.startsWith("/api/foods/")) && !api.foodsEnabled) {
+    return jsonResponse({ error: "Not found" }, 404)
+  }
   if (path === "/api/foods") {
     if (request.method === "GET") return apiResult(api.listFoods(user.id))
     if (request.method === "DELETE") return apiResult(api.deleteFoods(user.id, await readJson(request)))
