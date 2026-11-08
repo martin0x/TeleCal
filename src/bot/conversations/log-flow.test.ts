@@ -429,6 +429,31 @@ describe("LogFlow", () => {
     expect(pressed).toMatchObject({ stale: false, saveOffer: { logId: newest } })
   })
 
+  test("with the food library on, a log made only of saved foods has no save offer", async () => {
+    const withLibrary = new LogFlow(
+      conversationsRepo,
+      foodLogsRepo,
+      pendingRepo,
+      mockAIService as unknown as MealEstimator,
+      usersRepo,
+      { foodLibrary: true }
+    )
+    const items = JSON.stringify([
+      { description: "Quaker Oats ×2", calories: 300, protein_g: 10, saved_food_id: 1 },
+      { description: "Skyflakes", calories: 110, protein_g: 2, saved_food_id: 3 },
+    ])
+
+    conversationsRepo.upsert(123, 456, "confirming", "2026-01-31", { pending_items: items })
+    const typed = await withLibrary.processInput(123, 456, "yes", "openai")
+    expect(typed.action).toBe("done")
+    expect(typed.saveOffer).toBeUndefined()
+
+    conversationsRepo.upsert(123, 456, "confirming", "2026-01-31", { pending_items: items })
+    const pressed = withLibrary.resolveConfirmation(123, 456, confirmToken("2026-01-31", items), "log")
+    expect(pressed.stale).toBe(false)
+    expect(pressed).not.toHaveProperty("saveOffer")
+  })
+
   test("with the food library off, there is no save offer", async () => {
     const items = JSON.stringify([{ description: "Chicken", calories: 200, emoji: "🍗" }])
     conversationsRepo.upsert(123, 456, "confirming", "2026-01-31", { pending_items: items })

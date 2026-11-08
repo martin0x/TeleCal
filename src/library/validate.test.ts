@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test"
-import { validateFood, DEFAULT_SERVING, MAX_FOOD_CALORIES, MAX_FOOD_GRAMS } from "./validate"
+import { validateFood, DEFAULT_SERVING, MAX_FOOD_CALORIES, MAX_FOOD_GRAMS, MAX_SERVING_AMOUNT } from "./validate"
 
 const ROW = {
   name: "Quaker Oats",
@@ -70,5 +70,12 @@ describe("validateFood", () => {
     expect(food({ ...ROW, serving_unit: null })).toMatchObject({ serving_amount: null, serving_unit: null })
     expect(food({ ...ROW, serving_unit: "cup" })).toMatchObject({ serving_amount: null, serving_unit: null })
     expect(food({ ...ROW, serving_amount: 0 })).toMatchObject({ serving_amount: null, serving_unit: null })
+  })
+
+  test("a serving amount above 10000 is out of range", () => {
+    expect(MAX_SERVING_AMOUNT).toBe(10000)
+    expect(food({ ...ROW, serving_amount: MAX_SERVING_AMOUNT })).toMatchObject({ serving_amount: 10000, serving_unit: "g" })
+    expect(reason({ ...ROW, serving_amount: 10001 })).toBe("serving amount out of range")
+    expect(reason({ ...ROW, serving_amount: "1e9", serving_unit: "ml" })).toBe("serving amount out of range")
   })
 })

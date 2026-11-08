@@ -298,11 +298,17 @@ describe("save from a log", () => {
     return foodLogs.create(owner, 555, "2026-11-08", items)
   }
 
+  /** A saved Quaker Oats, as a log item made from it would point at. */
+  function savedOatsId(): number {
+    library.upsertMany(OWNER, [{ ...(OATS_ROW as any) }], "import")
+    return library.listByUser(OWNER)[0].id
+  }
+
   test("previews the log's items with toggles, leaving out items from saved foods; Save stores only the ones on", async () => {
     const log = logged([
       { description: "Chicken adobo (1 cup)", calories: 350, protein_g: 30, emoji: "🍗" },
       { description: "Garlic rice (1 cup)", calories: 300, protein_g: 5, emoji: "🍚" },
-      { description: "Quaker Oats ×2", calories: 300, protein_g: 10, saved_food_id: 1 },
+      { description: "Quaker Oats ×2", calories: 300, protein_g: 10, saved_food_id: savedOatsId() },
     ])
     const ctx = await press(encodeFoodsCallback({ action: "log", ownerId: OWNER, logId: log.id }))
 
@@ -317,11 +323,14 @@ describe("save from a log", () => {
 
     await press(saveData(ctx))
     const saved = library.listByUser(OWNER)
-    expect(saved.map((f) => [f.name, f.serving, f.source])).toEqual([["Chicken adobo (1 cup)", "as logged", "log"]])
+    expect(saved.map((f) => [f.name, f.serving, f.source])).toEqual([
+      ["Chicken adobo (1 cup)", "as logged", "log"],
+      ["Quaker Oats", "1/2 cup (40 g)", "import"],
+    ])
   })
 
   test("a log made only of saved foods: says so", async () => {
-    const log = logged([{ description: "Quaker Oats ×2", calories: 300, saved_food_id: 1 }])
+    const log = logged([{ description: "Quaker Oats ×2", calories: 300, saved_food_id: savedOatsId() }])
     const ctx = await press(encodeFoodsCallback({ action: "log", ownerId: OWNER, logId: log.id }))
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith("These are already in your foods.")
     expect(ctx.reply).not.toHaveBeenCalled()

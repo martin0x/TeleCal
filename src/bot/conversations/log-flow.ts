@@ -273,7 +273,7 @@ export class LogFlow {
       return {
         message: `Logged ${formatTotals(sumTotals(items), this.macrosFor(telegramId))} for ${formatDateForDisplay(state.target_date)}.`,
         action: "done",
-        ...this.saveOffer(logId),
+        ...this.saveOffer(logId, items),
       }
     }
 
@@ -322,7 +322,7 @@ export class LogFlow {
           stale: false,
           edit: `✅ Logged to ${formatDateForDisplay(state.target_date)}:\n\n${formatItemsSummary(items, macros)}`,
           toast: "Logged ✅",
-          ...this.saveOffer(logId),
+          ...this.saveOffer(logId, items),
         }
       }
       case "change":
@@ -356,9 +356,12 @@ export class LogFlow {
     return log.id
   }
 
-  /** The "Save to my foods" offer for a just-logged entry, when the library is on. */
-  private saveOffer(logId: number): { saveOffer?: { logId: number } } {
-    return this.opts.foodLibrary ? { saveOffer: { logId } } : {}
+  /**
+   * The "Save to my foods" offer for a just-logged entry, when the library is
+   * on and at least one item didn't come from a saved food.
+   */
+  private saveOffer(logId: number, items: FoodItem[]): { saveOffer?: { logId: number } } {
+    return this.opts.foodLibrary && items.some((item) => !item.saved_food_id) ? { saveOffer: { logId } } : {}
   }
 
   private backToInput(

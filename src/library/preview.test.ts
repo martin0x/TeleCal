@@ -38,16 +38,23 @@ describe("importPreview", () => {
 })
 
 describe("logPreview", () => {
+  const SAVED_OATS: SavedFood = { ...(OATS_ROW as FoodFields), id: 1, telegram_id: 42, source: "import" }
+
   test("turns logged items into foods served as logged, leaving out items from saved foods", () => {
     const preview = logPreview(
       [
         { description: "Chicken adobo (1 cup)", calories: 350, protein_g: 30, fat_g: 20, fiber_g: 1, added_sugar_g: 2, emoji: "🍗" },
         { description: "Quaker Oats ×2", calories: 300, protein_g: 10, saved_food_id: 1 },
       ],
-      []
+      [SAVED_OATS]
     )
     expect(preview.rows).toHaveLength(1)
     expect(preview.rows[0].food).toMatchObject({ name: "Chicken adobo (1 cup)", serving: "as logged", serving_amount: null, calories: 350 })
+  })
+
+  test("an item whose saved food has since been deleted is offered again", () => {
+    const preview = logPreview([{ description: "Quaker Oats ×2", calories: 300, protein_g: 10, saved_food_id: 99 }], [SAVED_OATS])
+    expect(preview.rows.map((r) => r.food.name)).toEqual(["Quaker Oats ×2"])
   })
 })
 

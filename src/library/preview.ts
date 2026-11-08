@@ -46,12 +46,16 @@ export function importPreview(reply: ParsedFoodsReply, existing: SavedFood[]): P
   return finish(foods, unreadable, existing)
 }
 
-/** A log's items → foods served "as logged". Items that came from saved foods are left out. */
+/**
+ * A log's items → foods served "as logged". Items that came from a saved food
+ * are left out while that food still exists; once it is deleted, they are
+ * offered again.
+ */
 export function logPreview(items: FoodItem[], existing: SavedFood[]): Preview {
   const foods: FoodFields[] = []
   const unreadable: Unreadable[] = []
   for (const item of items) {
-    if (item.saved_food_id) continue
+    if (existing.some((f) => f.id === item.saved_food_id)) continue
     const result = validateFood({ ...item, name: item.description, serving: AS_LOGGED })
     if (result.ok) foods.push(result.food)
     else unreadable.push({ text: item.description, reason: result.reason })

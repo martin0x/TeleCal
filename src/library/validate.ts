@@ -9,6 +9,8 @@ export const MAX_FOOD_CALORIES = 5000
 export const MAX_FOOD_GRAMS = 500
 export const MAX_NAME_LENGTH = 100
 export const MAX_SERVING_LENGTH = 100
+/** The largest serving amount, in g or ml. */
+export const MAX_SERVING_AMOUNT = 10000
 /** The serving of a row that gave none. */
 export const DEFAULT_SERVING = "1 serving"
 /** The serving of a food saved from a log: one serving is what was logged. */
@@ -53,6 +55,7 @@ export function validateFood(input: Record<string, unknown>): Validation {
   const serving = (servingText || DEFAULT_SERVING).slice(0, MAX_SERVING_LENGTH)
 
   const amount = toNumber(input.serving_amount)
+  if (amount !== null && amount > MAX_SERVING_AMOUNT) return { ok: false, reason: "serving amount out of range" }
   const unit = toUnit(input.serving_unit)
   const hasAmount = amount !== null && amount > 0 && unit !== null
 
