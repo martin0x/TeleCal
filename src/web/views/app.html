@@ -609,6 +609,15 @@
       return user;
     }
 
+    // Shared across every caller, so /api/user is requested once and
+    // startAnalytics runs once. A failed request clears the cache so a later
+    // call can retry.
+    let userPromise = null;
+    function loadUser() {
+      if (!userPromise) userPromise = getUser().catch(e => { userPromise = null; throw e; });
+      return userPromise;
+    }
+
     // API helpers
     async function api(endpoint) {
       const res = await fetch(endpoint, {
@@ -1016,11 +1025,16 @@
     let editingFood = null;
 
     async function apiSend(method, endpoint, body) {
-      const res = await fetch(endpoint, {
-        method,
-        headers: { 'Authorization': `tg-init-data ${tg.initData}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
+      let res = null;
+      try {
+        res = await fetch(endpoint, {
+          method,
+          headers: { 'Authorization': `tg-init-data ${tg.initData}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+      } catch (e) {
+        return { ok: false, status: 0, data: null };
+      }
       let data = null;
       try { data = await res.json(); } catch (e) { data = null; }
       return { ok: res.ok, status: res.status, data };
@@ -1046,7 +1060,13 @@
     }
 
     async function loadFoods() {
-      const data = await api('/api/foods');
+      let data = null;
+      try {
+        data = await api('/api/foods');
+      } catch (e) {
+        document.getElementById('foods-list').innerHTML = '<div class="empty-state">Could not load your foods. Try again.</div>';
+        return;
+      }
       foods = data.foods;
       renderFoods();
     }
@@ -1246,7 +1266,7 @@
       try {
         if (tab === 'today') {
           const [user, today] = await Promise.all([
-            userData ? Promise.resolve(userData) : getUser(),
+            userData ? Promise.resolve(userData) : loadUser(),
             api('/api/today')
           ]);
           userData = user;
@@ -1258,7 +1278,7 @@
 
         if (tab === 'week') {
           if (!weekData) weekData = await api('/api/stats?period=week');
-          if (!userData) userData = await getUser();
+          if (!userData) userData = await loadUser();
 
           renderMetricToggles();
           createWeekChart(weekData, userData, metric);
@@ -1272,7 +1292,7 @@
 
         if (tab === 'month') {
           if (!monthData) monthData = await api('/api/stats?period=month');
-          if (!userData) userData = await getUser();
+          if (!userData) userData = await loadUser();
           renderMetricToggles();
 
           createMonthChart(monthData, metric);
@@ -1293,18 +1313,22 @@
       }
     }
 
-    // Initial load. ?tab=foods (the bot's "Open my foods" button) opens the
-    // Foods tab, when the server says the library is on.
+    // Initial load. Today shows right away, loading its user and its data
+    // together, unless ?tab=foods (the bot's "Open my foods" button) asked
+    // for the Foods tab, which waits on the user to know whether it's on.
     async function init() {
+      const wanted = new URLSearchParams(window.location.search).get('tab');
+      if (wanted !== 'foods') showTab('today');
+      let user = null;
       try {
-        userData = await getUser();
+        user = await loadUser();
+        userData = user;
       } catch (e) {
         console.error('Failed to load user:', e);
       }
-      const libraryOn = Boolean(userData && userData.food_library);
+      const libraryOn = Boolean(user && user.food_library);
       document.getElementById('foods-tab').classList.toggle('hidden', !libraryOn);
-      const wanted = new URLSearchParams(window.location.search).get('tab');
-      showTab(wanted === 'foods' && libraryOn ? 'foods' : 'today');
+      if (wanted === 'foods') showTab(libraryOn ? 'foods' : 'today');
     }
 
     init();

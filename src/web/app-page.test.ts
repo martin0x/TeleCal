@@ -53,4 +53,10 @@ describe("Foods tab", () => {
     expect(script).not.toContain("?.")
     expect(script).not.toContain("??")
   })
+
+  test("shares one user load across tabs, and reports network failures instead of throwing", () => {
+    expect(script).toContain("function loadUser()")
+    expect(script).toContain("status: 0")
+    expect(script).toContain("Could not load your foods.")
+  })
 })
