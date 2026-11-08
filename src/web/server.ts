@@ -4,8 +4,9 @@ import { join } from "path"
 import { config } from "../config"
 import { UsersRepository } from "../db/repositories/users"
 import { FoodLogsRepository } from "../db/repositories/food-logs"
+import type { FoodLibraryRepository } from "../db/repositories/food-library"
 import { validateInitData, extractAuthHeader, TelegramUser } from "./auth"
-import { createApiHandlers } from "./api"
+import { createApiHandlers, type ApiResult } from "./api"
 import { landingAnalyticsScript, miniAppAnalyticsScript, type WebAnalyticsConfig } from "./analytics-snippet"
 
 export interface WebServerDeps {
@@ -19,6 +20,10 @@ export interface WebServerDeps {
   analytics?: WebAnalyticsConfig
   /** POSTHOG_ID_SECRET, for analytics_id in /api/user. Server-side only: never put it in a page. */
   analyticsIdSecret?: string
+  /** The food library; with foodLibraryEnabled, serves /api/foods. */
+  foodLibraryRepo?: FoodLibraryRepository
+  /** FEATURE_LOCAL_FOOD_DB */
+  foodLibraryEnabled?: boolean
 }
 
 const VIEWS_DIR = join(import.meta.dir, "views")
@@ -75,7 +80,13 @@ function loadLanding(values: LandingValues): string | null {
 
 export function createFetchHandler(deps: WebServerDeps) {
   const { usersRepo, foodLogsRepo, analyticsIdSecret } = deps
-  const api = createApiHandlers({ usersRepo, foodLogsRepo, analyticsIdSecret })
+  const api = createApiHandlers({
+    usersRepo,
+    foodLogsRepo,
+    analyticsIdSecret,
+    foodLibrary: deps.foodLibraryRepo,
+    foodLibraryEnabled: deps.foodLibraryEnabled,
+  })
   // Rendered once: the template and both values are fixed for the process lifetime.
   const landing = loadLanding({
     botUsername: deps.botUsername,
@@ -122,7 +133,7 @@ export function createFetchHandler(deps: WebServerDeps) {
         return jsonResponse({ error: "Unauthorized" }, 401)
       }
 
-      return handleApiRoute(path, url, user, api)
+      return handleApiRoute(request, path, url, user, api)
     }
 
     return new Response("Not found", { status: 404 })
@@ -151,12 +162,25 @@ async function serveAsset(name: string, extension: string): Promise<Response> {
   })
 }
 
-function handleApiRoute(
+async function handleApiRoute(
+  request: Request,
   path: string,
   url: URL,
   user: TelegramUser,
   api: ReturnType<typeof createApiHandlers>
-): Response {
+): Promise<Response> {
+  // The Foods tab: the only routes that change data. Same-origin only (no CORS preflight is answered).
+  if (path === "/api/foods") {
+    if (request.method === "GET") return apiResult(api.listFoods(user.id))
+    if (request.method === "DELETE") return apiResult(api.deleteFoods(user.id, await readJson(request)))
+    return jsonResponse({ error: "Method not allowed" }, 405)
+  }
+  const foodMatch = path.match(/^\/api\/foods\/(\d+)$/)
+  if (foodMatch) {
+    if (request.method !== "PATCH") return jsonResponse({ error: "Method not allowed" }, 405)
+    return apiResult(api.updateFood(user.id, Number(foodMatch[1]), await readJson(request)))
+  }
+
   // GET /api/user
   if (path === "/api/user") {
     return jsonResponse(api.getUser(user.id))
@@ -184,6 +208,19 @@ function handleApiRoute(
   }
 
   return jsonResponse({ error: "Not found" }, 404)
+}
+
+/** The request's JSON body, or null when it has none or it isn't JSON (the handlers answer 400). */
+async function readJson(request: Request): Promise<unknown> {
+  try {
+    return await request.json()
+  } catch {
+    return null
+  }
+}
+
+function apiResult(result: ApiResult): Response {
+  return jsonResponse(result.body, result.status)
 }
 
 function jsonResponse(data: unknown, status = 200): Response {

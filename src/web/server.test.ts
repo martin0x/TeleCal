@@ -3,6 +3,7 @@ import { describe, test, expect, beforeEach } from "bun:test"
 import { createTestDb } from "../db/test-helpers"
 import { FoodLogsRepository } from "../db/repositories/food-logs"
 import { UsersRepository } from "../db/repositories/users"
+import { FoodLibraryRepository } from "../db/repositories/food-library"
 import { config } from "../config"
 import { hashTelegramId } from "../analytics"
 import { createFetchHandler, renderLanding } from "./server"
@@ -203,5 +204,60 @@ describe("routes", () => {
 
   test("unknown paths are 404", async () => {
     expect((await get("/nope")).status).toBe(404)
+  })
+})
+
+describe("/api/foods", () => {
+  const USER = { id: 42, first_name: "Maria" }
+  let foodsHandle: (request: Request) => Promise<Response>
+  let library: FoodLibraryRepository
+
+  beforeEach(() => {
+    const db = createTestDb()
+    library = new FoodLibraryRepository(db)
+    const users = new UsersRepository(db)
+    users.upsert(42, "maria")
+    library.upsertMany(42, [{ name: "Quaker Oats", serving: "1 serving", serving_amount: null, serving_unit: null, calories: 150, protein_g: 5, fat_g: 3, fiber_g: 4, added_sugar_g: null }], "import")
+    foodsHandle = createFetchHandler({
+      usersRepo: users,
+      foodLogsRepo: new FoodLogsRepository(db),
+      foodLibraryRepo: library,
+      foodLibraryEnabled: true,
+      botUsername: "TeleCalTestBot",
+      baseUrl: "https://telecal.example",
+    })
+  })
+
+  function call(method: string, path: string, body?: unknown, auth = true) {
+    const headers: Record<string, string> = { "Content-Type": "application/json" }
+    if (auth) headers.Authorization = `tg-init-data ${createValidInitData(USER, config.telegram.botToken)}`
+    return foodsHandle(new Request(`http://localhost${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }))
+  }
+
+  test("GET lists, PATCH edits, DELETE deletes", async () => {
+    const list = await call("GET", "/api/foods")
+    expect(list.status).toBe(200)
+    const [oats] = (await list.json()).foods
+
+    const patched = await call("PATCH", `/api/foods/${oats.id}`, { calories: 160 })
+    expect(patched.status).toBe(200)
+    expect((await patched.json()).food.calories).toBe(160)
+
+    const deleted = await call("DELETE", "/api/foods", { ids: [oats.id] })
+    expect(await deleted.json()).toEqual({ deleted: 1 })
+  })
+
+  test("a body that isn't JSON is a 400; a wrong method is a 405; no auth is a 401", async () => {
+    const bad = await foodsHandle(
+      new Request("http://localhost/api/foods", {
+        method: "DELETE",
+        headers: { Authorization: `tg-init-data ${createValidInitData(USER, config.telegram.botToken)}` },
+        body: "not json",
+      })
+    )
+    expect(bad.status).toBe(400)
+    expect((await call("POST", "/api/foods", {})).status).toBe(405)
+    expect((await call("GET", "/api/foods/1")).status).toBe(405)
+    expect((await call("GET", "/api/foods", undefined, false)).status).toBe(401)
   })
 })

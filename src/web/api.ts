@@ -7,12 +7,38 @@ import { getTodayInTimezone, getDateRangeInTimezone, DEFAULT_TIMEZONE } from "..
 import { sumTotals } from "../utils/format"
 import { hashTelegramId } from "../analytics"
 import { MACROS, DEFAULT_MACROS, macroValuesOf, type MacroKey } from "../macros"
+import type { FoodLibraryRepository } from "../db/repositories/food-library"
+import { validateFood } from "../library/validate"
+import type { SavedFood } from "../library/types"
 
 export interface ApiDeps {
   usersRepo: UsersRepository
   foodLogsRepo: FoodLogsRepository
   /** POSTHOG_ID_SECRET, only when analytics is on. Server-side only: the browser gets the hash. */
   analyticsIdSecret?: string
+  /** The food library (Foods tab); its routes 404 unless foodLibraryEnabled. */
+  foodLibrary?: FoodLibraryRepository
+  /** FEATURE_LOCAL_FOOD_DB */
+  foodLibraryEnabled?: boolean
+}
+
+export type ApiResult = { status: number; body: unknown }
+export const MAX_DELETE_IDS = 500
+
+/** The fields a PATCH may change. Anything else in the body is ignored. */
+const FOOD_FIELDS = ["name", "serving", "serving_amount", "serving_unit", "calories", ...MACROS.map((m) => m.column)]
+const NOT_FOUND: ApiResult = { status: 404, body: { error: "Not found" } }
+
+function foodPayload(food: SavedFood) {
+  return {
+    id: food.id,
+    name: food.name,
+    serving: food.serving,
+    serving_amount: food.serving_amount,
+    serving_unit: food.serving_unit,
+    calories: food.calories,
+    ...macroValuesOf(food),
+  }
 }
 
 function dayPayload(date: string, entries: FoodLog[]) {
@@ -31,6 +57,7 @@ function dayPayload(date: string, entries: FoodLog[]) {
 
 export function createApiHandlers(deps: ApiDeps) {
   const { usersRepo, foodLogsRepo, analyticsIdSecret } = deps
+  const library = deps.foodLibraryEnabled && deps.foodLibrary ? deps.foodLibrary : null
 
   return {
     getUser(telegramId: number) {
@@ -43,6 +70,8 @@ export function createApiHandlers(deps: ApiDeps) {
         username: user?.username ?? null,
         // The same distinct ID as this user's server-side events; null means no analytics.
         analytics_id: analyticsIdSecret ? hashTelegramId(telegramId, analyticsIdSecret) : null,
+        // Shows the Foods tab. A Telegram-cached page that predates this ignores it.
+        food_library: library !== null,
       }
     },
 
@@ -86,6 +115,44 @@ export function createApiHandlers(deps: ApiDeps) {
 
     getDay(telegramId: number, date: string) {
       return dayPayload(date, foodLogsRepo.getByDate(telegramId, date))
+    },
+
+    listFoods(telegramId: number): ApiResult {
+      if (!library) return NOT_FOUND
+      return { status: 200, body: { foods: library.listByUser(telegramId).map(foodPayload) } }
+    },
+
+    updateFood(telegramId: number, id: number, patch: unknown): ApiResult {
+      if (!library) return NOT_FOUND
+      const existing = library.get(telegramId, id)
+      if (!existing) return NOT_FOUND
+      if (typeof patch !== "object" || patch === null || Array.isArray(patch)) {
+        return { status: 400, body: { error: "Expected a JSON object" } }
+      }
+      const merged: Record<string, unknown> = { ...foodPayload(existing) }
+      for (const key of FOOD_FIELDS) if (key in patch) merged[key] = (patch as Record<string, unknown>)[key]
+      const result = validateFood(merged)
+      if (!result.ok) return { status: 400, body: { error: result.reason } }
+      const outcome = library.update(telegramId, id, result.food)
+      if (outcome === "not_found") return NOT_FOUND
+      if (outcome === "name_taken") {
+        return { status: 409, body: { error: `You already have a food called ${result.food.name}` } }
+      }
+      return { status: 200, body: { food: foodPayload(library.get(telegramId, id)!) } }
+    },
+
+    deleteFoods(telegramId: number, body: unknown): ApiResult {
+      if (!library) return NOT_FOUND
+      const ids = typeof body === "object" && body !== null ? (body as { ids?: unknown }).ids : undefined
+      const valid =
+        Array.isArray(ids) &&
+        ids.length > 0 &&
+        ids.length <= MAX_DELETE_IDS &&
+        ids.every((id) => typeof id === "number" && Number.isSafeInteger(id) && id > 0)
+      if (!valid) return { status: 400, body: { error: `Expected ids: 1 to ${MAX_DELETE_IDS} food ids` } }
+      const deleted = library.deleteMany(telegramId, ids as number[])
+      if (deleted === "not_found") return NOT_FOUND
+      return { status: 200, body: { deleted } }
     },
   }
 }

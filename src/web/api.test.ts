@@ -3,6 +3,7 @@ import { describe, test, expect, beforeEach } from "bun:test"
 import { createTestDb } from "../db/test-helpers"
 import { FoodLogsRepository } from "../db/repositories/food-logs"
 import { UsersRepository } from "../db/repositories/users"
+import { FoodLibraryRepository } from "../db/repositories/food-library"
 import { getTodayInTimezone, DEFAULT_TIMEZONE } from "../utils/dates"
 import { hashTelegramId } from "../analytics"
 import { createApiHandlers } from "./api"
@@ -31,6 +32,7 @@ describe("getUser", () => {
       tracked_macros: ["protein"],
       username: "maria",
       analytics_id: null,
+      food_library: false,
     })
   })
 
@@ -107,5 +109,68 @@ describe("getStats", () => {
     for (const series of Object.values(stats.dailyMacros)) expect(Object.keys(series)).toEqual(Object.keys(stats.daily))
     expect(stats.dailyMacros.added_sugar[today]).toBe(2)
     expect(stats.dailyMacros.fat[Object.keys(stats.daily).sort()[5]]).toBe(0)
+  })
+})
+
+describe("food library", () => {
+  const OATS = { name: "Quaker Oats", serving: "1/2 cup (40 g)", serving_amount: 40, serving_unit: "g" as const, calories: 150, protein_g: 5, fat_g: 3, fiber_g: 4, added_sugar_g: null }
+  let library: FoodLibraryRepository
+  let foodsApi: ReturnType<typeof createApiHandlers>
+
+  beforeEach(() => {
+    const db = createTestDb()
+    library = new FoodLibraryRepository(db)
+    const users = new UsersRepository(db)
+    users.upsert(USER, "maria")
+    foodsApi = createApiHandlers({ usersRepo: users, foodLogsRepo: new FoodLogsRepository(db), foodLibrary: library, foodLibraryEnabled: true })
+    library.upsertMany(USER, [OATS, { ...OATS, name: "Skyflakes", calories: 110 }], "import")
+  })
+
+  test("getUser says whether the library is on", () => {
+    expect(foodsApi.getUser(USER).food_library).toBe(true)
+    expect(api.getUser(USER).food_library).toBe(false)
+  })
+
+  test("off: every foods route is 404", () => {
+    const off = createApiHandlers({ usersRepo, foodLogsRepo, foodLibrary: library, foodLibraryEnabled: false })
+    expect(off.listFoods(USER).status).toBe(404)
+    expect(off.updateFood(USER, 1, {}).status).toBe(404)
+    expect(off.deleteFoods(USER, { ids: [1] }).status).toBe(404)
+  })
+
+  test("listFoods: A–Z, every field", () => {
+    const result = foodsApi.listFoods(USER)
+    expect(result.status).toBe(200)
+    const foods = (result.body as { foods: any[] }).foods
+    expect(foods.map((f) => f.name)).toEqual(["Quaker Oats", "Skyflakes"])
+    expect(foods[0]).toEqual({ id: foods[0].id, ...OATS })
+    expect(foodsApi.listFoods(999).body).toEqual({ foods: [] })
+  })
+
+  test("updateFood: changes only the fields sent, validated", () => {
+    const id = library.listByUser(USER)[0].id
+    const ok = foodsApi.updateFood(USER, id, { calories: 160, fiber_g: null, unknown_field: 1 })
+    expect(ok.status).toBe(200)
+    expect((ok.body as any).food).toMatchObject({ name: "Quaker Oats", calories: 160, fiber_g: null, protein_g: 5 })
+
+    expect(foodsApi.updateFood(USER, id, { calories: 9999 })).toEqual({ status: 400, body: { error: "calories out of range" } })
+    expect(foodsApi.updateFood(USER, id, "nope").status).toBe(400)
+    expect(foodsApi.updateFood(999, id, { calories: 1 }).status).toBe(404)
+    expect(foodsApi.updateFood(USER, id, { name: "skyflakes" })).toEqual({
+      status: 409,
+      body: { error: "You already have a food called skyflakes" },
+    })
+  })
+
+  test("deleteFoods: all or nothing, ids checked", () => {
+    const [oats, sky] = library.listByUser(USER)
+    expect(foodsApi.deleteFoods(USER, { ids: [] }).status).toBe(400)
+    expect(foodsApi.deleteFoods(USER, { ids: ["1"] }).status).toBe(400)
+    expect(foodsApi.deleteFoods(USER, null).status).toBe(400)
+    expect(foodsApi.deleteFoods(USER, { ids: Array.from({ length: 501 }, (_, i) => i + 1) }).status).toBe(400)
+    expect(foodsApi.deleteFoods(999, { ids: [oats.id] }).status).toBe(404)
+    expect(library.count(USER)).toBe(2)
+    expect(foodsApi.deleteFoods(USER, { ids: [oats.id, sky.id] })).toEqual({ status: 200, body: { deleted: 2 } })
+    expect(library.count(USER)).toBe(0)
   })
 })

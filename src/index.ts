@@ -22,7 +22,7 @@ console.log("Database initialized")
 
 // userAnalytics applies each user's /settings meal text choice; anything that
 // reports for a user goes through it.
-const { bot, usersRepo, foodLogsRepo, pendingRepo, mealEstimator, analytics: userAnalytics } = createBot(analytics)
+const { bot, usersRepo, foodLogsRepo, pendingRepo, mealEstimator, foodLibraryRepo, analytics: userAnalytics } = createBot(analytics)
 
 // Fetches the bot's own username (getMe) for the landing page's t.me links.
 // bot.start() below reuses it instead of calling getMe again.
@@ -39,6 +39,8 @@ const webServer = startWebServer({
     ? { apiKey: config.posthog.apiKey, host: config.posthog.host, environment: config.posthog.environment }
     : undefined,
   analyticsIdSecret: config.posthog.apiKey ? config.posthog.idSecret : undefined,
+  foodLibraryRepo,
+  foodLibraryEnabled: config.features.localFoodDb,
 })
 console.log(`Web server running on port ${config.web.port}`)
 
