@@ -25,6 +25,8 @@ import { createPendingCommand, createPendingCallbackHandler } from "./commands/p
 import { createUsageCommand } from "./commands/usage"
 import { LogFlow } from "./conversations/log-flow"
 import { AIService } from "../ai/service"
+import { FoodLibraryRepository } from "../db/repositories/food-library"
+import { MealEstimator } from "../library/estimator"
 import { noopAnalytics, type Analytics } from "../analytics"
 import { withContentPreference } from "../analytics/content-preference"
 import { createBotErrorHandler } from "./errors"
@@ -48,7 +50,12 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
   const pendingRepo = new PendingRepository(db)
   const usageRepo = new UsageRepository(db)
   const aiService = new AIService(new CacheRepository(db), usageRepo, analytics)
-  const logFlow = new LogFlow(conversationsRepo, foodLogsRepo, pendingRepo, aiService, usersRepo)
+  const foodLibraryRepo = new FoodLibraryRepository(db)
+  const foodLibraryEnabled = config.features.localFoodDb
+  const mealEstimator = new MealEstimator({ enabled: foodLibraryEnabled, library: foodLibraryRepo, ai: aiService, analytics })
+  const logFlow = new LogFlow(conversationsRepo, foodLogsRepo, pendingRepo, mealEstimator, usersRepo, {
+    foodLibrary: foodLibraryEnabled,
+  })
 
   const accessRequestsRepo = new AccessRequestsRepository(db)
   const announcementsRepo = new AnnouncementsRepository(db)
@@ -132,5 +139,5 @@ export function createBot(baseAnalytics: Analytics = noopAnalytics) {
     return logMessageHandler(ctx)
   })
 
-  return { bot, allowedUsersRepo, usersRepo, foodLogsRepo, conversationsRepo, pendingRepo, aiService, logFlow, analytics }
+  return { bot, allowedUsersRepo, usersRepo, foodLogsRepo, conversationsRepo, pendingRepo, aiService, foodLibraryRepo, mealEstimator, logFlow, analytics }
 }

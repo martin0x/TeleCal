@@ -7,8 +7,7 @@ import { ConversationsRepository } from "../../db/repositories/conversations"
 import { FoodLogsRepository } from "../../db/repositories/food-logs"
 import { PendingRepository } from "../../db/repositories/pending"
 import { UsersRepository } from "../../db/repositories/users"
-import { AIService } from "../../ai/service"
-import { EstimationResult } from "../../ai/types"
+import type { MealEstimator } from "../../library/estimator"
 import { zeroTotals } from "../../macros"
 
 describe("LogFlow", () => {
@@ -44,7 +43,7 @@ describe("LogFlow", () => {
       conversationsRepo,
       foodLogsRepo,
       pendingRepo,
-      mockAIService as unknown as AIService,
+      mockAIService as unknown as MealEstimator,
       usersRepo
     )
   })
@@ -383,5 +382,57 @@ describe("LogFlow", () => {
       edit: "✅ Logged to Sat, Jan 31:\n\n<blockquote>🍗 Chicken — 200 cal</blockquote>\n\n<b>Total: 200 cal</b>",
       toast: "Logged ✅",
     })
+  })
+
+  test("the confirmation names the items that came from saved foods", async () => {
+    mockAIService.estimate.mockImplementation(() =>
+      Promise.resolve({
+        items: [
+          { description: "Quaker Oats ×2", calories: 300, protein_g: 10, saved_food_id: 1 },
+          { description: "Banana", calories: 105, protein_g: 1, emoji: "🍌" },
+        ],
+        needsClarification: false,
+        confidence: "high" as const,
+        source: "mixed" as const,
+      })
+    )
+    await logFlow.start(123, 456, "2026-01-31", "openai")
+    const result = await logFlow.processInput(123, 456, "80g oats and a banana", "openai")
+    expect(result.message).toEndWith("\n\nFrom your foods: Quaker Oats ×2")
+  })
+
+  test("no footer when nothing came from saved foods", async () => {
+    await logFlow.start(123, 456, "2026-01-31", "openai")
+    const result = await logFlow.processInput(123, 456, "grilled chicken", "openai")
+    expect(result.message).not.toContain("From your foods")
+  })
+
+  test("with the food library on, logging offers Save to my foods with the new log's id", async () => {
+    const withLibrary = new LogFlow(
+      conversationsRepo,
+      foodLogsRepo,
+      pendingRepo,
+      mockAIService as unknown as MealEstimator,
+      usersRepo,
+      { foodLibrary: true }
+    )
+    const items = JSON.stringify([{ description: "Chicken", calories: 200, protein_g: 25, emoji: "🍗" }])
+
+    conversationsRepo.upsert(123, 456, "confirming", "2026-01-31", { pending_items: items })
+    const typed = await withLibrary.processInput(123, 456, "yes", "openai")
+    const firstLog = foodLogsRepo.getByDate(123, "2026-01-31")[0]
+    expect(typed.saveOffer).toEqual({ logId: firstLog.id })
+
+    conversationsRepo.upsert(123, 456, "confirming", "2026-01-31", { pending_items: items })
+    const pressed = withLibrary.resolveConfirmation(123, 456, confirmToken("2026-01-31", items), "log")
+    const newest = Math.max(...foodLogsRepo.getByDate(123, "2026-01-31").map((log) => log.id))
+    expect(pressed).toMatchObject({ stale: false, saveOffer: { logId: newest } })
+  })
+
+  test("with the food library off, there is no save offer", async () => {
+    const items = JSON.stringify([{ description: "Chicken", calories: 200, emoji: "🍗" }])
+    conversationsRepo.upsert(123, 456, "confirming", "2026-01-31", { pending_items: items })
+    const typed = await logFlow.processInput(123, 456, "yes", "openai")
+    expect(typed.saveOffer).toBeUndefined()
   })
 })

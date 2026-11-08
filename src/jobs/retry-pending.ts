@@ -3,7 +3,7 @@ import { Bot } from "grammy"
 import { PendingRepository, PendingEntry } from "../db/repositories/pending"
 import { FoodLogsRepository } from "../db/repositories/food-logs"
 import { UsersRepository } from "../db/repositories/users"
-import { AIService } from "../ai/service"
+import type { MealEstimator } from "../library/estimator"
 import { config } from "../config"
 import { formatDateForDisplay } from "../utils/dates"
 import { formatItemsSummary } from "../utils/format"
@@ -21,7 +21,7 @@ export function createRetryPendingJob(
   pendingRepo: PendingRepository,
   foodLogsRepo: FoodLogsRepository,
   usersRepo: UsersRepository,
-  aiService: AIService,
+  estimator: Pick<MealEstimator, "estimate">,
   analytics: Analytics = noopAnalytics
 ) {
   return async (): Promise<void> => {
@@ -49,7 +49,7 @@ export function createRetryPendingJob(
         const user = usersRepo.findById(entry.telegram_id)
         const provider = user?.ai_provider ?? "openai"
 
-        const result = await aiService.estimate(entry.food_text, provider, {
+        const result = await estimator.estimate(entry.food_text, provider, {
           telegramId: entry.telegram_id,
           chatId: entry.chat_id,
           callType: "retry",
@@ -99,10 +99,10 @@ export function startRetryPendingJob(
   pendingRepo: PendingRepository,
   foodLogsRepo: FoodLogsRepository,
   usersRepo: UsersRepository,
-  aiService: AIService,
+  estimator: Pick<MealEstimator, "estimate">,
   analytics: Analytics = noopAnalytics
 ): NodeJS.Timeout {
-  const job = createRetryPendingJob(bot, pendingRepo, foodLogsRepo, usersRepo, aiService, analytics)
+  const job = createRetryPendingJob(bot, pendingRepo, foodLogsRepo, usersRepo, estimator, analytics)
 
   // Run every 5 minutes (configurable)
   const interval = setInterval(() => {

@@ -6,7 +6,7 @@ import { PendingRepository } from "../db/repositories/pending"
 import { FoodLogsRepository } from "../db/repositories/food-logs"
 import { UsersRepository } from "../db/repositories/users"
 import { createRetryPendingJob } from "./retry-pending"
-import type { AIService } from "../ai/service"
+import type { MealEstimator } from "../library/estimator"
 import { FakeAnalytics } from "../analytics/test-helpers"
 
 let db: Database
@@ -39,7 +39,7 @@ test("passes retry call type and the entry's user and chat to the AI service", a
     pendingRepo,
     foodLogsRepo,
     usersRepo,
-    { estimate } as unknown as AIService
+    { estimate } as unknown as MealEstimator
   )
   await job()
 
@@ -71,7 +71,7 @@ test("announces a processed entry as an HTML summary", async () => {
     pendingRepo,
     foodLogsRepo,
     usersRepo,
-    { estimate } as unknown as AIService
+    { estimate } as unknown as MealEstimator
   )
   await job()
 
@@ -94,7 +94,7 @@ test("tells the user when an entry is given up on", async () => {
     pendingRepo as unknown as PendingRepository,
     new FoodLogsRepository(db),
     new UsersRepository(db),
-    {} as AIService
+    {} as MealEstimator
   )
   await job()
 
@@ -122,7 +122,7 @@ test("a failure processing an entry is reported, and the entry stays for the nex
     pendingRepo,
     foodLogsRepo,
     usersRepo,
-    { estimate } as unknown as AIService,
+    { estimate } as unknown as MealEstimator,
     analytics
   )
   await job()
@@ -149,7 +149,7 @@ test("the processed-entry message follows the user's macros", async () => {
   )
   const bot = { api: { sendMessage: mock(() => Promise.resolve()) } }
 
-  await createRetryPendingJob(bot as any, pendingRepo, foodLogsRepo, usersRepo, { estimate } as unknown as AIService)()
+  await createRetryPendingJob(bot as any, pendingRepo, foodLogsRepo, usersRepo, { estimate } as unknown as MealEstimator)()
 
   expect(bot.api.sendMessage).toHaveBeenCalledWith(
     42,

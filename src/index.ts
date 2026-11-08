@@ -22,7 +22,7 @@ console.log("Database initialized")
 
 // userAnalytics applies each user's /settings meal text choice; anything that
 // reports for a user goes through it.
-const { bot, usersRepo, foodLogsRepo, pendingRepo, aiService, analytics: userAnalytics } = createBot(analytics)
+const { bot, usersRepo, foodLogsRepo, pendingRepo, mealEstimator, analytics: userAnalytics } = createBot(analytics)
 
 // Fetches the bot's own username (getMe) for the landing page's t.me links.
 // bot.start() below reuses it instead of calling getMe again.
@@ -52,7 +52,7 @@ bot.start({
 
     // Start background jobs after bot is running
     reminderInterval = startReminderJob(bot, usersRepo, foodLogsRepo, userAnalytics)
-    retryInterval = startRetryPendingJob(bot, pendingRepo, foodLogsRepo, usersRepo, aiService, userAnalytics)
+    retryInterval = startRetryPendingJob(bot, pendingRepo, foodLogsRepo, usersRepo, mealEstimator, userAnalytics)
   },
 })
 

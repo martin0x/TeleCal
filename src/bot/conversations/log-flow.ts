@@ -6,9 +6,8 @@ import {
 import { FoodLogsRepository, FoodItem } from "../../db/repositories/food-logs"
 import { PendingRepository } from "../../db/repositories/pending"
 import { UsersRepository } from "../../db/repositories/users"
-import { AIService } from "../../ai/service"
-import { EstimationResult } from "../../ai/types"
-import { formatItemsSummary, formatTotals, sumTotals, shortHash } from "../../utils/format"
+import type { MealEstimator, MealEstimate } from "../../library/estimator"
+import { escapeHtml, formatItemsSummary, formatTotals, sumTotals, shortHash } from "../../utils/format"
 import { formatDateForDisplay } from "../../utils/dates"
 import { DEFAULT_MACROS, type MacroKey, type Totals } from "../../macros"
 
@@ -18,13 +17,15 @@ export interface LogFlowResult {
   parseMode?: "HTML"
   /** Set on a confirmation message; the bot layer turns it into the Log/Change/Cancel keyboard. */
   confirm?: { token: string; totals: Totals; macros: MacroKey[] }
+  /** Set after logging when the food library is on; the bot layer adds "Save to my foods". */
+  saveOffer?: { logId: number }
 }
 
 export type ConfirmChoice = "log" | "change" | "cancel"
 
 export type ConfirmationOutcome =
   | { stale: true }
-  | { stale: false; edit: string; toast?: string; followUp?: string }
+  | { stale: false; edit: string; toast?: string; followUp?: string; saveOffer?: { logId: number } }
 
 /**
  * Fingerprint of a pending estimate, carried in the confirmation buttons. A
@@ -65,8 +66,10 @@ export class LogFlow {
     private conversations: ConversationsRepository,
     private foodLogs: FoodLogsRepository,
     private pending: PendingRepository,
-    private aiService: AIService,
-    private users: Pick<UsersRepository, "findById">
+    private estimator: Pick<MealEstimator, "estimate">,
+    private users: Pick<UsersRepository, "findById">,
+    /** foodLibrary: FEATURE_LOCAL_FOOD_DB, which turns on the save offer after logging. */
+    private opts: { foodLibrary?: boolean } = {}
   ) {}
 
   /** The macros this user's replies show. */
@@ -198,7 +201,7 @@ export class LogFlow {
     targetDate: string
   ): Promise<LogFlowResult> {
     try {
-      const result = await this.aiService.estimate(input, provider, {
+      const result = await this.estimator.estimate(input, provider, {
         telegramId,
         chatId,
         callType: "estimate",
@@ -225,7 +228,7 @@ export class LogFlow {
     const contextStr = this.buildContextString(state.pending_food, context)
 
     try {
-      const result = await this.aiService.estimate(input, provider, {
+      const result = await this.estimator.estimate(input, provider, {
         telegramId,
         chatId,
         callType: "clarify",
@@ -265,11 +268,12 @@ export class LogFlow {
         }
       }
 
-      this.commitPending(telegramId, chatId, state.target_date, items)
+      const logId = this.commitPending(telegramId, chatId, state.target_date, items)
 
       return {
         message: `Logged ${formatTotals(sumTotals(items), this.macrosFor(telegramId))} for ${formatDateForDisplay(state.target_date)}.`,
         action: "done",
+        ...this.saveOffer(logId),
       }
     }
 
@@ -312,13 +316,15 @@ export class LogFlow {
     const macros = this.macrosFor(telegramId)
 
     switch (choice) {
-      case "log":
-        this.commitPending(telegramId, chatId, state.target_date, items)
+      case "log": {
+        const logId = this.commitPending(telegramId, chatId, state.target_date, items)
         return {
           stale: false,
           edit: `✅ Logged to ${formatDateForDisplay(state.target_date)}:\n\n${formatItemsSummary(items, macros)}`,
           toast: "Logged ✅",
+          ...this.saveOffer(logId),
         }
+      }
       case "change":
         this.backToInput(telegramId, state)
         return {
@@ -344,9 +350,15 @@ export class LogFlow {
     chatId: number,
     targetDate: string,
     items: FoodItem[]
-  ): void {
-    this.foodLogs.create(telegramId, chatId, targetDate, items)
+  ): number {
+    const log = this.foodLogs.create(telegramId, chatId, targetDate, items)
     this.conversations.delete(telegramId)
+    return log.id
+  }
+
+  /** The "Save to my foods" offer for a just-logged entry, when the library is on. */
+  private saveOffer(logId: number): { saveOffer?: { logId: number } } {
+    return this.opts.foodLibrary ? { saveOffer: { logId } } : {}
   }
 
   private backToInput(
@@ -365,8 +377,10 @@ export class LogFlow {
     action: "prompt" | "continue"
   ): LogFlowResult {
     const macros = this.macrosFor(telegramId)
+    const fromLibrary = items.filter((item) => item.saved_food_id).map((item) => item.description)
+    const footer = fromLibrary.length > 0 ? `\n\nFrom your foods: ${escapeHtml(fromLibrary.join(", "))}` : ""
     return {
-      message: `${header}\n\n${formatItemsSummary(items, macros)}`,
+      message: `${header}\n\n${formatItemsSummary(items, macros)}${footer}`,
       action,
       parseMode: "HTML",
       confirm: {
@@ -381,7 +395,7 @@ export class LogFlow {
     telegramId: number,
     chatId: number,
     input: string,
-    result: EstimationResult,
+    result: MealEstimate,
     targetDate: string,
     previousContext?: ConversationContext
   ): LogFlowResult {
