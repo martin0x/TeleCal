@@ -175,4 +175,28 @@ describe("GeminiProvider.parseFoods", () => {
     const result = await new GeminiProvider(fakeClient(reply)).parseFoods("Oats 150 kcal")
     expect(result.reply.foods).toEqual([{ name: "Oats", calories: 150 }])
   })
+
+  test("caps output at 4096 tokens, unlike estimate", async () => {
+    function capturingClient(text: string) {
+      const seen: any[] = []
+      const client = {
+        getGenerativeModel: (opts: any) => {
+          seen.push(opts)
+          return {
+            generateContent: async () => ({ response: { text: () => text, usageMetadata: {} } }),
+          }
+        },
+      } as any
+      return { client, seen }
+    }
+
+    const foods = capturingClient(JSON.stringify({ foods: [], unreadable: [] }))
+    await new GeminiProvider(foods.client).parseFoods("x")
+    expect(foods.seen[0].generationConfig.maxOutputTokens).toBe(4096)
+
+    const estimate = capturingClient(VALID_REPLY)
+    await new GeminiProvider(estimate.client).estimate("two eggs")
+    expect(estimate.seen[0].generationConfig.maxOutputTokens).toBeUndefined()
+    expect("maxOutputTokens" in estimate.seen[0].generationConfig).toBe(false)
+  })
 })

@@ -2,7 +2,14 @@
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { AIProvider, ProviderResult, MacroBatchResult, TokenUsage, type FoodsParseResult } from "../types"
 import { config } from "../../config"
-import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT, FOODS_PARSE_PROMPT, formatBatchInput, estimateUserMessage } from "../prompt"
+import {
+  ESTIMATE_JSON_PROMPT,
+  MACRO_BATCH_PROMPT,
+  FOODS_PARSE_PROMPT,
+  FOODS_MAX_TOKENS,
+  formatBatchInput,
+  estimateUserMessage,
+} from "../prompt"
 import { normalizeItems, stripFences, alignMacroBatch, parseReply, traceOf, normalizeFoodsReply } from "../parse"
 
 const MODEL = "gemini-3.5-flash-lite"
@@ -15,19 +22,25 @@ export class GeminiProvider implements AIProvider {
     this.client = client ?? new GoogleGenerativeAI(config.ai.googleApiKey)
   }
 
-  private model(systemInstruction: string) {
+  /** maxOutputTokens is only set in generationConfig when given, so estimate/estimateMacros keep today's request shape. */
+  private model(systemInstruction: string, maxOutputTokens?: number) {
     return this.client.getGenerativeModel({
       model: MODEL,
       generationConfig: {
         temperature: 0.3,
         responseMimeType: "application/json",
+        ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
       },
       systemInstruction,
     })
   }
 
-  private async generate(systemInstruction: string, input: string): Promise<{ text: string; usage: TokenUsage }> {
-    const result = await this.model(systemInstruction).generateContent(input)
+  private async generate(
+    systemInstruction: string,
+    input: string,
+    maxOutputTokens?: number
+  ): Promise<{ text: string; usage: TokenUsage }> {
+    const result = await this.model(systemInstruction, maxOutputTokens).generateContent(input)
     const response = result.response
     const text = response.text()
     if (!text) {
@@ -85,9 +98,8 @@ export class GeminiProvider implements AIProvider {
     }
   }
 
-  // Gemini's default output limit is already far above a pasted table's needs.
   async parseFoods(text: string): Promise<FoodsParseResult> {
-    const { text: output, usage } = await this.generate(FOODS_PARSE_PROMPT, text)
+    const { text: output, usage } = await this.generate(FOODS_PARSE_PROMPT, text, FOODS_MAX_TOKENS)
     const trace = traceOf(FOODS_PARSE_PROMPT, text, output)
     return { reply: normalizeFoodsReply(parseReply(stripFences(output), usage, trace)), usage, trace }
   }
