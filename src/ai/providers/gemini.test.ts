@@ -2,7 +2,7 @@
 import { describe, test, expect } from "bun:test"
 import { GeminiProvider } from "./gemini"
 import { ProviderParseError } from "../types"
-import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT, SAVED_FOODS_HEADER } from "../prompt"
+import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT, SAVED_FOODS_HEADER, FOODS_MAX_TOKENS } from "../prompt"
 import { MACROS, emptyMacroValues } from "../../macros"
 
 const VALID_REPLY = JSON.stringify({
@@ -176,7 +176,7 @@ describe("GeminiProvider.parseFoods", () => {
     expect(result.reply.foods).toEqual([{ name: "Oats", calories: 150 }])
   })
 
-  test("caps output at 4096 tokens, unlike estimate", async () => {
+  test("caps output at FOODS_MAX_TOKENS, unlike estimate", async () => {
     function capturingClient(text: string) {
       const seen: any[] = []
       const client = {
@@ -192,7 +192,7 @@ describe("GeminiProvider.parseFoods", () => {
 
     const foods = capturingClient(JSON.stringify({ foods: [], unreadable: [] }))
     await new GeminiProvider(foods.client).parseFoods("x")
-    expect(foods.seen[0].generationConfig.maxOutputTokens).toBe(4096)
+    expect(foods.seen[0].generationConfig.maxOutputTokens).toBe(FOODS_MAX_TOKENS)
 
     const estimate = capturingClient(VALID_REPLY)
     await new GeminiProvider(estimate.client).estimate("two eggs")

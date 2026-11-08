@@ -3,7 +3,7 @@ import { describe, test, expect } from "bun:test"
 import Anthropic from "@anthropic-ai/sdk"
 import { AnthropicProvider } from "./anthropic"
 import { ProviderParseError } from "../types"
-import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT, SAVED_FOODS_HEADER, FOODS_PARSE_PROMPT } from "../prompt"
+import { ESTIMATE_JSON_PROMPT, MACRO_BATCH_PROMPT, SAVED_FOODS_HEADER, FOODS_PARSE_PROMPT, FOODS_MAX_TOKENS } from "../prompt"
 import { MACROS, emptyMacroValues } from "../../macros"
 
 const VALID_REPLY = JSON.stringify({
@@ -171,7 +171,7 @@ describe("AnthropicProvider: saved foods", () => {
 })
 
 describe("AnthropicProvider.parseFoods", () => {
-  test("sends the text with the foods prompt and a 4096-token limit, and returns the rows", async () => {
+  test("sends the text with the foods prompt and the foods token limit, and returns the rows", async () => {
     const calls: any[] = []
     const reply = JSON.stringify({ foods: [{ name: "Oats", calories: 150 }], unreadable: [] })
     const client = {
@@ -186,7 +186,7 @@ describe("AnthropicProvider.parseFoods", () => {
     const result = await new AnthropicProvider(client).parseFoods("Oats 150 kcal")
 
     expect(calls[0].system).toBe(FOODS_PARSE_PROMPT)
-    expect(calls[0].max_tokens).toBe(4096)
+    expect(calls[0].max_tokens).toBe(FOODS_MAX_TOKENS)
     expect(calls[0].messages[0].content).toBe("Oats 150 kcal")
     expect(result.reply.foods).toEqual([{ name: "Oats", calories: 150 }])
     expect(result.usage.inputTokens).toBe(50)

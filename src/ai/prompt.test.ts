@@ -6,6 +6,7 @@ import {
   MACRO_BATCH_PROMPT,
   MACRO_RULES,
   FOODS_PARSE_PROMPT,
+  FOODS_MAX_TOKENS,
   estimateUserMessage,
   formatSavedFoods,
   SAVED_FOODS_HEADER,
@@ -76,5 +77,9 @@ describe("FOODS_PARSE_PROMPT", () => {
     expect(FOODS_PARSE_PROMPT).toContain("per serving")
     expect(FOODS_PARSE_PROMPT).toContain("Never estimate")
     expect(FOODS_PARSE_PROMPT).toContain("total sugars")
+  })
+
+  test("leaves room for a full 4096-character paste: about 80 rows, over 4,000 output tokens", () => {
+    expect(FOODS_MAX_TOKENS).toBe(16384)
   })
 })

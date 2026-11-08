@@ -5,6 +5,7 @@
 //   bun run scripts/smoke-providers.ts <openai|anthropic|gemini>           # estimate()
 //   bun run scripts/smoke-providers.ts <openai|anthropic|gemini> --macros  # estimateMacros()
 //   bun run scripts/smoke-providers.ts <openai|anthropic|gemini> --foods   # parseFoods()
+//   bun run scripts/smoke-providers.ts <openai|anthropic|gemini> --saved   # estimate() with savedFoods
 //
 // With POSTHOG_API_KEY and POSTHOG_ID_SECRET set, the call is also sent to
 // PostHog as $ai_generation (tagged environment=development unless
@@ -16,13 +17,30 @@ import { UsageRepository } from "../src/db/repositories/usage"
 import { createAnalytics } from "../src/analytics"
 import { config } from "../src/config"
 import { MACROS } from "../src/macros"
+import type { SavedFood } from "../src/library/types"
 
 const provider = process.argv[2]
 const flag = process.argv[3]
-const mode = flag === "--macros" ? "macros" : flag === "--foods" ? "foods" : "estimate"
+const mode = flag === "--macros" ? "macros" : flag === "--foods" ? "foods" : flag === "--saved" ? "saved" : "estimate"
 if (!provider) {
-  console.error("Usage: bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--macros|--foods]")
+  console.error("Usage: bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--macros|--foods|--saved]")
   process.exit(1)
+}
+
+/** The saved food --saved sends; "80g oats" is 2 of its 40 g servings. */
+const SAVED_OATS: SavedFood = {
+  id: 1,
+  telegram_id: 0,
+  source: "import",
+  name: "Quaker Oats",
+  serving: "1/2 cup (40 g)",
+  serving_amount: 40,
+  serving_unit: "g",
+  calories: 150,
+  protein_g: 5,
+  fat_g: 3,
+  fiber_g: 4,
+  added_sugar_g: null,
 }
 
 const db = createTestDb()
@@ -72,12 +90,15 @@ try {
     await finish(0)
   }
 
-  const result = await service.estimate("two scrambled eggs and a slice of toast", provider, {
+  // --saved: the same call with a saved food, which switches OpenAI to its saved-foods schema.
+  const saved = mode === "saved"
+  const result = await service.estimate(saved ? "80g oats and a banana" : "two scrambled eggs and a slice of toast", provider, {
     telegramId: 0,
     chatId: null,
     callType: "estimate",
+    ...(saved ? { savedFoods: [SAVED_OATS] } : {}),
   })
-  console.log(`✓ ${provider} responded`)
+  console.log(`✓ ${provider} responded${saved ? " with saved foods" : ""}`)
   console.log(JSON.stringify(result, null, 2))
   if (result.items.length === 0 && !result.needsClarification) {
     console.error("✗ Empty items with no clarification request — the model replied, but not usefully.")
@@ -87,6 +108,15 @@ try {
   if (missing > 0) {
     console.error(`✗ ${missing} item(s) came back with a macro missing.`)
     await finish(1)
+  }
+  if (saved) {
+    // Reported, not required: which item the model ties to the food is its judgment.
+    const tied = result.items.some((item) => item.saved_food_id === SAVED_OATS.id && item.servings === 2)
+    console.log(
+      tied
+        ? "  An item carried saved_food_id 1 with servings 2."
+        : "  No item carried saved_food_id 1 with servings 2: check the JSON above by eye."
+    )
   }
   await finish(0)
 } catch (error) {

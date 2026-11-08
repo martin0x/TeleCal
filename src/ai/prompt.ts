@@ -83,8 +83,12 @@ export function formatSavedFoods(foods: SavedFood[]): string {
   ].join("\n")
 }
 
-/** Output limit for parseFoods: a 60-row paste overflows the estimate call's 1024. */
-export const FOODS_MAX_TOKENS = 4096
+/**
+ * Output limit for parseFoods. A full 4096-character paste of short rows is
+ * about 80 rows, over 4,000 output tokens, and a cut-off reply is bad JSON.
+ * Billing is per token produced, not per limit.
+ */
+export const FOODS_MAX_TOKENS = 16384
 
 export const FOODS_PARSE_PROMPT = `You turn pasted nutrition information into structured rows. The text may be a table copied from a document or spreadsheet, a list, or one food typed by hand.
 

@@ -13,7 +13,7 @@ bun run dev      # Start with hot reload
 bun run start    # Production start
 bun test         # Run all tests
 bun test src/ai  # Run tests in specific directory
-bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--macros|--foods]   # one live API call to verify a provider; --macros exercises the batch call, --foods the table parser; with POSTHOG_* set, also sends the $ai_generation
+bun run scripts/smoke-providers.ts <openai|anthropic|gemini> [--macros|--foods|--saved]   # one live API call to verify a provider; --macros exercises the batch call, --foods the table parser, --saved an estimate with a saved food; with POSTHOG_* set, also sends the $ai_generation
 bun run scripts/smoke-posthog.ts   # sends one test exception to PostHog; needs POSTHOG_API_KEY and POSTHOG_ID_SECRET
 bun run scripts/telegram-mock/render.ts && bash scripts/build-landing-assets.sh   # re-render the landing page's Telegram screenshots from the bot's real formatters (macOS, Chrome)
 ```
@@ -41,7 +41,7 @@ bun run scripts/telegram-mock/render.ts && bash scripts/build-landing-assets.sh 
 
 **Macros** (`src/macros.ts`): the registry of tracked macros (protein, fat, fiber, added sugar), with each one's column, labels, `/edit` words and prompt rule. Prompts, parsing, the cache check, repository SQL, formatters, the backfill, `/settings` and the API loop over it; a few places still name each macro by hand (listed below). Calories are not in it. Each user's choice is `users.tracked_macros`; formatters take that list (`DEFAULT_MACROS` is protein only).
 
-Adding a macro: its registry entry, then the column in `src/db/schema.sql` and `COLUMN_MIGRATIONS`, `src/ai/prompt.ts` (opening line, shape line, batch instruction, examples), the first line of OpenAI's `INSTRUCTIONS` (`src/ai/providers/openai.ts`), `MACRO_LABELS` in `src/web/views/app.html`, "all four" in `MACROS_SCREEN_TEXT` (`src/bot/commands/settings.ts`), `HELP_TEXT` (`src/bot/help.ts`), the column in `food_library` (`src/db/schema.sql`, `REAL`), `FOODS_PARSE_PROMPT` (`src/ai/prompt.ts`), and `form` in `MACRO_LABELS`.
+Adding a macro: its registry entry, then the column in `src/db/schema.sql` and `COLUMN_MIGRATIONS`, `src/ai/prompt.ts` (opening line, shape line, batch instruction, examples), the first line of OpenAI's `INSTRUCTIONS` (`src/ai/providers/openai.ts`), `MACRO_LABELS` in `src/web/views/app.html` (including its `form` label), "all four" in `MACROS_SCREEN_TEXT` (`src/bot/commands/settings.ts`), `HELP_TEXT` (`src/bot/help.ts`), the column in `food_library` (`src/db/schema.sql`, `REAL`), and `FOODS_PARSE_PROMPT` (`src/ai/prompt.ts`).
 
 **Food library** (`src/library/`, behind `FEATURE_LOCAL_FOOD_DB`): each user's saved foods, label values per serving (`food_library`). `MealEstimator` (`estimator.ts`) is the one entry point for meal estimates (`LogFlow`, the retry job): a meal that `match.ts` matches entirely in code makes no AI call; otherwise up to 15 saved foods go into the AI's user message (never the system prompt) and code applies their label values to the items the AI ties to them. The shared cache is skipped whenever saved foods are involved. Nothing is saved without a preview and a Save tap: `validate.ts` gates every row, `preview.ts` builds the preview. `/foods` (`src/bot/commands/foods.ts`) adds foods by paste, `/foods add`, or "Save to my foods" on a logged meal; the Mini App Foods tab lists, edits and deletes them through `/api/foods`. Spec: `docs/superpowers/specs/2026-11-08-food-library-design.md`.
 

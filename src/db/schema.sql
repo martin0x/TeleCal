@@ -139,7 +139,7 @@ CREATE TABLE IF NOT EXISTS ai_usage (
   -- Subset of output_tokens, NEVER added to it. Billed as output. OpenAI only.
   reasoning_tokens INTEGER,
   cost_usd REAL NOT NULL,
-  call_type TEXT NOT NULL,      -- estimate | clarify | edit | retry | backfill
+  call_type TEXT NOT NULL,      -- estimate | clarify | edit | retry | backfill | import
   status TEXT NOT NULL,         -- ok | parse_error | no_usage
   created_at TEXT DEFAULT (datetime('now'))
 );

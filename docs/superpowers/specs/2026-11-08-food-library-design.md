@@ -106,7 +106,8 @@ Rules:
 - **No preview edits.** To fix a row, the user saves and then edits it in the Mini
   App, or cancels and pastes again.
 - **Long pastes.** Telegram splits a message over 4096 characters into several.
-  Each message gets its own preview and its own Save.
+  Each message gets its own preview and its own Save. A message within 10
+  seconds of a paste is taken as more of it.
 - **Long previews.** A preview that would not fit in one Telegram message lists
   as many rows as fit, then "…and 12 more". Save still saves every row.
 - **Saving.** "Saved 3 foods (1 replaced). You have 145 foods." with an "Open my
@@ -115,9 +116,9 @@ Rules:
 
 ### Save from a log
 
-When the flag is on, the "Logged" message gets a "Save to my foods" button. This
-covers both the Log button and a typed "yes". Only the user who logged can press
-it.
+When the flag is on, the "Logged" message gets a "Save to my foods" button,
+unless every logged item came from the library. This covers both the Log button
+and a typed "yes". Only the user who logged can press it.
 
 ```
 Save to your foods? Values are per serving, as logged.
@@ -131,8 +132,9 @@ Save to your foods? Values are per serving, as logged.
   and no amount. Later it scales only by servings, not by weight.
 - The number buttons switch items on and off, like `/settings` → Macros. Save
   shows how many are on.
-- Items that came from the library are left out. If every item did, the press
-  answers "These are already in your foods."
+- Items that came from the library are left out while their saved food still
+  exists; once it is deleted, they are offered again. If every item is left out,
+  the press answers "These are already in your foods."
 
 ### Logging with the library
 
@@ -148,7 +150,10 @@ This applies to `/log`, `/log <food>` and the retry job. Order:
 **Matching** (code-only path):
 
 - The whole message is tried as one food first, then split on `,`, `and`, `+`,
-  `&` and new lines. A saved "Mac and cheese" stays one item.
+  `&` and new lines. When the message splits, the whole of it must match a saved
+  name exactly (a quantity before or after is allowed), so a saved "Mac and
+  cheese" stays one item and "oats and milk" never becomes a saved "Oats and
+  Milk Bar".
 - A part matches a food when its name matches exactly, ignoring case and
   punctuation, or when every word the user typed appears in exactly one saved
   name ("oats" finds "Quaker Oats"). Two or more candidates means no match.
@@ -198,6 +203,9 @@ when it tries again.
 - Empty state: "No saved foods yet. Use /foods in the chat to add some."
 - Validation errors from the API show beside the form, for example "You already
   have a food called Quaker Oats".
+- A request refused because the Mini App session expired (a 401) shows "Your
+  session expired. Close and reopen the app." beside the form, in an alert for
+  a bulk delete, or in place of the list.
 
 ## Architecture
 
@@ -244,8 +252,9 @@ trim, collapse spaces, strip punctuation), so the cache and the library agree.
 
 `validateFood(input)` returns a clean saved food or a reason: name 1–100
 characters, calories an integer 0–5000 (rounded from decimals), macros blank or
-0–500, unit `g` or `ml` only with a positive amount, serving defaulting to "1
-serving". Used by the import preview, save-from-log and the API.
+0–500, unit `g` or `ml` only with a positive amount, serving amount at most
+10000, serving defaulting to "1 serving". Used by the import preview,
+save-from-log and the API.
 
 ### Matching — `src/library/match.ts` (new)
 
@@ -292,6 +301,9 @@ confirmation footer needs.
    dropped from every item.
 6. A database or matching error in steps 2–4 is reported to error tracking
    (`source: "library"`) and the estimate continues as step 1.
+7. If the call in step 5 fails, it is reported (`source: "library"`) and tried
+   once more as step 1. If that fails too, the error reaches `LogFlow`, whose
+   pending queue handles outages.
 
 `source` is `"cache"` when `AIService` reports a cache hit, `"mixed"` when an AI
 call produced at least one library item, and `"ai"` otherwise. It emits
@@ -328,7 +340,7 @@ returns, so the meal-text opt-out applies.
   otherwise.
 - **Parsing a table.** New `FOODS_PARSE_PROMPT` and
   `AIProvider.parseFoods(text): Promise<FoodsParseResult>`, implemented by all
-  three providers with an output limit of about 4096 tokens. The reply shape:
+  three providers with an output limit of about 16384 tokens. The reply shape:
 
   ```json
   {"foods":[{"name":"Quaker Oats","serving":"1/2 cup (40 g)","serving_amount":40,"serving_unit":"g","calories":150,"protein_g":5,"fat_g":3,"fiber_g":4,"added_sugar_g":null}],
@@ -358,9 +370,11 @@ user's.
 
 - `/foods` and `/foods add <text>`, registered in `src/bot/index.ts`.
 - In-memory state per user, like `/edit` and `/delete`:
-  `{ mode: "awaiting_paste" }` or `{ mode: "preview", kind, rows, selected, token }`.
-  `message:text` routes to it while waiting for a paste, alongside
-  `hasEditState`.
+  `{ pasteUntil, previews }`. `pasteUntil` is a time (unbounded while waiting
+  for the first paste, 10 seconds after each paste, null when not waiting), and
+  `previews` holds up to five previews by token, so each chunk of a long paste
+  keeps its own Save. `message:text` routes to it while waiting for a paste,
+  alongside `hasEditState`.
 - Callbacks: `foods:add`, `foods:save:<token>`, `foods:cancel`,
   `foods:fromlog:<logId>`, `foods:toggle:<index>:<token>`, encoded in
   `src/bot/utils/callback-data.ts`. The token fingerprints the rows the preview

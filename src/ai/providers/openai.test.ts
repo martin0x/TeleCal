@@ -3,7 +3,7 @@ import { describe, test, expect } from "bun:test"
 import OpenAI from "openai"
 import { OpenAIProvider } from "./openai"
 import { ProviderParseError } from "../types"
-import { MACRO_BATCH_PROMPT, SAVED_FOODS_HEADER } from "../prompt"
+import { MACRO_BATCH_PROMPT, SAVED_FOODS_HEADER, FOODS_MAX_TOKENS } from "../prompt"
 import { MACROS, emptyMacroValues } from "../../macros"
 
 /** Captures the arguments a Responses call was made with, and returns a canned reply. */
@@ -224,12 +224,12 @@ describe("OpenAIProvider: saved foods", () => {
 })
 
 describe("OpenAIProvider.parseFoods", () => {
-  test("uses a strict foods schema and a 4096-token limit", async () => {
+  test("uses a strict foods schema and the foods token limit", async () => {
     const reply = JSON.stringify({ foods: [{ name: "Oats", calories: 150 }], unreadable: [] })
     const { client, calls } = fakeClient(reply)
     const result = await new OpenAIProvider(client).parseFoods("Oats 150 kcal")
     expect(calls[0].text.format).toMatchObject({ type: "json_schema", name: "foods", strict: true })
-    expect(calls[0].max_output_tokens).toBe(4096)
+    expect(calls[0].max_output_tokens).toBe(FOODS_MAX_TOKENS)
     expect(calls[0].input).toBe("Oats 150 kcal")
     expect(calls[0].store).toBe(false)
     expect(result.reply.foods).toEqual([{ name: "Oats", calories: 150 }])
