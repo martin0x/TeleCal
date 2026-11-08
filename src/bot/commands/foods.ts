@@ -3,6 +3,9 @@
 // save goes through (nothing enters the library without a Save tap). Browsing,
 // editing and deleting live in the Mini App's Foods tab. State is in memory,
 // like /edit and /delete: a restart loses a preview and its Save says so.
+// Telegram splits a paste over 4096 characters into several messages, so each
+// message gets its own preview, and a short window after a paste takes the
+// next chunks as pastes too.
 import { Context, InlineKeyboard } from "grammy"
 import type { AIService } from "../../ai/service"
 import type { FoodLibraryRepository } from "../../db/repositories/food-library"
@@ -27,6 +30,8 @@ export interface FoodsDeps {
   analytics: Analytics
   /** config.web.miniAppUrl */
   miniAppUrl: string
+  /** The clock for the paste window; Date.now by default. */
+  now?: () => number
 }
 
 export const NOT_AVAILABLE = "Saved foods aren't available yet."
@@ -37,18 +42,50 @@ export const NOTHING_FOUND = "I couldn't find any foods in that. Each one needs 
 export const EXPIRED = "This preview expired, paste again."
 const NOT_OWNER = "Only the person who started this can use these buttons."
 
-type PreviewState = { mode: "preview"; source: FoodSource; preview: Preview; on: boolean[]; token: string }
-type FoodsState = { mode: "awaiting_paste" } | PreviewState
+/** After a paste, further messages this soon are taken as more chunks of it. */
+export const PASTE_WINDOW_MS = 10_000
+/** Previews kept per user; a newer one drops the oldest. */
+export const MAX_PREVIEWS = 5
+
+type PreviewState = { source: FoodSource; preview: Preview; on: boolean[]; token: string }
+type FoodsState = {
+  /** Text is a paste until this time; Infinity while waiting for the first paste, null when not waiting. */
+  pasteUntil: number | null
+  /** Open previews by token, oldest first. */
+  previews: Map<string, PreviewState>
+}
 
 const foodsStates = new Map<number, FoodsState>()
 
-export function isAwaitingFoodsPaste(userId: number): boolean {
-  return foodsStates.get(userId)?.mode === "awaiting_paste"
+function stateOf(userId: number): FoodsState {
+  let state = foodsStates.get(userId)
+  if (!state) {
+    state = { pasteUntil: null, previews: new Map() }
+    foodsStates.set(userId, state)
+  }
+  return state
+}
+
+/** Drops a user's entry once it holds nothing. */
+function tidy(userId: number): void {
+  const state = foodsStates.get(userId)
+  if (state && state.pasteUntil === null && state.previews.size === 0) foodsStates.delete(userId)
+}
+
+function setPasteUntil(userId: number, until: number | null): void {
+  stateOf(userId).pasteUntil = until
+  tidy(userId)
+}
+
+/** Whether this user's next text is a paste. `now` is FoodsDeps.now's time; Date.now by default. */
+export function isAwaitingFoodsPaste(userId: number, now: number = Date.now()): boolean {
+  const until = foodsStates.get(userId)?.pasteUntil ?? null
+  return until !== null && now <= until
 }
 
 /** Any command stops waiting for a paste (src/bot/index.ts calls this for every command). */
 export function stopAwaitingPaste(userId: number): void {
-  if (isAwaitingFoodsPaste(userId)) foodsStates.delete(userId)
+  if (foodsStates.has(userId)) setPasteUntil(userId, null)
 }
 
 /** Test-only. */
@@ -93,18 +130,33 @@ function previewKeyboard(ownerId: number, state: PreviewState): InlineKeyboard {
 /** Shows a preview and remembers it; its buttons carry a fingerprint of the rows it showed. */
 export async function showPreview(ctx: Context, ownerId: number, source: FoodSource, preview: Preview): Promise<void> {
   const state: PreviewState = {
-    mode: "preview",
     source,
     preview,
     on: preview.rows.map(() => true),
     token: shortHash(JSON.stringify(preview.rows)),
   }
-  foodsStates.set(ownerId, state)
+  const { previews } = stateOf(ownerId)
+  // The same rows again replace their earlier preview and count as the newest.
+  previews.delete(state.token)
+  previews.set(state.token, state)
+  for (const token of previews.keys()) {
+    if (previews.size <= MAX_PREVIEWS) break
+    previews.delete(token)
+  }
   await smartReply(ctx, formatPreview(previewHeader(source, preview.rows.length), preview), {
     reply_markup: previewKeyboard(ownerId, state),
   })
 }
 
+function clock(deps: FoodsDeps): number {
+  return (deps.now ?? Date.now)()
+}
+
+/**
+ * One message's text → a preview. A paste ("import") then keeps the paste
+ * window open a little longer for the next chunk of a long paste; /foods add
+ * <text> ("single") never starts waiting for a paste.
+ */
 async function runImport(ctx: Context, deps: FoodsDeps, userId: number, text: string, source: "import" | "single"): Promise<void> {
   const provider = deps.users.findById(userId)?.ai_provider ?? "openai"
   let reply
@@ -112,14 +164,14 @@ async function runImport(ctx: Context, deps: FoodsDeps, userId: number, text: st
     reply = await deps.ai.parseFoods(text, provider, { telegramId: userId, chatId: ctx.chat?.id ?? null })
   } catch {
     // AIService has already recorded and reported the failure.
-    foodsStates.delete(userId)
+    setPasteUntil(userId, null)
     await smartReply(ctx, PARSE_FAILED)
     return
   }
 
   const preview = importPreview(reply, deps.library.listByUser(userId))
+  if (source === "import") setPasteUntil(userId, clock(deps) + PASTE_WINDOW_MS)
   if (preview.rows.length === 0) {
-    foodsStates.delete(userId)
     await smartReply(ctx, `${NOTHING_FOUND}${formatPreview("", preview)}`.trimEnd())
     return
   }
@@ -139,7 +191,7 @@ export function createFoodsCommand(deps: FoodsDeps) {
     if (add) {
       const text = add[1].trim()
       if (!text) {
-        foodsStates.set(userId, { mode: "awaiting_paste" })
+        setPasteUntil(userId, Infinity)
         return smartReply(ctx, PASTE_PROMPT)
       }
       return runImport(ctx, deps, userId, text, "single")
@@ -159,23 +211,28 @@ export function createFoodsMessageHandler(deps: FoodsDeps) {
   return async (ctx: Context) => {
     const userId = ctx.from?.id
     const text = ctx.message?.text?.trim()
-    if (!userId || !text || !isAwaitingFoodsPaste(userId)) return
+    if (!userId || !text || !isAwaitingFoodsPaste(userId, clock(deps))) return
 
     if (text.startsWith("/")) {
-      foodsStates.delete(userId)
+      stopAwaitingPaste(userId)
       return
     }
     if (text.toLowerCase() === "cancel") {
-      foodsStates.delete(userId)
+      stopAwaitingPaste(userId)
       return smartReply(ctx, "Cancelled.")
     }
     await runImport(ctx, deps, userId, text, "import")
   }
 }
 
+/** The preview whose buttons carry this token, if it is still open. */
 function currentPreview(userId: number, token: string): PreviewState | null {
-  const state = foodsStates.get(userId)
-  return state?.mode === "preview" && state.token === token ? state : null
+  return foodsStates.get(userId)?.previews.get(token) ?? null
+}
+
+function closePreview(userId: number, token: string): void {
+  foodsStates.get(userId)?.previews.delete(token)
+  tidy(userId)
 }
 
 async function expired(ctx: Context): Promise<void> {
@@ -203,7 +260,7 @@ async function save(ctx: Context, deps: FoodsDeps, userId: number, token: string
   }
 
   const { added, replaced } = deps.library.upsertMany(userId, foods, state.source)
-  foodsStates.delete(userId)
+  closePreview(userId, token)
   deps.analytics.capture(userId, "foods_added", { count: added + replaced, replaced, source: state.source })
 
   await answerCallback(ctx, "Saved")
@@ -232,13 +289,13 @@ export function createFoodsCallbackHandler(deps: FoodsDeps) {
 
     switch (parsed.action) {
       case "add":
-        foodsStates.set(presserId, { mode: "awaiting_paste" })
+        setPasteUntil(presserId, Infinity)
         await answerCallback(ctx)
         await smartReply(ctx, PASTE_PROMPT)
         return
       case "cxl": {
         if (!currentPreview(presserId, parsed.token)) return expired(ctx)
-        foodsStates.delete(presserId)
+        closePreview(presserId, parsed.token)
         await answerCallback(ctx, "Cancelled")
         await editOrReply(ctx, "Cancelled. Nothing saved.")
         return

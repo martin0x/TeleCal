@@ -19,6 +19,7 @@ import {
   PARSE_FAILED,
   PASTE_PROMPT,
   PRIVATE_ONLY,
+  PASTE_WINDOW_MS,
   type FoodsDeps,
 } from "./foods"
 
@@ -33,9 +34,12 @@ let foodLogs: FoodLogsRepository
 let analytics: FakeAnalytics
 let parseFoods: ReturnType<typeof mock>
 let deps: FoodsDeps
+/** The handlers' clock (FoodsDeps.now); tests move it forward. */
+let clock: number
 
 beforeEach(() => {
   resetFoodsStates()
+  clock = 1_000_000
   const db = createTestDb()
   const users = new UsersRepository(db)
   users.upsert(OWNER, "maria")
@@ -52,6 +56,7 @@ beforeEach(() => {
     users,
     analytics,
     miniAppUrl: "https://telecal.example/app",
+    now: () => clock,
   }
 })
 
@@ -178,13 +183,35 @@ describe("paste → preview → Save", () => {
     expect(ctx.editMessageText.mock.calls[0][0]).toBe("Cancelled. Nothing saved.")
   })
 
-  test("an old preview's Save is refused once a newer preview exists", async () => {
-    const first = await run("/foods add x")
+  test("an old preview's Save still works after a newer preview", async () => {
     parseFoods.mockImplementation(async () => ({ foods: [OATS_ROW], unreadable: [] }))
-    await run("/foods add y")
-    const ctx = await press(saveData(first))
+    const first = await run("/foods add x")
+    parseFoods.mockImplementation(async () => ({ foods: [SKY_ROW], unreadable: [] }))
+    const second = await run("/foods add y")
+    await press(saveData(first))
+    expect(library.listByUser(OWNER).map((f) => f.name)).toEqual(["Quaker Oats"])
+    await press(saveData(second))
+    expect(library.listByUser(OWNER).map((f) => f.name)).toEqual(["Quaker Oats", "Skyflakes"])
+  })
+
+  test("a token from a Cancelled preview is refused", async () => {
+    const preview = await run("/foods add x")
+    await press(buttons(preview).find((b) => b.text === "Cancel")!.data!)
+    const ctx = await press(saveData(preview))
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith(EXPIRED)
     expect(library.count(OWNER)).toBe(0)
+  })
+
+  test("only the newest five previews are kept", async () => {
+    const previews = []
+    for (let i = 0; i < 6; i++) {
+      parseFoods.mockImplementation(async () => ({ foods: [{ ...OATS_ROW, name: `Food ${i}` }], unreadable: [] }))
+      previews.push(await run(`/foods add food ${i}`))
+    }
+    const oldest = await press(saveData(previews[0]))
+    expect(oldest.answerCallbackQuery).toHaveBeenCalledWith(EXPIRED)
+    await press(saveData(previews[1]))
+    expect(library.listByUser(OWNER).map((f) => f.name)).toEqual(["Food 1"])
   })
 
   test("someone else's press is refused", async () => {
@@ -218,6 +245,40 @@ describe("paste → preview → Save", () => {
     const ctx = await send("cancel")
     expect(ctx.reply).toHaveBeenCalledWith("Cancelled.", undefined)
     expect(isAwaitingFoodsPaste(OWNER)).toBe(false)
+  })
+
+  test("a long paste split into two messages: each gets its own preview and both Saves work", async () => {
+    await run("/foods add")
+    parseFoods.mockImplementation(async () => ({ foods: [OATS_ROW], unreadable: [] }))
+    const first = await send("first half of the table")
+    expect(isAwaitingFoodsPaste(OWNER, clock)).toBe(true)
+    parseFoods.mockImplementation(async () => ({ foods: [SKY_ROW], unreadable: [] }))
+    const second = await send("second half of the table")
+    expect(parseFoods).toHaveBeenCalledTimes(2)
+
+    await press(saveData(first))
+    await press(saveData(second))
+    expect(library.listByUser(OWNER).map((f) => f.name)).toEqual(["Quaker Oats", "Skyflakes"])
+  })
+
+  test("a text sent after the paste window has passed is not taken as a paste", async () => {
+    await run("/foods add")
+    await send("the table")
+    clock += PASTE_WINDOW_MS
+    expect(isAwaitingFoodsPaste(OWNER, clock)).toBe(true)
+    clock += 1
+    expect(isAwaitingFoodsPaste(OWNER, clock)).toBe(false)
+    await send("2 eggs")
+    expect(parseFoods).toHaveBeenCalledTimes(1)
+  })
+
+  test("waiting for the first paste has no time limit; /foods add <text> doesn't start waiting", async () => {
+    await run("/foods add")
+    clock += 24 * 60 * 60 * 1000
+    expect(isAwaitingFoodsPaste(OWNER, clock)).toBe(true)
+    stopAwaitingPaste(OWNER)
+    await run("/foods add oats 150 kcal")
+    expect(isAwaitingFoodsPaste(OWNER, clock)).toBe(false)
   })
 
   test("the Add foods button waits for a paste", async () => {
