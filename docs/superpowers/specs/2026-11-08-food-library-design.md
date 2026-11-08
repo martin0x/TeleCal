@@ -107,8 +107,11 @@ Rules:
   App, or cancels and pastes again.
 - **Long pastes.** Telegram splits a message over 4096 characters into several.
   Each message gets its own preview and its own Save.
+- **Long previews.** A preview that would not fit in one Telegram message lists
+  as many rows as fit, then "…and 12 more". Save still saves every row.
 - **Saving.** "Saved 3 foods (1 replaced). You have 145 foods." with an "Open my
-  foods" button.
+  foods" button in private chats. Telegram refuses `web_app` buttons in groups,
+  so a save from a log in a group gets the text only.
 
 ### Save from a log
 
@@ -171,7 +174,7 @@ code-only path and are filled by the AI on the AI path. Items carry no emoji, so
 they show the formatter's existing fallback.
 
 **Confirmation.** When any item came from the library, the confirmation ends with
-"From your foods: Quaker Oats, Skyflakes".
+the descriptions of those items: "From your foods: Quaker Oats ×2, Skyflakes".
 
 **Clarifications.** A clarification reply always goes to the AI, with saved foods
 picked from the original message plus every reply.
@@ -270,9 +273,11 @@ class MealEstimator {
 }
 type MealEstimate = EstimationResult & {
   source: "library" | "mixed" | "ai" | "cache"
-  savedFoodsUsed: string[]        // names, for the confirmation footer
 }
 ```
+
+Items that came from the library carry `saved_food_id`, which is all the
+confirmation footer needs.
 
 1. Flag off: `ai.estimate` as today.
 2. Load the user's foods. None: `ai.estimate` as today.
@@ -314,10 +319,11 @@ returns, so the meal-text opt-out applies.
   [12] Quaker Oats, serving 1/2 cup (40 g): 150 kcal, protein 5 g, fat 3 g, fiber 4 g, added sugar not on label
   ```
 
-- `ESTIMATE_JSON_PROMPT`'s shape line and OpenAI's strict schema gain
-  `saved_food_id` and `servings`, null unless the message lists saved foods.
-  OpenAI's strict mode needs both as required, nullable fields. `prompt.test.ts`
-  covers the new lines.
+- The system prompts stay unchanged, so a call without saved foods is
+  byte-identical to today's (goal 6). The saved-foods block itself asks for
+  `saved_food_id` and `servings` on every item. OpenAI's strict schema forbids
+  extra fields, so OpenAI switches to a second schema, with both as required,
+  nullable fields, only when saved foods are present.
 - `parse.ts`'s `normalizeItems` keeps both fields when they are numbers, null
   otherwise.
 - **Parsing a table.** New `FOODS_PARSE_PROMPT` and
