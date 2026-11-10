@@ -131,3 +131,44 @@ Default canonical labels: `needs-triage`, `needs-info`, `ready-for-agent`, `read
 ### Domain docs
 
 Single-context: one root `CONTEXT.md` plus `docs/adr/`. See `docs/agents/domain.md`.
+
+<!-- providence:start — written by Providence scripts/link-repo.sh. Edit the template in Providence (process/templates/project/AGENTS.md) and re-run the script; edits made here are overwritten. -->
+## Providence: where this project stands
+
+This project is entry 005, "TeleCal", in Providence (`martin0x/Providence`, folder
+`ideas/005-telecal/`). Its stop note lives there and only there.
+
+### Getting Providence
+
+- **Local:** Providence sits next to this repo's main checkout, at `../Providence`. From
+  a git worktree that means next to the main checkout, not next to the worktree. If it
+  isn't there, clone `https://github.com/martin0x/Providence` into that place.
+- **Cloud session:** add `martin0x/Providence` to the session alongside this repo.
+- `git pull` Providence before reading it and again before writing to it. Another
+  session may have committed in the meantime.
+
+### At the start of every session
+
+Read `ideas/005-telecal/handoff.md`, the stop note. The block for the branch you are on says
+where work stopped, what comes next and what is waiting on the founder. Check it against
+`git log` and `git status`. If they disagree, the repo is right and the note is stale:
+say so, then carry on from the repo's state.
+
+### When work stops
+
+When the founder says they are stopping, wrapping up or switching to something else, or
+when a Providence hook asks, record where things stand. Run this from the repo or
+worktree you are working in:
+
+    ../Providence/scripts/stop.sh 005-telecal \
+      --state "what is done and what is not, as of now" \
+      --next "one step that someone could start cold" \
+      --waiting "only what the founder must do: a decision, a review, a deploy" \
+      --pointers "plan and spec paths, issue and PR numbers"
+
+- One line per field. Write what is true in the repo now, not what was intended.
+- Leave out `--waiting` when nothing is waiting on the founder.
+- No secrets, tokens or customer data: the note is pushed to GitHub.
+- The script writes the note, then commits and pushes in Providence. Nothing in this
+  repo changes, and you commit nothing here.
+<!-- providence:end -->
